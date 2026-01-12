@@ -1,0 +1,272 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import type { Event } from '@/lib/supabase'
+
+export default function AdminEventsPage() {
+  const [events, setEvents] = useState<Event[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    date: '',
+    location: '',
+    credits_required: '1',
+    max_attendees: ''
+  })
+
+  useEffect(() => {
+    loadEvents()
+  }, [])
+
+  async function loadEvents() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .order('date', { ascending: true })
+
+    if (!error && data) {
+      setEvents(data)
+    }
+    setLoading(false)
+  }
+
+  async function handleCreateEvent(e: React.FormEvent) {
+    e.preventDefault()
+    setSubmitting(true)
+
+    try {
+      const eventData = {
+        title: formData.title,
+        description: formData.description,
+        date: new Date(formData.date).toISOString(),
+        location: formData.location,
+        credits_required: parseInt(formData.credits_required),
+        max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null
+      }
+
+      const { data, error } = await supabase
+        .from('events')
+        .insert(eventData)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error creating event:', error)
+        throw error
+      }
+
+      alert('Event created successfully!')
+      setShowCreateForm(false)
+      setFormData({
+        title: '',
+        description: '',
+        date: '',
+        location: '',
+        credits_required: '1',
+        max_attendees: ''
+      })
+      loadEvents()
+    } catch (error: any) {
+      console.error('Full error:', error)
+      alert('Error: ' + error.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleDeleteEvent(eventId: string, eventTitle: string) {
+    if (!confirm(`Are you sure you want to delete "${eventTitle}"?`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', eventId)
+
+      if (error) throw error
+
+      alert('Event deleted successfully!')
+      loadEvents()
+    } catch (error: any) {
+      console.error('Error deleting event:', error)
+      alert('Error: ' + error.message)
+    }
+  }
+
+  if (loading) {
+    return <div className="text-center py-8">Loading events...</div>
+  }
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold">Event Management</h2>
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
+        >
+          + Create Event
+        </button>
+      </div>
+
+      {/* Events Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {events.map((event) => (
+          <div key={event.id} className="bg-white rounded-lg shadow p-6">
+            <h3 className="font-bold text-lg mb-2">{event.title}</h3>
+            <p className="text-gray-600 text-sm mb-4">{event.description}</p>
+            
+            <div className="text-sm text-gray-500 mb-4 space-y-1">
+              <p>📅 {new Date(event.date).toLocaleString()}</p>
+              <p>📍 {event.location}</p>
+              <p>💳 {event.credits_required} credits</p>
+              {event.max_attendees && <p>👥 Max {event.max_attendees} attendees</p>}
+            </div>
+
+            <button
+              onClick={() => handleDeleteEvent(event.id, event.title)}
+              className="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium"
+            >
+              Delete Event
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {events.length === 0 && (
+        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+          No events yet. Create your first event!
+        </div>
+      )}
+
+      {/* Create Event Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-4">Create New Event</h3>
+
+            <form onSubmit={handleCreateEvent} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Event Title *
+                </label>
+                <input
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description *
+                </label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  rows={3}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date & Time *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Location *
+                </label>
+                <input
+                  type="text"
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  placeholder="e.g., Online, Downtown Office, etc."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Credits Required *
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.credits_required}
+                    onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
+                    min="1"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Max Attendees (optional)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.max_attendees}
+                    onChange={(e) => setFormData({ ...formData, max_attendees: e.target.value })}
+                    min="1"
+                    placeholder="Unlimited"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium"
+                >
+                  {submitting ? 'Creating...' : 'Create Event'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateForm(false)
+                    setFormData({
+                      title: '',
+                      description: '',
+                      date: '',
+                      location: '',
+                      credits_required: '1',
+                      max_attendees: ''
+                    })
+                  }}
+                  className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
