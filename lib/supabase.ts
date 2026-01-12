@@ -23,6 +23,7 @@ export type Event = {
   location: string | null
   credits_required: number
   max_attendees: number | null
+  cancellation_hours: number
   created_at: string
   updated_at: string
 }
@@ -34,6 +35,7 @@ export type Booking = {
   credits_used: number
   booked_at: string
   status: string
+  waitlist_position: number | null
 }
 
 export type CreditTransaction = {

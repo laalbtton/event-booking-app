@@ -8,6 +8,7 @@ type BookingWithDetails = {
   credits_used: number
   booked_at: string
   status: string
+  waitlist_position: number | null
   profiles: {
     full_name: string
     email: string
@@ -22,6 +23,7 @@ type BookingWithDetails = {
 export default function AdminBookingsPage() {
   const [bookings, setBookings] = useState<BookingWithDetails[]>([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<'all' | 'confirmed' | 'waitlist'>('all')
 
   useEffect(() => {
     loadBookings()
@@ -44,6 +46,11 @@ export default function AdminBookingsPage() {
     setLoading(false)
   }
 
+  const filteredBookings = bookings.filter(booking => {
+    if (filter === 'all') return booking.status === 'confirmed' || booking.status === 'waitlist'
+    return booking.status === filter
+  })
+
   if (loading) {
     return <div className="text-center py-8">Loading bookings...</div>
   }
@@ -52,8 +59,25 @@ export default function AdminBookingsPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold">Booking Management</h2>
-        <div className="text-sm text-gray-500">
-          Total Bookings: {bookings.length}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-4 py-2 rounded ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+          >
+            All ({bookings.filter(b => b.status === 'confirmed' || b.status === 'waitlist').length})
+          </button>
+          <button
+            onClick={() => setFilter('confirmed')}
+            className={`px-4 py-2 rounded ${filter === 'confirmed' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
+          >
+            Confirmed ({bookings.filter(b => b.status === 'confirmed').length})
+          </button>
+          <button
+            onClick={() => setFilter('waitlist')}
+            className={`px-4 py-2 rounded ${filter === 'waitlist' ? 'bg-yellow-600 text-white' : 'bg-gray-200'}`}
+          >
+            Waitlist ({bookings.filter(b => b.status === 'waitlist').length})
+          </button>
         </div>
       </div>
 
@@ -83,7 +107,7 @@ export default function AdminBookingsPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {bookings.map((booking) => (
+            {filteredBookings.map((booking) => (
               <tr key={booking.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">
@@ -112,9 +136,14 @@ export default function AdminBookingsPage() {
                   <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                     booking.status === 'confirmed' 
                       ? 'bg-green-100 text-green-800' 
-                      : 'bg-gray-100 text-gray-800'
+                      : booking.status === 'waitlist'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-gray-800'
                   }`}>
-                    {booking.status}
+                    {booking.status === 'waitlist' && booking.waitlist_position
+                      ? `Waitlist #${booking.waitlist_position}`
+                      : booking.status
+                    }
                   </span>
                 </td>
               </tr>
@@ -123,9 +152,9 @@ export default function AdminBookingsPage() {
         </table>
       </div>
 
-      {bookings.length === 0 && (
+      {filteredBookings.length === 0 && (
         <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-          No bookings yet
+          No {filter !== 'all' ? filter : ''} bookings yet
         </div>
       )}
     </div>

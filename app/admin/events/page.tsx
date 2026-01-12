@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/lib/supabase'
+import Link from 'next/link'
 
 export default function AdminEventsPage() {
   const [events, setEvents] = useState<Event[]>([])
@@ -16,7 +17,8 @@ export default function AdminEventsPage() {
     date: '',
     location: '',
     credits_required: '1',
-    max_attendees: ''
+    max_attendees: '',
+    cancellation_hours: '4'
   })
 
   useEffect(() => {
@@ -47,7 +49,8 @@ export default function AdminEventsPage() {
         date: new Date(formData.date).toISOString(),
         location: formData.location,
         credits_required: parseInt(formData.credits_required),
-        max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null
+        max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
+        cancellation_hours: parseInt(formData.cancellation_hours)
       }
 
       const { data, error } = await supabase
@@ -69,7 +72,8 @@ export default function AdminEventsPage() {
         date: '',
         location: '',
         credits_required: '1',
-        max_attendees: ''
+        max_attendees: '',
+        cancellation_hours: '4'
       })
       loadEvents()
     } catch (error: any) {
@@ -129,14 +133,23 @@ export default function AdminEventsPage() {
               <p>📍 {event.location}</p>
               <p>💳 {event.credits_required} credits</p>
               {event.max_attendees && <p>👥 Max {event.max_attendees} attendees</p>}
+              <p>⏱️ Cancel up to {event.cancellation_hours || 4} hours before</p>
             </div>
-
-            <button
-              onClick={() => handleDeleteEvent(event.id, event.title)}
-              className="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium"
-            >
-              Delete Event
-            </button>
+            <div className="flex gap-2">
+              <Link
+                href={`/events/${event.id}`}
+                className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-medium text-center"
+              >
+                View Details
+              </Link>
+              
+              <button
+                onClick={() => handleDeleteEvent(event.id, event.title)}
+                className="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium"
+              >
+                Delete Event
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -149,8 +162,8 @@ export default function AdminEventsPage() {
 
       {/* Create Event Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 my-8">
             <h3 className="text-xl font-bold mb-4">Create New Event</h3>
 
             <form onSubmit={handleCreateEvent} className="space-y-4">
@@ -207,7 +220,7 @@ export default function AdminEventsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Credits Required *
@@ -224,7 +237,7 @@ export default function AdminEventsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Max Attendees (optional)
+                    Max Attendees
                   </label>
                   <input
                     type="number"
@@ -234,6 +247,21 @@ export default function AdminEventsPage() {
                     placeholder="Unlimited"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Cancel Hours *
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.cancellation_hours}
+                    onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
+                    min="0"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Hours before event to allow cancellation with refund</p>
                 </div>
               </div>
 
@@ -255,7 +283,8 @@ export default function AdminEventsPage() {
                       date: '',
                       location: '',
                       credits_required: '1',
-                      max_attendees: ''
+                      max_attendees: '',
+                      cancellation_hours: '4'
                     })
                   }}
                   className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium"
