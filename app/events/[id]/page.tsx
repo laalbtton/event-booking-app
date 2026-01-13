@@ -11,11 +11,13 @@ type EventDetails = {
   id: string
   title: string
   description: string
+  theme: string | null
   date: string
   location: string
   credits_required: number
   max_attendees: number | null
   cancellation_hours: number
+  host_user_id: string | null
 }
 
 type AttendeeBooking = {
@@ -38,6 +40,7 @@ export default function EventDetailsPage() {
   const [waitlistBookings, setWaitlistBookings] = useState<AttendeeBooking[]>([])
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [hostProfile, setHostProfile] = useState<{ full_name: string } | null>(null)
 
 
   function copyPublicLink() {
@@ -67,6 +70,19 @@ export default function EventDetailsPage() {
 
       if (eventError) throw eventError
       setEvent(eventData)
+
+      // Load host profile if host is assigned
+      if (eventData.host_user_id) {
+        const { data: hostData, error: hostError } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', eventData.host_user_id)
+          .single()
+
+        if (!hostError && hostData) {
+          setHostProfile(hostData)
+        }
+      }
 
       // Load confirmed bookings
       const { data: confirmedData, error: confirmedError } = await supabase
@@ -162,6 +178,30 @@ export default function EventDetailsPage() {
             
 
             <p className="text-gray-700 text-lg mb-6">{event.description}</p>
+
+            {event.theme && (
+              <div className="mb-4">
+                <span className="inline-block bg-purple-100 text-purple-700 px-4 py-2 rounded-lg font-semibold">
+                  🎨 Theme: {event.theme}
+                </span>
+              </div>
+            )}
+
+            {hostProfile && (
+              <div className="mb-4">
+                <span className="inline-block bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg font-semibold">
+                  👤 Host: {hostProfile.full_name}
+                </span>
+              </div>
+            )}
+
+            {event.host_user_id && !hostProfile && (
+              <div className="mb-4">
+                <span className="inline-block bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-semibold">
+                  👤 Host: TBD
+                </span>
+              </div>
+            )}
 
             <div className="grid md:grid-cols-2 gap-6 mb-6">
                 <div>

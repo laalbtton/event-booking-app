@@ -9,11 +9,16 @@ type EventDetails = {
   id: string
   title: string
   description: string
+  theme: string | null
   date: string
   location: string
   credits_required: number
   max_attendees: number | null
   cancellation_hours: number
+  host_user_id: string | null
+  host_profile?: {
+    full_name: string
+  } | null
 }
 
 type AttendeeBooking = {
@@ -21,6 +26,7 @@ type AttendeeBooking = {
   status: string
   waitlist_position: number | null
   profiles: {
+    id: string
     full_name: string
   }
 }
@@ -33,6 +39,7 @@ export default function PublicEventPage() {
   const [confirmedBookings, setConfirmedBookings] = useState<AttendeeBooking[]>([])
   const [waitlistBookings, setWaitlistBookings] = useState<AttendeeBooking[]>([])
   const [loading, setLoading] = useState(true)
+  const [hostProfile, setHostProfile] = useState<{ full_name: string } | null>(null)
 
   useEffect(() => {
     loadEventDetails()
@@ -52,6 +59,19 @@ export default function PublicEventPage() {
       if (eventError) throw eventError
       setEvent(eventData)
 
+      // Load host profile if host is assigned
+      if (eventData.host_user_id) {
+        const { data: hostData, error: hostError } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', eventData.host_user_id)
+          .single()
+
+        if (!hostError && hostData) {
+          setHostProfile(hostData)
+        }
+      }
+
       // Load confirmed bookings (public - no auth required)
       const { data: confirmedData, error: confirmedError } = await supabase
         .from('bookings')
@@ -59,7 +79,7 @@ export default function PublicEventPage() {
           id,
           status,
           waitlist_position,
-          profiles (full_name)
+          profiles (id, full_name)
         `)
         .eq('event_id', eventId)
         .eq('status', 'confirmed')
@@ -75,7 +95,7 @@ export default function PublicEventPage() {
           id,
           status,
           waitlist_position,
-          profiles (full_name)
+          profiles (id, full_name)
         `)
         .eq('event_id', eventId)
         .eq('status', 'waitlist')
@@ -147,6 +167,30 @@ export default function PublicEventPage() {
           
           <p className="text-gray-700 text-lg mb-6">{event.description}</p>
 
+          {event.theme && (
+            <div className="mb-4">
+              <span className="inline-block bg-purple-100 text-purple-700 px-4 py-2 rounded-lg font-semibold">
+                🎨 Theme: {event.theme}
+              </span>
+            </div>
+          )}
+
+          {hostProfile && (
+            <div className="mb-4">
+              <span className="inline-block bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg font-semibold">
+                👤 Host: {hostProfile.full_name}
+              </span>
+            </div>
+          )}
+
+          {event.host_user_id && !hostProfile && (
+            <div className="mb-4">
+              <span className="inline-block bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-semibold">
+                👤 Host: TBD
+              </span>
+            </div>
+          )}
+
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-blue-50 p-4 rounded-lg">
               <h3 className="text-sm font-bold text-blue-900 mb-2">📅 DATE & TIME</h3>
@@ -199,19 +243,20 @@ export default function PublicEventPage() {
           ) : (
             <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {confirmedBookings.map((booking, index) => (
-                <div 
-                  key={booking.id} 
-                  className="flex items-center p-4 bg-green-50 rounded-lg border-2 border-green-200 hover:border-green-400 transition-colors"
+                <Link
+                  key={booking.id}
+                  href={`/profile/${booking.profiles.id}`}
+                  className="flex items-center p-4 bg-green-50 rounded-lg border-2 border-green-200 hover:border-green-400 transition-colors cursor-pointer"
                 >
                   <div className="flex-shrink-0 w-12 h-12 bg-green-600 text-white rounded-full flex items-center justify-center font-bold text-lg mr-3 shadow-md">
                     {index + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-base font-semibold text-gray-900 truncate">
+                    <p className="text-base font-semibold text-gray-900 truncate hover:text-blue-600">
                       {booking.profiles.full_name}
                     </p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
@@ -226,19 +271,20 @@ export default function PublicEventPage() {
 
             <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {waitlistBookings.map((booking) => (
-                <div 
-                  key={booking.id} 
-                  className="flex items-center p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200"
+                <Link
+                  key={booking.id}
+                  href={`/profile/${booking.profiles.id}`}
+                  className="flex items-center p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200 hover:border-yellow-400 transition-colors cursor-pointer"
                 >
                   <div className="flex-shrink-0 w-12 h-12 bg-yellow-500 text-white rounded-full flex items-center justify-center font-bold text-lg mr-3 shadow-md">
                     {booking.waitlist_position}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-base font-semibold text-gray-900 truncate">
+                    <p className="text-base font-semibold text-gray-900 truncate hover:text-blue-600">
                       {booking.profiles.full_name}
                     </p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>

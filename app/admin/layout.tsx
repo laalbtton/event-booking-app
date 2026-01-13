@@ -66,12 +66,20 @@ export default function AdminLayout({
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold">Admin Panel</h1>
-            <button
-              onClick={handleSignOut}
-              className="text-sm hover:text-gray-300"
-            >
-              Sign Out
-            </button>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="text-sm hover:text-gray-300 font-medium"
+              >
+                Dashboard
+              </Link>
+              <button
+                onClick={handleSignOut}
+                className="text-sm hover:text-gray-300"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </div>

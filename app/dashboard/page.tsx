@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [cancellingBooking, setCancellingBooking] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [isAdmin, setIsAdmin] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -36,6 +37,15 @@ export default function Dashboard() {
       router.push('/login')
       return
     }
+
+    // Check if user is admin
+    const { data: adminData } = await supabase
+      .from('admin_users')
+      .select('*')
+      .eq('user_id', user.id)
+      .single()
+
+    setIsAdmin(!!adminData)
 
     loadData(user.id)
   }
@@ -89,6 +99,15 @@ export default function Dashboard() {
     setError('')
 
     try {
+      // Check if registration is open
+      if (event.registration_opens_at) {
+        const registrationOpensAt = new Date(event.registration_opens_at)
+        const now = new Date()
+        if (now < registrationOpensAt) {
+          throw new Error(`Registration opens on ${registrationOpensAt.toLocaleString()}`)
+        }
+      }
+
       // Check if already booked (confirmed or waitlist)
       const alreadyBooked = myBookings.some(
         b => b.event_id === event.id && (b.status === 'confirmed' || b.status === 'waitlist')
@@ -297,12 +316,28 @@ export default function Dashboard() {
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <button
-            onClick={handleSignOut}
-            className="text-sm text-gray-700 hover:text-gray-900 font-medium"
-          >
-            Sign Out
-          </button>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/profile"
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              My Profile
+            </Link>
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+              >
+                Admin Panel
+              </Link>
+            )}
+            <button
+              onClick={handleSignOut}
+              className="text-sm text-gray-700 hover:text-gray-900 font-medium"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
 
@@ -440,6 +475,10 @@ export default function Dashboard() {
                 const isBooked = !!booking
                 const canAfford = (profile?.credits || 0) >= event.credits_required
                 const isBooking = bookingLoading === event.id
+                
+                // Check if registration is open
+                const isRegistrationOpen = !event.registration_opens_at || new Date() >= new Date(event.registration_opens_at)
+                const registrationOpensAt = event.registration_opens_at ? new Date(event.registration_opens_at) : null
 
                 return (
                   <div key={event.id} className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
@@ -456,8 +495,16 @@ export default function Dashboard() {
                     <div className="text-sm text-gray-600 mb-4">
                       <p className="text-gray-800">📅 {new Date(event.date).toLocaleString()}</p>
                       <p className="text-gray-800">📍 {event.location}</p>
+                      {event.theme && (
+                        <p className="text-gray-800">🎨 Theme: {event.theme}</p>
+                      )}
                       {event.max_attendees && (
                         <p className="text-gray-800">👥 Max {event.max_attendees} attendees</p>
+                      )}
+                      {!isRegistrationOpen && registrationOpensAt && (
+                        <p className="text-orange-600 font-semibold mt-2">
+                          ⏰ Registration opens: {registrationOpensAt.toLocaleString()}
+                        </p>
                       )}
                       <p className="text-xs mt-2 text-gray-600">
                         ⏱️ Cancel up to {event.cancellation_hours || 4}h before for refund
@@ -475,6 +522,10 @@ export default function Dashboard() {
                         ) : (
                           <span className="text-green-600 font-semibold">✓ Booked</span>
                         )
+                      ) : !isRegistrationOpen ? (
+                        <span className="text-orange-600 font-semibold text-sm">
+                          Registration Not Open
+                        </span>
                       ) : (
                         <button
                           onClick={() => handleBookEvent(event)}

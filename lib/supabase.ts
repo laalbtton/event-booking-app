@@ -11,6 +11,11 @@ export type Profile = {
   email: string
   full_name: string | null
   credits: number
+  bio: string | null
+  website_link: string | null
+  instagram_link: string | null
+  youtube_link: string | null
+  twitter_link: string | null
   created_at: string
   updated_at: string
 }
@@ -19,11 +24,14 @@ export type Event = {
   id: string
   title: string
   description: string | null
+  theme: string | null
   date: string
   location: string | null
   credits_required: number
   max_attendees: number | null
   cancellation_hours: number
+  registration_opens_at: string | null
+  host_user_id: string | null
   created_at: string
   updated_at: string
 }
@@ -36,6 +44,7 @@ export type Booking = {
   booked_at: string
   status: string
   waitlist_position: number | null
+  attendance_status: string | null // 'attended', 'no_show', or null (confirmed)
 }
 
 export type CreditTransaction = {

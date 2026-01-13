@@ -14,11 +14,14 @@ export default function AdminEventsPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
+    theme: '',
     date: '',
     location: '',
     credits_required: '5',
     max_attendees: '',
-    cancellation_hours: '4'
+    cancellation_hours: '4',
+    open_registration_now: true,
+    registration_opens_at: ''
   })
 
   useEffect(() => {
@@ -46,11 +49,17 @@ export default function AdminEventsPage() {
       const eventData = {
         title: formData.title,
         description: formData.description,
+        theme: formData.theme || null,
         date: new Date(formData.date).toISOString(),
         location: formData.location,
         credits_required: parseInt(formData.credits_required),
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
-        cancellation_hours: parseInt(formData.cancellation_hours)
+        cancellation_hours: parseInt(formData.cancellation_hours),
+        registration_opens_at: formData.open_registration_now 
+          ? null 
+          : formData.registration_opens_at 
+            ? new Date(formData.registration_opens_at).toISOString() 
+            : null
       }
 
       const { data, error } = await supabase
@@ -69,11 +78,14 @@ export default function AdminEventsPage() {
       setFormData({
         title: '',
         description: '',
+        theme: '',
         date: '',
         location: '',
         credits_required: '5',
         max_attendees: '',
-        cancellation_hours: '4'
+        cancellation_hours: '4',
+        open_registration_now: true,
+        registration_opens_at: ''
       })
       loadEvents()
     } catch (error: any) {
@@ -131,6 +143,7 @@ export default function AdminEventsPage() {
             <div className="text-sm text-gray-500 mb-4 space-y-1">
               <p>📅 {new Date(event.date).toLocaleString()}</p>
               <p>📍 {event.location}</p>
+              {event.theme && <p>🎨 Theme: {event.theme}</p>}
               <p>💳 {event.credits_required} credits</p>
               {event.max_attendees && <p>👥 Max {event.max_attendees} attendees</p>}
               <p>⏱️ Cancel up to {event.cancellation_hours || 4} hours before</p>
@@ -167,6 +180,13 @@ export default function AdminEventsPage() {
                   className="block w-full bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 text-sm font-medium text-center"
                 >
                   📱 Generate QR Code
+                </Link>
+
+                <Link
+                  href={`/admin/events/${event.id}/attendance`}
+                  className="block w-full bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 text-sm font-medium text-center"
+                >
+                  📋 Manage Attendance
                 </Link>
 
               </div>
@@ -212,6 +232,19 @@ export default function AdminEventsPage() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={3}
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Theme (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.theme}
+                  onChange={(e) => setFormData({ ...formData, theme: e.target.value })}
+                  placeholder="e.g., Networking, Workshop, Social, etc."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
 
@@ -287,6 +320,40 @@ export default function AdminEventsPage() {
                 </div>
               </div>
 
+              <div className="border-t pt-4">
+                <div className="mb-4">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={formData.open_registration_now}
+                      onChange={(e) => setFormData({ ...formData, open_registration_now: e.target.checked })}
+                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      Open Registration Now
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 ml-6 mt-1">
+                    If unchecked, registration will open at a specific date/time
+                  </p>
+                </div>
+
+                {!formData.open_registration_now && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Registration Opens At *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.registration_opens_at}
+                      onChange={(e) => setFormData({ ...formData, registration_opens_at: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required={!formData.open_registration_now}
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
@@ -302,11 +369,14 @@ export default function AdminEventsPage() {
                     setFormData({
                       title: '',
                       description: '',
+                      theme: '',
                       date: '',
                       location: '',
                       credits_required: '1',
                       max_attendees: '',
-                      cancellation_hours: '4'
+                      cancellation_hours: '4',
+                      open_registration_now: true,
+                      registration_opens_at: ''
                     })
                   }}
                   className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium"
