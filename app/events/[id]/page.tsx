@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
+
+
 type EventDetails = {
   id: string
   title: string
@@ -36,6 +38,13 @@ export default function EventDetailsPage() {
   const [waitlistBookings, setWaitlistBookings] = useState<AttendeeBooking[]>([])
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
+
+
+  function copyPublicLink() {
+  const publicUrl = `${window.location.origin}/event-public/${eventId}`
+  navigator.clipboard.writeText(publicUrl)
+  alert('Public link copied to clipboard!')
+}
 
   useEffect(() => {
     loadEventDetails()
@@ -126,40 +135,49 @@ export default function EventDetailsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
+        {/* Header */}
+        <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <Link 
+            <Link 
             href="/dashboard"
-            className="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-block"
-          >
+            className="text-blue-700 hover:text-blue-900 text-sm mb-2 inline-block font-medium"
+            >
             ← Back to Dashboard
-          </Link>
-          <h1 className="text-3xl font-bold text-gray-900">Event Details</h1>
+            </Link>
+            <h1 className="text-3xl font-bold text-gray-900">Event Details</h1>
         </div>
-      </div>
+        </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* Event Info Card */}
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-          <h2 className="text-3xl font-bold mb-4">{event.title}</h2>
-          <p className="text-gray-600 text-lg mb-6">{event.description}</p>
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-8 border border-gray-200">
+            <h2 className="text-3xl font-bold mb-4 text-gray-900">{event.title}</h2>
 
-          <div className="grid md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-500 mb-2">DATE & TIME</h3>
-              <p className="text-lg">📅 {new Date(event.date).toLocaleString()}</p>
-            </div>
+                <button
+                onClick={copyPublicLink}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold text-sm shadow-md flex items-center gap-2"
+                >
+                🔗 Share Public Link
+                </button>
+            
 
-            <div>
-              <h3 className="text-sm font-semibold text-gray-500 mb-2">LOCATION</h3>
-              <p className="text-lg">📍 {event.location}</p>
-            </div>
+            <p className="text-gray-700 text-lg mb-6">{event.description}</p>
 
-            <div>
-              <h3 className="text-sm font-semibold text-gray-500 mb-2">COST</h3>
-              <p className="text-lg">💳 {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</p>
-            </div>
+            <div className="grid md:grid-cols-2 gap-6 mb-6">
+                <div>
+                <h3 className="text-sm font-bold text-gray-700 mb-2">DATE & TIME</h3>
+                <p className="text-base text-gray-900">📅 {new Date(event.date).toLocaleString()}</p>
+                </div>
+
+                <div>
+                <h3 className="text-sm font-bold text-gray-700 mb-2">LOCATION</h3>
+                <p className="text-base text-gray-900">📍 {event.location}</p>
+                </div>
+
+                <div>
+                <h3 className="text-sm font-bold text-gray-700 mb-2">COST</h3>
+                <p className="text-base text-gray-900">💳 {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</p>
+                </div>
 
             <div>
               <h3 className="text-sm font-semibold text-gray-500 mb-2">CAPACITY</h3>

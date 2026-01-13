@@ -16,7 +16,7 @@ export default function AdminEventsPage() {
     description: '',
     date: '',
     location: '',
-    credits_required: '1',
+    credits_required: '5',
     max_attendees: '',
     cancellation_hours: '4'
   })
@@ -71,7 +71,7 @@ export default function AdminEventsPage() {
         description: '',
         date: '',
         location: '',
-        credits_required: '1',
+        credits_required: '5',
         max_attendees: '',
         cancellation_hours: '4'
       })
@@ -135,21 +135,43 @@ export default function AdminEventsPage() {
               {event.max_attendees && <p>👥 Max {event.max_attendees} attendees</p>}
               <p>⏱️ Cancel up to {event.cancellation_hours || 4} hours before</p>
             </div>
-            <div className="flex gap-2">
-              <Link
-                href={`/events/${event.id}`}
-                className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-medium text-center"
-              >
-                View Details
-              </Link>
-              
-              <button
-                onClick={() => handleDeleteEvent(event.id, event.title)}
-                className="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium"
-              >
-                Delete Event
-              </button>
-            </div>
+
+            <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    const publicUrl = `${window.location.origin}/event-public/${event.id}`
+                    navigator.clipboard.writeText(publicUrl)
+                    alert('Public link copied!')
+                  }}
+                  className="w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm font-medium"
+                >
+                  📋 Copy Public Link
+                </button>
+
+                <Link
+                  href={`/events/${event.id}`}
+                  className="block w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-medium text-center"
+                >
+                  View Details
+                </Link>
+                
+                <button
+                  onClick={() => handleDeleteEvent(event.id, event.title)}
+                  className="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium"
+                >
+                  Delete Event
+                </button>
+
+                <Link
+                  href={`/admin/events/${event.id}/qr`}
+                  className="block w-full bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 text-sm font-medium text-center"
+                >
+                  📱 Generate QR Code
+                </Link>
+
+              </div>
+
+
           </div>
         ))}
       </div>

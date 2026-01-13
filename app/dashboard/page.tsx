@@ -299,7 +299,7 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <button
             onClick={handleSignOut}
-            className="text-sm text-gray-600 hover:text-gray-900"
+            className="text-sm text-gray-700 hover:text-gray-900 font-medium"
           >
             Sign Out
           </button>
@@ -308,11 +308,11 @@ export default function Dashboard() {
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* Credits Card */}
-        <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-lg p-6 mb-8 text-white">
+        <div className="bg-gradient-to-r from-blue-600 to-purple-700 rounded-lg shadow-lg p-6 mb-8 text-white">
           <h2 className="text-lg font-semibold mb-2">Welcome, {profile?.full_name}!</h2>
           <div className="flex items-baseline">
-            <span className="text-5xl font-bold">{profile?.credits || 0}</span>
-            <span className="text-xl ml-2">credits available</span>
+            <span className="text-5xl font-bold drop-shadow-md">{profile?.credits || 0}</span>
+            <span className="text-xl ml-2 drop-shadow">credits available</span>
           </div>
         </div>
 
@@ -442,30 +442,30 @@ export default function Dashboard() {
                 const isBooking = bookingLoading === event.id
 
                 return (
-                  <div key={event.id} className="bg-white rounded-lg shadow p-6">
-                    <h3 className="font-bold text-lg mb-2">
+                  <div key={event.id} className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
+                    <h3 className="font-bold text-lg mb-2 text-gray-900">
                       <Link 
                         href={`/events/${event.id}`}
-                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                        className="text-blue-700 hover:text-blue-900 hover:underline"
                       >
                         {event.title}
                       </Link>
                     </h3>
-                    <p className="text-gray-600 text-sm mb-4">{event.description}</p>
+                    <p className="text-gray-700 text-sm mb-4">{event.description}</p>
                     
-                    <div className="text-sm text-gray-500 mb-4">
-                      <p>📅 {new Date(event.date).toLocaleString()}</p>
-                      <p>📍 {event.location}</p>
+                    <div className="text-sm text-gray-600 mb-4">
+                      <p className="text-gray-800">📅 {new Date(event.date).toLocaleString()}</p>
+                      <p className="text-gray-800">📍 {event.location}</p>
                       {event.max_attendees && (
-                        <p>👥 Max {event.max_attendees} attendees</p>
+                        <p className="text-gray-800">👥 Max {event.max_attendees} attendees</p>
                       )}
-                      <p className="text-xs mt-2">
+                      <p className="text-xs mt-2 text-gray-600">
                         ⏱️ Cancel up to {event.cancellation_hours || 4}h before for refund
                       </p>
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-lg font-semibold text-blue-600">
+                      <span className="text-lg font-semibold text-blue-700">
                         {event.credits_required} {event.credits_required === 1 ? 'credit' : 'credits'}
                       </span>
                       
