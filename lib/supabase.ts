@@ -6,18 +6,31 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Type definitions
+// Full profile (for own profile)
 export type Profile = {
   id: string
   email: string
   full_name: string | null
   credits: number
-  bio: string | null
-  website_link: string | null
   instagram_link: string | null
   youtube_link: string | null
   twitter_link: string | null
+  website_link: string | null
+  bio: string | null
   created_at: string
   updated_at: string
+}
+
+// Public profile (for viewing others)
+export type PublicProfile = {
+  id: string
+  full_name: string | null
+  bio: string | null
+  instagram_link: string | null
+  youtube_link: string | null
+  twitter_link: string | null
+  website_link: string | null
+  created_at: string
 }
 
 export type Event = {

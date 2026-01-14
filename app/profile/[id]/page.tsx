@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import type { Profile } from '@/lib/supabase'
+import type { PublicProfile } from '@/lib/supabase'
 import Link from 'next/link'
 
 type AttendedEvent = {
@@ -18,7 +18,7 @@ export default function PublicProfilePage() {
   const params = useParams()
   const profileId = params.id as string
 
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [profile, setProfile] = useState<PublicProfile | null>(null)
   const [attendedEvents, setAttendedEvents] = useState<AttendedEvent[]>([])
   const [attendedCount, setAttendedCount] = useState(0)
   const [loading, setLoading] = useState(true)
