@@ -65,7 +65,7 @@ export default function AdminLayout({
       <div className="bg-gray-900 text-white">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">Admin Panel</h1>
+            <h1 className="text-2xl font-bold text-white">Admin Panel</h1>
             <div className="flex items-center gap-4">
               <Link
                 href="/dashboard"

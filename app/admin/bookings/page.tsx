@@ -58,7 +58,7 @@ export default function AdminBookingsPage() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold">Booking Management</h2>
+        <h2 className="text-3xl font-bold text-gray-900">Booking Management</h2>
         <div className="flex gap-2">
           <button
             onClick={() => setFilter('all')}

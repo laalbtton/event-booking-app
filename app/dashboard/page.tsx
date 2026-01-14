@@ -360,7 +360,7 @@ export default function Dashboard() {
         {/* My Bookings Section */}
         {myBookings.length > 0 && (
           <div className="mb-8">
-            <h2 className="text-2xl font-bold mb-4">My Bookings</h2>
+            <h2 className="text-2xl font-bold mb-4 text-gray-900">My Bookings</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {myBookings.map((booking) => {
                 const eventDate = new Date(booking.events.date)
@@ -462,7 +462,7 @@ export default function Dashboard() {
 
         {/* Available Events Section */}
         <div>
-          <h2 className="text-2xl font-bold mb-4">Available Events</h2>
+          <h2 className="text-2xl font-bold mb-4 text-gray-900">Available Events</h2>
           
           {events.length === 0 ? (
             <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">

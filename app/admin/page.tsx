@@ -94,7 +94,7 @@ export default function AdminUsersPage() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold">User Management</h2>
+        <h2 className="text-3xl font-bold text-gray-900">User Management</h2>
         <div className="text-sm text-gray-500">
           Total Users: {users.length}
         </div>
@@ -159,7 +159,7 @@ export default function AdminUsersPage() {
       {selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-bold mb-4">
+            <h3 className="text-xl font-bold mb-4 text-gray-900">
               Add Credits to {selectedUser.full_name}
             </h3>
             

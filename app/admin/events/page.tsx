@@ -124,7 +124,7 @@ export default function AdminEventsPage() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold">Event Management</h2>
+        <h2 className="text-3xl font-bold text-gray-900">Event Management</h2>
         <button
           onClick={() => setShowCreateForm(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
@@ -206,7 +206,7 @@ export default function AdminEventsPage() {
       {showCreateForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 my-8">
-            <h3 className="text-xl font-bold mb-4">Create New Event</h3>
+            <h3 className="text-xl font-bold mb-4 text-gray-900">Create New Event</h3>
 
             <form onSubmit={handleCreateEvent} className="space-y-4">
               <div>
