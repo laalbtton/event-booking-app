@@ -38,7 +38,7 @@ export default function PublicProfilePage() {
         .single()
 
       if (profileError) throw profileError
-      setProfile(profileData)
+      setProfile(profileData as PublicProfile)
 
       // Load attended events
       const { data: bookingsData, error: bookingsError } = await supabase
