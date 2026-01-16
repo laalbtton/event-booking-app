@@ -6,12 +6,14 @@ import { supabase } from '@/lib/supabase'
 import type { PublicProfile } from '@/lib/supabase'
 import Link from 'next/link'
 
-type AttendedEvent = {
+type UpcomingEvent = {
   id: string
   title: string
   date: string
   location: string
   booked_at: string
+  status: string
+  waitlist_position: number | null
 }
 
 export default function PublicProfilePage() {
@@ -19,8 +21,8 @@ export default function PublicProfilePage() {
   const profileId = params.id as string
 
   const [profile, setProfile] = useState<PublicProfile | null>(null)
-  const [attendedEvents, setAttendedEvents] = useState<AttendedEvent[]>([])
-  const [attendedCount, setAttendedCount] = useState(0)
+  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
+  const [upcomingCount, setUpcomingCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -40,11 +42,14 @@ export default function PublicProfilePage() {
       if (profileError) throw profileError
       setProfile(profileData as PublicProfile)
 
-      // Load attended events
+      // Load upcoming events (confirmed/waitlist bookings for future events)
+      const now = new Date().toISOString()
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select(`
           id,
+          status,
+          waitlist_position,
           booked_at,
           events (
             id,
@@ -54,30 +59,27 @@ export default function PublicProfilePage() {
           )
         `)
         .eq('user_id', profileId)
-        .eq('attendance_status', 'attended')
-        .order('booked_at', { ascending: false })
+        .in('status', ['confirmed', 'waitlist'])
+        .order('booked_at', { ascending: true })
 
       if (bookingsError) throw bookingsError
       
-      const events = (bookingsData || []).map((b: any) => ({
-        id: b.events.id,
-        title: b.events.title,
-        date: b.events.date,
-        location: b.events.location,
-        booked_at: b.booked_at
-      }))
-      setAttendedEvents(events)
+      // Filter to only future events
+      const events = (bookingsData || [])
+        .filter((b: any) => new Date(b.events.date) > new Date(now))
+        .map((b: any) => ({
+          id: b.events.id,
+          title: b.events.title,
+          date: b.events.date,
+          location: b.events.location,
+          booked_at: b.booked_at,
+          status: b.status,
+          waitlist_position: b.waitlist_position
+        }))
+      setUpcomingEvents(events)
 
-      // Get attended count
-      const { count, error: countError } = await supabase
-        .from('bookings')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', profileId)
-        .eq('attendance_status', 'attended')
-
-      if (!countError) {
-        setAttendedCount(count || 0)
-      }
+      // Get upcoming count
+      setUpcomingCount(events.length)
 
     } catch (error: any) {
       console.error('Error loading profile:', error)
@@ -198,9 +200,9 @@ export default function PublicProfilePage() {
 
           {/* Stats (no credits or email) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="text-sm font-semibold text-green-900 mb-1">Events Attended</h3>
-              <p className="text-2xl font-bold text-green-700">{attendedCount}</p>
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h3 className="text-sm font-semibold text-blue-900 mb-1">Upcoming Events</h3>
+              <p className="text-2xl font-bold text-blue-700">{upcomingCount}</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
               <h3 className="text-sm font-semibold text-purple-900 mb-1">Member Since</h3>
@@ -209,12 +211,12 @@ export default function PublicProfilePage() {
           </div>
         </div>
 
-        {/* Attended Events */}
-        {attendedEvents.length > 0 && (
+        {/* Upcoming Events */}
+        {upcomingEvents.length > 0 && (
           <div className="bg-white rounded-lg shadow-lg p-6 md:p-8">
-            <h3 className="text-2xl font-bold text-gray-900 mb-6">Events Attended</h3>
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">Upcoming Events</h3>
             <div className="space-y-4">
-              {attendedEvents.map((event) => (
+              {upcomingEvents.map((event) => (
                 <div
                   key={event.id}
                   className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
@@ -226,9 +228,17 @@ export default function PublicProfilePage() {
                         📅 {new Date(event.date).toLocaleString()}
                       </p>
                       <p className="text-sm text-gray-600">📍 {event.location}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Attended: {new Date(event.booked_at).toLocaleDateString()}
-                      </p>
+                      <div className="mt-2">
+                        {event.status === 'waitlist' ? (
+                          <span className="inline-block bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-semibold">
+                            ⏳ Waitlist #{event.waitlist_position}
+                          </span>
+                        ) : (
+                          <span className="inline-block bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">
+                            ✓ Confirmed
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <Link
                       href={`/event-public/${event.id}`}
@@ -243,9 +253,9 @@ export default function PublicProfilePage() {
           </div>
         )}
 
-        {attendedEvents.length === 0 && (
+        {upcomingEvents.length === 0 && (
           <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 text-center text-gray-500">
-            <p className="text-lg">No events attended yet</p>
+            <p className="text-lg">No upcoming events</p>
           </div>
         )}
       </div>

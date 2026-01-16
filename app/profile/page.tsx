@@ -6,17 +6,21 @@ import { supabase } from '@/lib/supabase'
 import type { Profile, Event } from '@/lib/supabase'
 import Link from 'next/link'
 
-type AttendedEvent = {
+type EventBooking = {
   id: string
   title: string
   date: string
   location: string
   booked_at: string
+  credits_used: number
+  status: string
+  attendance_status: string | null
+  waitlist_position: number | null
 }
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [attendedEvents, setAttendedEvents] = useState<AttendedEvent[]>([])
+  const [eventBookings, setEventBookings] = useState<EventBooking[]>([])
   const [attendedCount, setAttendedCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -70,11 +74,15 @@ export default function ProfilePage() {
         twitter_link: profileData.twitter_link || ''
       })
 
-      // Load attended events
+      // Load all bookings where credits were used (attended, cancelled, no_show, etc.)
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select(`
           id,
+          credits_used,
+          status,
+          attendance_status,
+          waitlist_position,
           booked_at,
           events (
             id,
@@ -84,7 +92,7 @@ export default function ProfilePage() {
           )
         `)
         .eq('user_id', userId)
-        .eq('attendance_status', 'attended')
+        .gt('credits_used', 0)
         .order('booked_at', { ascending: false })
 
       if (bookingsError) throw bookingsError
@@ -94,20 +102,17 @@ export default function ProfilePage() {
         title: b.events.title,
         date: b.events.date,
         location: b.events.location,
-        booked_at: b.booked_at
+        booked_at: b.booked_at,
+        credits_used: b.credits_used,
+        status: b.status,
+        attendance_status: b.attendance_status,
+        waitlist_position: b.waitlist_position
       }))
-      setAttendedEvents(events)
+      setEventBookings(events)
 
       // Get attended count
-      const { count, error: countError } = await supabase
-        .from('bookings')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .eq('attendance_status', 'attended')
-
-      if (!countError) {
-        setAttendedCount(count || 0)
-      }
+      const attended = events.filter(e => e.attendance_status === 'attended').length
+      setAttendedCount(attended)
 
     } catch (error: any) {
       console.error('Error loading profile:', error)
@@ -406,43 +411,77 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Attended Events */}
-        {attendedEvents.length > 0 && (
+        {/* Event Bookings */}
+        {eventBookings.length > 0 && (
           <div className="bg-white rounded-lg shadow-lg p-6 md:p-8">
-            <h3 className="text-2xl font-bold text-gray-900 mb-6">Events Attended</h3>
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">My Event Bookings</h3>
             <div className="space-y-4">
-              {attendedEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-bold text-lg text-gray-900 mb-1">{event.title}</h4>
-                      <p className="text-sm text-gray-600">
-                        📅 {new Date(event.date).toLocaleString()}
-                      </p>
-                      <p className="text-sm text-gray-600">📍 {event.location}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Booked: {new Date(event.booked_at).toLocaleDateString()}
-                      </p>
+              {eventBookings.map((booking) => {
+                // Determine status display
+                let statusDisplay = ''
+                let statusColor = ''
+                
+                if (booking.attendance_status === 'attended') {
+                  statusDisplay = '✓ Attended'
+                  statusColor = 'bg-green-100 text-green-700'
+                } else if (booking.attendance_status === 'no_show') {
+                  statusDisplay = '✗ No Show'
+                  statusColor = 'bg-red-100 text-red-700'
+                } else if (booking.status === 'cancelled') {
+                  statusDisplay = 'Cancelled'
+                  statusColor = 'bg-gray-100 text-gray-700'
+                } else if (booking.status === 'waitlist') {
+                  statusDisplay = `⏳ Waitlist${booking.waitlist_position ? ` #${booking.waitlist_position}` : ''}`
+                  statusColor = 'bg-yellow-100 text-yellow-700'
+                } else if (booking.status === 'confirmed') {
+                  statusDisplay = 'Confirmed'
+                  statusColor = 'bg-blue-100 text-blue-700'
+                } else {
+                  statusDisplay = booking.status
+                  statusColor = 'bg-gray-100 text-gray-700'
+                }
+
+                return (
+                  <div
+                    key={booking.id}
+                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <h4 className="font-bold text-lg text-gray-900 mb-1">{booking.title}</h4>
+                        <p className="text-sm text-gray-600">
+                          📅 {new Date(booking.date).toLocaleString()}
+                        </p>
+                        <p className="text-sm text-gray-600">📍 {booking.location}</p>
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${statusColor}`}>
+                            {statusDisplay}
+                          </span>
+                          <span className="text-sm text-gray-600">
+                            💳 {booking.credits_used} credit{booking.credits_used !== 1 ? 's' : ''} used
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Booked: {new Date(booking.booked_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/event-public/${booking.id}`}
+                        className="text-blue-600 hover:text-blue-800 font-medium text-sm ml-4"
+                      >
+                        View Event →
+                      </Link>
                     </div>
-                    <Link
-                      href={`/event-public/${event.id}`}
-                      className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-                    >
-                      View Event →
-                    </Link>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
 
-        {attendedEvents.length === 0 && (
+        {eventBookings.length === 0 && (
           <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 text-center text-gray-500">
-            <p className="text-lg">No events attended yet</p>
+            <p className="text-lg">No event bookings yet</p>
             <Link
               href="/dashboard"
               className="text-blue-600 hover:text-blue-800 font-medium mt-2 inline-block"
