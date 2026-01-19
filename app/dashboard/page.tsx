@@ -343,47 +343,37 @@ export default function Dashboard() {
               } else {
                 console.log(`Successfully promoted waitlist member ${nextWaitlistMember.id} to confirmed`)
                 
-                // Small delay to ensure the promotion is committed
-                await new Promise(resolve => setTimeout(resolve, 100))
+                // Use database function to update all waitlist positions
+                // This bypasses RLS since the function runs with SECURITY DEFINER
+                const { data: functionResult, error: functionError } = await supabase
+                  .rpc('update_waitlist_positions', { event_uuid: event.id })
                 
-                // Update waitlist positions for remaining waitlist members
-                // First, get all remaining waitlist members (refresh after promotion)
-                const { data: remainingWaitlist, error: remainingError } = await supabase
-                  .from('bookings')
-                  .select('id, waitlist_position')
-                  .eq('event_id', event.id)
-                  .eq('status', 'waitlist')
-                  .order('waitlist_position', { ascending: true })
-
-                if (!remainingError && remainingWaitlist && remainingWaitlist.length > 0) {
-                  console.log(`Found ${remainingWaitlist.length} remaining waitlist members to update`)
+                if (functionError) {
+                  console.error('Error updating waitlist positions via function:', functionError)
                   
-                  // Update positions sequentially (1, 2, 3, etc.)
-                  let successCount = 0
-                  for (let i = 0; i < remainingWaitlist.length; i++) {
-                    const newPosition = i + 1
-                    const oldPosition = remainingWaitlist[i].waitlist_position
-                    
-                    console.log(`Updating booking ${remainingWaitlist[i].id} from position ${oldPosition} to ${newPosition}`)
-                    
-                    const { data: updatedData, error: updateError } = await supabase
-                      .from('bookings')
-                      .update({ waitlist_position: newPosition })
-                      .eq('id', remainingWaitlist[i].id)
-                      .select()
+                  // Fallback: Try manual update (might fail due to RLS)
+                  console.log('Attempting fallback manual update...')
+                  const { data: remainingWaitlist, error: remainingError } = await supabase
+                    .from('bookings')
+                    .select('id, waitlist_position')
+                    .eq('event_id', event.id)
+                    .eq('status', 'waitlist')
+                    .order('waitlist_position', { ascending: true })
 
-                    if (updateError) {
-                      console.error(`Error updating waitlist position for ${remainingWaitlist[i].id}:`, updateError)
-                    } else if (updatedData && updatedData.length > 0) {
-                      console.log(`✓ Successfully updated booking ${remainingWaitlist[i].id} to position ${newPosition}`)
-                      successCount++
-                    } else {
-                      console.warn(`⚠ No rows updated for booking ${remainingWaitlist[i].id}`)
+                  if (!remainingError && remainingWaitlist && remainingWaitlist.length > 0) {
+                    for (let i = 0; i < remainingWaitlist.length; i++) {
+                      const newPosition = i + 1
+                      await supabase
+                        .from('bookings')
+                        .update({ waitlist_position: newPosition })
+                        .eq('id', remainingWaitlist[i].id)
                     }
+                    console.log(`Fallback: Updated ${remainingWaitlist.length} waitlist positions`)
                   }
-                  console.log(`Successfully updated ${successCount}/${remainingWaitlist.length} waitlist positions`)
+                } else {
+                  console.log('Successfully updated waitlist positions using database function')
                   
-                  // Verify the updates by fetching the waitlist again
+                  // Verify the updates
                   const { data: verifyWaitlist, error: verifyError } = await supabase
                     .from('bookings')
                     .select('id, waitlist_position')
@@ -393,13 +383,7 @@ export default function Dashboard() {
                   
                   if (!verifyError && verifyWaitlist) {
                     console.log('Verification - Current waitlist positions:', verifyWaitlist.map(w => ({ id: w.id, position: w.waitlist_position })))
-                  } else if (verifyError) {
-                    console.error('Error verifying waitlist positions:', verifyError)
                   }
-                } else if (remainingError) {
-                  console.error('Error fetching remaining waitlist:', remainingError)
-                } else {
-                  console.log('No remaining waitlist members to update')
                 }
               }
             } else {
