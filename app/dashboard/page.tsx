@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Profile, Event, Booking } from '@/lib/supabase'
+import { formatDateTime, formatTime } from '@/lib/dateUtils'
+import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
 
 export default function Dashboard() {
@@ -18,6 +20,7 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [roleRequestStatus, setRoleRequestStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null)
+  const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
   const router = useRouter()
 
   useEffect(() => {
@@ -101,6 +104,24 @@ export default function Dashboard() {
       if (eventsError) throw eventsError
       setEvents(eventsData || [])
 
+      // Load confirmed booking counts for all events
+      if (eventsData && eventsData.length > 0) {
+        const eventIds = eventsData.map(e => e.id)
+        const { data: confirmedCountsData, error: countsError } = await supabase
+          .from('bookings')
+          .select('event_id, status')
+          .in('event_id', eventIds)
+          .eq('status', 'confirmed')
+
+        if (!countsError && confirmedCountsData) {
+          const counts: Record<string, number> = {}
+          confirmedCountsData.forEach(booking => {
+            counts[booking.event_id] = (counts[booking.event_id] || 0) + 1
+          })
+          setEventConfirmedCounts(counts)
+        }
+      }
+
       // Load user's bookings (confirmed AND waitlist)
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
@@ -133,7 +154,7 @@ export default function Dashboard() {
         const registrationOpensAt = new Date(event.registration_opens_at)
         const now = new Date()
         if (now < registrationOpensAt) {
-          throw new Error(`Registration opens on ${registrationOpensAt.toLocaleString()}`)
+          throw new Error(`Registration opens on ${formatDateTime(registrationOpensAt)}`)
         }
       }
 
@@ -273,6 +294,44 @@ export default function Dashboard() {
 
       if (bookingError) throw bookingError
 
+      // If a confirmed booking was cancelled and event has max_attendees, promote next waitlist member
+      if (booking.status === 'confirmed' && event.max_attendees) {
+        // Get current confirmed count (after cancellation, this should be one less)
+        const { count: currentConfirmedCount, error: countError } = await supabase
+          .from('bookings')
+          .select('*', { count: 'exact', head: true })
+          .eq('event_id', event.id)
+          .eq('status', 'confirmed')
+
+        if (!countError && currentConfirmedCount !== null && currentConfirmedCount < event.max_attendees) {
+          // Find the next waitlist member (lowest waitlist_position)
+          const { data: nextWaitlistMember, error: waitlistError } = await supabase
+            .from('bookings')
+            .select('id, user_id, credits_used, waitlist_position')
+            .eq('event_id', event.id)
+            .eq('status', 'waitlist')
+            .order('waitlist_position', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+
+          if (!waitlistError && nextWaitlistMember) {
+            // Promote the waitlist member to confirmed
+            const { error: promoteError } = await supabase
+              .from('bookings')
+              .update({ 
+                status: 'confirmed',
+                waitlist_position: null
+              })
+              .eq('id', nextWaitlistMember.id)
+
+            if (!promoteError) {
+              // Update waitlist positions for remaining waitlist members
+              await supabase.rpc('update_waitlist_positions', { event_uuid: event.id })
+            }
+          }
+        }
+      }
+
       // Waitlist always gets full refund
       const shouldRefund = booking.status === 'waitlist' || willGetRefund
 
@@ -341,42 +400,8 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/profile"
-              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-            >
-              My Profile
-            </Link>
-            {(userRole === 'event_creator' || userRole === 'admin') && (
-              <Link
-                href="/events/manage"
-                className="text-sm text-green-600 hover:text-green-800 font-medium"
-              >
-                Event Management
-              </Link>
-            )}
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className="text-sm text-purple-600 hover:text-purple-800 font-medium"
-              >
-                Admin Panel
-              </Link>
-            )}
-            <button
-              onClick={handleSignOut}
-              className="text-sm text-gray-700 hover:text-gray-900 font-medium"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Navigation Tabs */}
+      <NavigationTabs />
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* Role Request Status / Apply Section */}
@@ -479,39 +504,69 @@ export default function Dashboard() {
                 const borderColor = isWaitlist ? 'border-yellow-500' : 'border-green-500'
 
                 return (
-                  <div key={booking.id} className={`bg-white rounded-lg shadow p-6 border-l-4 ${borderColor}`}>
-                    <h3 className="font-bold text-lg mb-2">
+                  <div key={booking.id} className={`bg-white rounded-lg shadow p-4 border-l-4 ${borderColor}`}>
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-bold text-lg flex-1">
                         <Link 
                           href={`/events/${booking.event_id}`}
                           className="text-blue-600 hover:text-blue-800 hover:underline"
                         >
                           {booking.events.title}
                         </Link>
-                    </h3>
-                    <p className="text-gray-600 text-sm mb-2">{booking.events.description}</p>
-                    <div className="text-sm text-gray-500 mb-4">
-                      <p>📅 {new Date(booking.events.date).toLocaleString()}</p>
-                      <p>📍 {booking.events.location}</p>
-                      <p>💳 {booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</p>
-                      
-                      {!isPast ? (
-                        <p className="text-blue-600 font-semibold mt-2">
-                          ⏰ In {timeDisplay}
-                        </p>
-                      ) : (
-                        <p className="text-gray-400 font-semibold mt-2">
-                          ✓ Event completed
-                        </p>
-                      )}
-                      
+                      </h3>
                       {!isPast && (
                         isWaitlist ? (
-                          <p className="text-yellow-600 font-semibold">
-                            ⏳ Waitlist #{booking.waitlist_position}
-                          </p>
+                          <span className="text-yellow-600 font-semibold text-xs ml-2 whitespace-nowrap">
+                            ⏳ #{booking.waitlist_position}
+                          </span>
                         ) : (
-                          <p className="text-green-600 font-semibold">✓ Confirmed</p>
+                          <span className="text-green-600 font-semibold text-xs ml-2">✓</span>
                         )
+                      )}
+                    </div>
+                    
+                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">{booking.events.description}</p>
+                    
+                    <div className="flex justify-between gap-4 text-xs text-gray-600 mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span>📅</span>
+                          <span>{formatDateTime(booking.events.date)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>📍</span>
+                          <span>{booking.events.location}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {booking.events.max_attendees && (
+                          <div className="mb-1">
+                            <span>👥 Max {booking.events.max_attendees}</span>
+                          </div>
+                        )}
+                        {booking.events.theme && (
+                          <div>
+                            <span>🎨 {booking.events.theme}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-xs mb-3">
+                      <div className="flex items-center gap-1">
+                        <span>💳</span>
+                        <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
+                      </div>
+                      {!isPast ? (
+                        <div className="flex items-center gap-1 text-blue-600 font-semibold">
+                          <span>⏰</span>
+                          <span>In {timeDisplay}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-gray-400">
+                          <span>✓</span>
+                          <span>Completed</span>
+                        </div>
                       )}
                     </div>
 
@@ -566,60 +621,88 @@ export default function Dashboard() {
                 // Check if registration is open
                 const isRegistrationOpen = !event.registration_opens_at || new Date() >= new Date(event.registration_opens_at)
                 const registrationOpensAt = event.registration_opens_at ? new Date(event.registration_opens_at) : null
+                
+                // Check if event is full
+                const confirmedCount = eventConfirmedCounts[event.id] || 0
+                const isFull = event.max_attendees !== null && confirmedCount >= event.max_attendees
 
                 return (
-                  <div key={event.id} className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
-                    <h3 className="font-bold text-lg mb-2 text-gray-900">
-                      <Link 
-                        href={`/events/${event.id}`}
-                        className="text-blue-700 hover:text-blue-900 hover:underline"
-                      >
-                        {event.title}
-                      </Link>
-                    </h3>
-                    <p className="text-gray-700 text-sm mb-4">{event.description}</p>
-                    
-                    <div className="text-sm text-gray-600 mb-4">
-                      <p className="text-gray-800">📅 {new Date(event.date).toLocaleString()}</p>
-                      <p className="text-gray-800">📍 {event.location}</p>
-                      {event.theme && (
-                        <p className="text-gray-800">🎨 Theme: {event.theme}</p>
-                      )}
-                      {event.max_attendees && (
-                        <p className="text-gray-800">👥 Max {event.max_attendees} attendees</p>
-                      )}
-                      {!isRegistrationOpen && registrationOpensAt && (
-                        <p className="text-orange-600 font-semibold mt-2">
-                          ⏰ Registration opens: {registrationOpensAt.toLocaleString()}
-                        </p>
-                      )}
-                      <p className="text-xs mt-2 text-gray-600">
-                        ⏱️ Cancel up to {event.cancellation_hours || 4}h before for refund
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg font-semibold text-blue-700">
+                  <div key={event.id} className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-bold text-lg flex-1 text-gray-900">
+                        <Link 
+                          href={`/events/${event.id}`}
+                          className="text-blue-700 hover:text-blue-900 hover:underline"
+                        >
+                          {event.title}
+                        </Link>
+                      </h3>
+                      <span className="text-lg font-semibold text-blue-700 ml-2 whitespace-nowrap">
                         {event.credits_required} {event.credits_required === 1 ? 'credit' : 'credits'}
                       </span>
+                    </div>
+                    
+                    <p className="text-gray-700 text-sm mb-3 line-clamp-2">{event.description}</p>
+                    
+                    <div className="flex justify-between gap-4 text-xs text-gray-600 mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1 mb-1">
+                          <span>📅</span>
+                          <span>{formatDateTime(event.date)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span>📍</span>
+                          <span>{event.location}</span>
+                        </div>
+                        {!isRegistrationOpen && registrationOpensAt && (
+                          <div className="flex items-center gap-1 text-orange-600 font-semibold mt-1">
+                            <span>⏰</span>
+                            <span>Opens: {formatDateTime(registrationOpensAt)}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        {event.max_attendees && (
+                          <div className="mb-1">
+                            <span>👥 Max {event.max_attendees}</span>
+                          </div>
+                        )}
+                        {event.theme && (
+                          <div>
+                            <span>🎨 {event.theme}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
+                      <p className="text-xs text-gray-500">
+                        ⏱️ Cancel {event.cancellation_hours || 4}h before
+                      </p>
                       
                       {isBooked ? (
                         booking.status === 'waitlist' ? (
-                          <span className="text-yellow-600 font-semibold">⏳ Waitlisted</span>
+                          <span className="text-yellow-600 font-semibold text-xs">⏳ Waitlisted</span>
                         ) : (
-                          <span className="text-green-600 font-semibold">✓ Booked</span>
+                          <span className="text-green-600 font-semibold text-xs">✓ Booked</span>
                         )
                       ) : !isRegistrationOpen ? (
-                        <span className="text-orange-600 font-semibold text-sm">
-                          Registration Not Open
+                        <span className="text-orange-600 font-semibold text-xs">
+                          Not Open
                         </span>
                       ) : (
                         <button
                           onClick={() => handleBookEvent(event)}
                           disabled={!canAfford || isBooking}
-                          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
+                          className="bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-xs font-medium whitespace-nowrap"
                         >
-                          {isBooking ? 'Booking...' : !canAfford ? 'Not enough credits' : 'Book Event'}
+                          {isBooking 
+                            ? 'Booking...' 
+                            : !canAfford 
+                              ? 'Not enough credits' 
+                              : isFull 
+                                ? 'Join Waitlist' 
+                                : 'Book Event'}
                         </button>
                       )}
                     </div>
@@ -644,32 +727,61 @@ export default function Dashboard() {
                   const borderColor = isWaitlist ? 'border-yellow-500' : 'border-gray-400'
 
                   return (
-                    <div key={booking.id} className={`bg-white rounded-lg shadow p-6 border-l-4 ${borderColor} opacity-75`}>
-                      <h3 className="font-bold text-lg mb-2">
-                        <Link 
-                          href={`/events/${booking.event_id}`}
-                          className="text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {booking.events.title}
-                        </Link>
-                      </h3>
-                      <p className="text-gray-600 text-sm mb-2">{booking.events.description}</p>
-                      <div className="text-sm text-gray-500 mb-4">
-                        <p>📅 {new Date(booking.events.date).toLocaleString()}</p>
-                        <p>📍 {booking.events.location}</p>
-                        <p>💳 {booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</p>
-                        
-                        <p className="text-gray-400 font-semibold mt-2">
-                          ✓ Event completed
-                        </p>
-                        
+                    <div key={booking.id} className={`bg-white rounded-lg shadow p-4 border-l-4 ${borderColor} opacity-75`}>
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-bold text-lg flex-1">
+                          <Link 
+                            href={`/events/${booking.event_id}`}
+                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {booking.events.title}
+                          </Link>
+                        </h3>
                         {isWaitlist ? (
-                          <p className="text-yellow-600 font-semibold">
-                            ⏳ Waitlist #{booking.waitlist_position}
-                          </p>
+                          <span className="text-yellow-600 font-semibold text-xs ml-2 whitespace-nowrap">
+                            ⏳ #{booking.waitlist_position}
+                          </span>
                         ) : (
-                          <p className="text-green-600 font-semibold">✓ Confirmed</p>
+                          <span className="text-green-600 font-semibold text-xs ml-2">✓</span>
                         )}
+                      </div>
+                      
+                      <p className="text-gray-600 text-sm mb-3 line-clamp-2">{booking.events.description}</p>
+                      
+                      <div className="flex justify-between gap-4 text-xs text-gray-500 mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-1 mb-1">
+                            <span>📅</span>
+                            <span>{formatDateTime(booking.events.date)}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span>📍</span>
+                            <span>{booking.events.location}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {booking.events.max_attendees && (
+                            <div className="mb-1">
+                              <span>👥 Max {booking.events.max_attendees}</span>
+                            </div>
+                          )}
+                          {booking.events.theme && (
+                            <div>
+                              <span>🎨 {booking.events.theme}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1">
+                          <span>💳</span>
+                          <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-gray-400">
+                          <span>✓</span>
+                          <span>Completed</span>
+                        </div>
                       </div>
                     </div>
                   )

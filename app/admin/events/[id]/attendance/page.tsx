@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { formatDateTime, formatTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 
 type BookingWithProfile = {
@@ -209,7 +210,7 @@ export default function AttendancePage() {
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">{event.title}</h2>
           <p className="text-gray-600 mb-4">
-            📅 {new Date(event.date).toLocaleString()}
+            📅 {formatDateTime(event.date)}
           </p>
           
           {/* Host Section */}
@@ -295,7 +296,7 @@ export default function AttendancePage() {
                         </td>
                         <td className="py-3 px-4 text-gray-600">{booking.profiles.email}</td>
                         <td className="py-3 px-4 text-gray-600 text-sm">
-                          {new Date(booking.booked_at).toLocaleString()}
+                          {formatDateTime(booking.booked_at)}
                         </td>
                         <td className="py-3 px-4">
                           {attendanceStatus === 'attended' && (

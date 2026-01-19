@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { PublicProfile } from '@/lib/supabase'
+import { formatDateTime, formatDate } from '@/lib/dateUtils'
 import Link from 'next/link'
 
 type UpcomingEvent = {
@@ -113,10 +114,7 @@ export default function PublicProfilePage() {
     )
   }
 
-  const memberSince = new Date(profile.created_at).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long'
-  })
+  const memberSince = formatDate(profile.created_at)
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -225,7 +223,7 @@ export default function PublicProfilePage() {
                     <div>
                       <h4 className="font-bold text-lg text-gray-900 mb-1">{event.title}</h4>
                       <p className="text-sm text-gray-600">
-                        📅 {new Date(event.date).toLocaleString()}
+                        📅 {formatDateTime(event.date)}
                       </p>
                       <p className="text-sm text-gray-600">📍 {event.location}</p>
                       <div className="mt-2">

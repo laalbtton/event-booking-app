@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { formatDate } from '@/lib/dateUtils'
 
 type RoleChangeRequest = {
   id: string
@@ -240,7 +241,7 @@ export default function AdminRequestsPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(request.created_at).toLocaleDateString()}
+                    {formatDate(request.created_at)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     {request.status === 'pending' && (

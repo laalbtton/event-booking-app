@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/lib/supabase'
+import { formatDateTime } from '@/lib/dateUtils'
+import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
 
 export default function EventManagementPage() {
@@ -14,6 +16,7 @@ export default function EventManagementPage() {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
   const router = useRouter()
   
   const [formData, setFormData] = useState({
@@ -273,20 +276,8 @@ export default function EventManagementPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="text-blue-600 hover:text-blue-800 font-medium"
-            >
-              ← Back to Dashboard
-            </Link>
-            <h1 className="text-2xl font-bold text-gray-900">Event Management</h1>
-          </div>
-        </div>
-      </div>
+      {/* Navigation Tabs */}
+      <NavigationTabs />
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-6">
@@ -299,15 +290,57 @@ export default function EventManagementPage() {
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="mb-6 border-b border-gray-200">
+          <nav className="flex space-x-8" aria-label="Tabs">
+            <button
+              onClick={() => setActiveTab('upcoming')}
+              className={`${
+                activeTab === 'upcoming'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+            >
+              Upcoming Events
+            </button>
+            <button
+              onClick={() => setActiveTab('past')}
+              className={`${
+                activeTab === 'past'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+            >
+              Past Events
+            </button>
+          </nav>
+        </div>
+
         {/* Events Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {events.map((event) => (
+          {events
+            .filter((event) => {
+              const eventDate = new Date(event.date)
+              const now = new Date()
+              if (activeTab === 'upcoming') {
+                return eventDate >= now
+              } else {
+                return eventDate < now
+              }
+            })
+            .sort((a, b) => {
+              const dateA = new Date(a.date).getTime()
+              const dateB = new Date(b.date).getTime()
+              // Upcoming: ascending (soonest first), Past: descending (most recent first)
+              return activeTab === 'upcoming' ? dateA - dateB : dateB - dateA
+            })
+            .map((event) => (
             <div key={event.id} className="bg-white rounded-lg shadow p-6">
               <h3 className="font-bold text-lg mb-2">{event.title}</h3>
               <p className="text-gray-600 text-sm mb-4">{event.description}</p>
               
               <div className="text-sm text-gray-500 mb-4 space-y-1">
-                <p>📅 {new Date(event.date).toLocaleString()}</p>
+                <p>📅 {formatDateTime(event.date)}</p>
                 <p>📍 {event.location}</p>
                 {event.theme && <p>🎨 Theme: {event.theme}</p>}
                 <p>💳 {event.credits_required} credits</p>
@@ -316,22 +349,26 @@ export default function EventManagementPage() {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => handleEditEvent(event)}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-medium"
-                  title="Edit Event"
-                >
-                  ✏️ Edit Details
-                </button>
+                {activeTab === 'upcoming' && (
+                  <>
+                    <button
+                      onClick={() => handleEditEvent(event)}
+                      className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-medium"
+                      title="Edit Event"
+                    >
+                      ✏️ Edit Details
+                    </button>
+                    
+                    <button
+                      onClick={() => handleDeleteEvent(event.id, event.title)}
+                      className="bg-red-600 text-white px-3 py-2 rounded hover:bg-red-700 text-sm font-medium"
+                      title="Delete Event"
+                    >
+                      🗑️
+                    </button>
+                  </>
+                )}
                 
-                <button
-                  onClick={() => handleDeleteEvent(event.id, event.title)}
-                  className="bg-red-600 text-white px-3 py-2 rounded hover:bg-red-700 text-sm font-medium"
-                  title="Delete Event"
-                >
-                  🗑️
-                </button>
-
                 <button
                   onClick={() => {
                     const publicUrl = `${window.location.origin}/event-public/${event.id}`
@@ -344,29 +381,53 @@ export default function EventManagementPage() {
                   ⎘
                 </button>
 
-                <Link
-                  href={`/events/${event.id}/qr`}
-                  className="bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700 text-center inline-block"
-                  title="Generate QR Code"
-                >
-                  ▦
-                </Link>
+                {activeTab === 'upcoming' && (
+                  <>
+                    <Link
+                      href={`/events/${event.id}/qr`}
+                      className="bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700 text-center inline-block"
+                      title="Generate QR Code"
+                    >
+                      ▦
+                    </Link>
 
-                <Link
-                  href={`/events/${event.id}/attendance`}
-                  className="bg-orange-600 text-white px-3 py-2 rounded hover:bg-orange-700 text-center inline-block"
-                  title="Manage Attendance"
-                >
-                  👥
-                </Link>
+                    <Link
+                      href={`/events/${event.id}/attendance`}
+                      className="bg-orange-600 text-white px-3 py-2 rounded hover:bg-orange-700 text-center inline-block"
+                      title="Manage Attendance"
+                    >
+                      👥
+                    </Link>
+                  </>
+                )}
+
+                {activeTab === 'past' && (
+                  <Link
+                    href={`/events/${event.id}/attendance`}
+                    className="bg-orange-600 text-white px-3 py-2 rounded hover:bg-orange-700 text-center inline-block flex-1"
+                    title="View Attendance"
+                  >
+                    👥 View Attendance
+                  </Link>
+                )}
               </div>
             </div>
           ))}
         </div>
 
-        {events.length === 0 && (
+        {events.filter((event) => {
+          const eventDate = new Date(event.date)
+          const now = new Date()
+          if (activeTab === 'upcoming') {
+            return eventDate >= now
+          } else {
+            return eventDate < now
+          }
+        }).length === 0 && (
           <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-            No events yet. Create your first event!
+            {activeTab === 'upcoming' 
+              ? 'No upcoming events. Create your first event!'
+              : 'No past events yet.'}
           </div>
         )}
 

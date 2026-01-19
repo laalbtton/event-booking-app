@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/supabase'
+import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 
 type RoleChangeRequest = {
@@ -135,7 +136,7 @@ export default function ApplyEventCreatorPage() {
 
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-yellow-800">
-                <strong>Submitted:</strong> {new Date(existingRequest.created_at).toLocaleString()}
+                <strong>Submitted:</strong> {formatDateTime(existingRequest.created_at)}
               </p>
               {existingRequest.message && (
                 <div className="mt-2">

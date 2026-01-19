@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/lib/supabase'
+import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 
 export default function AdminEventsPage() {
@@ -223,7 +224,7 @@ export default function AdminEventsPage() {
             <p className="text-gray-600 text-sm mb-4">{event.description}</p>
             
             <div className="text-sm text-gray-500 mb-4 space-y-1">
-              <p>📅 {new Date(event.date).toLocaleString()}</p>
+              <p>📅 {formatDateTime(event.date)}</p>
               <p>📍 {event.location}</p>
               {event.theme && <p>🎨 Theme: {event.theme}</p>}
               <p>💳 {event.credits_required} credits</p>

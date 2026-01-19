@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Profile, Event } from '@/lib/supabase'
+import { formatDateTime, formatDate } from '@/lib/dateUtils'
+import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
 
 type EventBooking = {
@@ -175,33 +177,12 @@ export default function ProfilePage() {
     )
   }
 
-  const memberSince = new Date(profile.created_at).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long'
-  })
+  const memberSince = formatDate(profile.created_at)
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="text-blue-600 hover:text-blue-800 font-medium"
-            >
-              ← Back to Dashboard
-            </Link>
-            <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
-          </div>
-          <button
-            onClick={handleSignOut}
-            className="text-sm text-gray-700 hover:text-gray-900 font-medium"
-          >
-            Sign Out
-          </button>
-        </div>
-      </div>
+      {/* Navigation Tabs */}
+      <NavigationTabs />
 
       <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* Profile Card */}
@@ -450,7 +431,7 @@ export default function ProfilePage() {
                       <div className="flex-1">
                         <h4 className="font-bold text-lg text-gray-900 mb-1">{booking.title}</h4>
                         <p className="text-sm text-gray-600">
-                          📅 {new Date(booking.date).toLocaleString()}
+                          📅 {formatDateTime(booking.date)}
                         </p>
                         <p className="text-sm text-gray-600">📍 {booking.location}</p>
                         <div className="flex items-center gap-3 mt-2">
@@ -462,7 +443,7 @@ export default function ProfilePage() {
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          Booked: {new Date(booking.booked_at).toLocaleDateString()}
+                          Booked: {formatDate(booking.booked_at)}
                         </p>
                       </div>
                       <Link

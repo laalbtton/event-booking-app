@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 
 type EventDetails = {
@@ -194,7 +195,7 @@ export default function PublicEventPage() {
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-blue-50 p-4 rounded-lg">
               <h3 className="text-sm font-bold text-blue-900 mb-2">📅 DATE & TIME</h3>
-              <p className="text-base text-gray-900">{eventDate.toLocaleString()}</p>
+              <p className="text-base text-gray-900">{formatDateTime(event.date)}</p>
             </div>
 
             <div className="bg-purple-50 p-4 rounded-lg">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { formatDate } from '@/lib/dateUtils'
 
 type BookingWithDetails = {
   id: string
@@ -122,7 +123,7 @@ export default function AdminBookingsPage() {
                   <div className="text-sm text-gray-500">{booking.events.location}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(booking.events.date).toLocaleDateString()}
+                  {formatDate(booking.events.date)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
@@ -130,7 +131,7 @@ export default function AdminBookingsPage() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(booking.booked_at).toLocaleDateString()}
+                  {formatDate(booking.booked_at)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
