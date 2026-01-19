@@ -6,12 +6,16 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Type definitions
+// User roles
+export type UserRole = 'performer' | 'event_creator' | 'admin'
+
 // Full profile (for own profile)
 export type Profile = {
   id: string
   email: string
   full_name: string | null
   credits: number
+  role: UserRole
   instagram_link: string | null
   youtube_link: string | null
   twitter_link: string | null
@@ -45,6 +49,7 @@ export type Event = {
   cancellation_hours: number
   registration_opens_at: string | null
   host_user_id: string | null
+  created_by: string | null
   created_at: string
   updated_at: string
 }

@@ -112,6 +112,9 @@ export default function AdminUsersPage() {
                 Email
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Role
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Credits
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -132,6 +135,30 @@ export default function AdminUsersPage() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-500">{user.email}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <select
+                    value={user.role || 'performer'}
+                    onChange={async (e) => {
+                      try {
+                        const newRole = e.target.value as 'performer' | 'event_creator' | 'admin'
+                        const { error } = await supabase
+                          .from('profiles')
+                          .update({ role: newRole, updated_at: new Date().toISOString() })
+                          .eq('id', user.id)
+                        
+                        if (error) throw error
+                        loadUsers()
+                      } catch (error: any) {
+                        alert('Error updating role: ' + error.message)
+                      }
+                    }}
+                    className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                  >
+                    <option value="performer">Performer</option>
+                    <option value="event_creator">Event Creator</option>
+                    <option value="admin">Admin</option>
+                  </select>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">

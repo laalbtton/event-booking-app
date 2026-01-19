@@ -74,6 +74,70 @@ ADD COLUMN IF NOT EXISTS registration_opens_at TIMESTAMPTZ;
 ALTER TABLE events
 ADD COLUMN IF NOT EXISTS host_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
 
+-- 7b. Add created_by column to events table
+-- Tracks which user (event creator) created the event
+ALTER TABLE events
+ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES profiles(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
+
 -- Optional: Add index for better query performance
 CREATE INDEX IF NOT EXISTS idx_events_registration_opens_at ON events(registration_opens_at);
 CREATE INDEX IF NOT EXISTS idx_events_host_user_id ON events(host_user_id);
+
+-- ============================================
+-- User Roles Migration
+-- ============================================
+
+-- 8. Add role column to profiles table
+-- Default role is 'performer', can be 'event_creator' or 'admin'
+ALTER TABLE profiles
+ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'performer' CHECK (role IN ('performer', 'event_creator', 'admin'));
+
+-- Update existing users: if they're in admin_users table, set role to 'admin'
+UPDATE profiles
+SET role = 'admin'
+WHERE id IN (SELECT user_id FROM admin_users);
+
+-- Create index for role queries
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
+
+-- ============================================
+-- Role Change Requests System
+-- ============================================
+
+-- 9. Create role_change_requests table
+-- Tracks user requests to become event creators
+CREATE TABLE IF NOT EXISTS role_change_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  requested_role TEXT NOT NULL CHECK (requested_role IN ('event_creator', 'admin')),
+  from_role TEXT NOT NULL CHECK (from_role IN ('performer', 'event_creator', 'admin')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  message TEXT,
+  admin_notes TEXT,
+  reviewed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create indexes for role_change_requests
+CREATE INDEX IF NOT EXISTS idx_role_change_requests_user_id ON role_change_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_role_change_requests_status ON role_change_requests(status);
+CREATE INDEX IF NOT EXISTS idx_role_change_requests_reviewed_by ON role_change_requests(reviewed_by);
+
+-- Function to automatically update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_role_change_requests_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update updated_at on role_change_requests
+CREATE TRIGGER trigger_update_role_change_requests_updated_at
+BEFORE UPDATE ON role_change_requests
+FOR EACH ROW
+EXECUTE FUNCTION update_role_change_requests_updated_at();

@@ -26,14 +26,26 @@ export default function AdminLayout({
       return
     }
 
-    // Check if user is admin
-    const { data: adminData } = await supabase
-      .from('admin_users')
-      .select('*')
-      .eq('user_id', user.id)
+    // Check user role - only admins can access admin panel
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
       .single()
 
-    if (!adminData) {
+    if (profileError || !profile) {
+      // Fallback: check admin_users table for backward compatibility
+      const { data: adminData } = await supabase
+        .from('admin_users')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
+
+      if (!adminData) {
+        router.push('/dashboard')
+        return
+      }
+    } else if (profile.role !== 'admin') {
       router.push('/dashboard')
       return
     }
@@ -105,6 +117,12 @@ export default function AdminLayout({
               className="text-gray-700 hover:text-gray-900 font-medium"
             >
               Bookings
+            </Link>
+            <Link
+              href="/admin/requests"
+              className="text-gray-700 hover:text-gray-900 font-medium"
+            >
+              Role Requests
             </Link>
           </nav>
         </div>

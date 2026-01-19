@@ -16,6 +16,8 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [currentTime, setCurrentTime] = useState(new Date())
   const [isAdmin, setIsAdmin] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [roleRequestStatus, setRoleRequestStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -38,14 +40,41 @@ export default function Dashboard() {
       return
     }
 
-    // Check if user is admin
-    const { data: adminData } = await supabase
-      .from('admin_users')
-      .select('*')
-      .eq('user_id', user.id)
+    // Check user role
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
       .single()
 
+    if (!profileError && profile) {
+      setUserRole(profile.role)
+      setIsAdmin(profile.role === 'admin')
+    } else {
+      // Fallback: check admin_users table for backward compatibility
+      const { data: adminData } = await supabase
+        .from('admin_users')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
+
     setIsAdmin(!!adminData)
+    setUserRole(adminData ? 'admin' : 'performer')
+    }
+
+    // Check for existing role change request
+    const { data: requestData } = await supabase
+      .from('role_change_requests')
+      .select('status')
+      .eq('user_id', user.id)
+      .eq('requested_role', 'event_creator')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (requestData) {
+      setRoleRequestStatus(requestData.status)
+    }
 
     loadData(user.id)
   }
@@ -323,6 +352,14 @@ export default function Dashboard() {
             >
               My Profile
             </Link>
+            {(userRole === 'event_creator' || userRole === 'admin') && (
+              <Link
+                href="/events/manage"
+                className="text-sm text-green-600 hover:text-green-800 font-medium"
+              >
+                Event Management
+              </Link>
+            )}
             {isAdmin && (
               <Link
                 href="/admin"
@@ -342,6 +379,54 @@ export default function Dashboard() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        {/* Role Request Status / Apply Section */}
+        {userRole === 'performer' && (
+          <div className="mb-6">
+            {roleRequestStatus === 'pending' && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-semibold text-yellow-900">Application Pending</h3>
+                  <p className="text-sm text-yellow-700">Your request to become an Event Creator is under review.</p>
+                </div>
+                <Link
+                  href="/apply-event-creator"
+                  className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 font-medium"
+                >
+                  View Status
+                </Link>
+              </div>
+            )}
+            {roleRequestStatus === 'rejected' && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-semibold text-red-900">Application Rejected</h3>
+                  <p className="text-sm text-red-700">Your previous request was rejected. You can submit a new application.</p>
+                </div>
+                <Link
+                  href="/apply-event-creator"
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-medium"
+                >
+                  Reapply
+                </Link>
+              </div>
+            )}
+            {!roleRequestStatus && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-semibold text-blue-900">Become an Event Creator</h3>
+                  <p className="text-sm text-blue-700">Create and manage your own events! Apply now.</p>
+                </div>
+                <Link
+                  href="/apply-event-creator"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
+                >
+                  Apply Now
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Credits Card */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-700 rounded-lg shadow-lg p-6 mb-8 text-white">
           <h2 className="text-lg font-semibold mb-2">Welcome, {profile?.full_name}!</h2>
@@ -357,12 +442,14 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* My Bookings Section */}
-        {myBookings.length > 0 && (
+        {/* My Bookings Section - Upcoming Only */}
+        {myBookings.filter((booking) => new Date(booking.events.date) >= currentTime).length > 0 && (
           <div className="mb-8">
             <h2 className="text-2xl font-bold mb-4 text-gray-900">My Bookings</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {myBookings.map((booking) => {
+              {myBookings
+                .filter((booking) => new Date(booking.events.date) >= currentTime)
+                .map((booking) => {
                 const eventDate = new Date(booking.events.date)
                 const now = currentTime
                 const hoursUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
@@ -542,6 +629,54 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+
+        {/* Past Bookings Section */}
+        {myBookings.filter((booking) => new Date(booking.events.date) < currentTime).length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold mb-4 text-gray-900">Past Bookings</h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {myBookings
+                .filter((booking) => new Date(booking.events.date) < currentTime)
+                .sort((a, b) => new Date(b.events.date).getTime() - new Date(a.events.date).getTime())
+                .map((booking) => {
+                  const eventDate = new Date(booking.events.date)
+                  const isWaitlist = booking.status === 'waitlist'
+                  const borderColor = isWaitlist ? 'border-yellow-500' : 'border-gray-400'
+
+                  return (
+                    <div key={booking.id} className={`bg-white rounded-lg shadow p-6 border-l-4 ${borderColor} opacity-75`}>
+                      <h3 className="font-bold text-lg mb-2">
+                        <Link 
+                          href={`/events/${booking.event_id}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {booking.events.title}
+                        </Link>
+                      </h3>
+                      <p className="text-gray-600 text-sm mb-2">{booking.events.description}</p>
+                      <div className="text-sm text-gray-500 mb-4">
+                        <p>📅 {new Date(booking.events.date).toLocaleString()}</p>
+                        <p>📍 {booking.events.location}</p>
+                        <p>💳 {booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</p>
+                        
+                        <p className="text-gray-400 font-semibold mt-2">
+                          ✓ Event completed
+                        </p>
+                        
+                        {isWaitlist ? (
+                          <p className="text-yellow-600 font-semibold">
+                            ⏳ Waitlist #{booking.waitlist_position}
+                          </p>
+                        ) : (
+                          <p className="text-green-600 font-semibold">✓ Confirmed</p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
