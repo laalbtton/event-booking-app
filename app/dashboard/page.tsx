@@ -224,13 +224,18 @@ export default function Dashboard() {
         throw updateError
       }
 
-      // Create transaction record
-      await supabase.from('credit_transactions').insert({
-        user_id: profile.id,
-        amount: -event.credits_required,
-        transaction_type: 'booking',
-        notes: `${bookingStatus === 'waitlist' ? 'Waitlist: ' : ''}Booked event: ${event.title}`
-      })
+      // Create transaction record (non-blocking - if it fails, booking still succeeds)
+      try {
+        await supabase.from('credit_transactions').insert({
+          user_id: profile.id,
+          amount: -event.credits_required,
+          transaction_type: 'booking',
+          notes: `${bookingStatus === 'waitlist' ? 'Waitlist: ' : ''}Booked event: ${event.title}`
+        })
+      } catch (transactionError: any) {
+        // Log error but don't fail the booking
+        console.warn('Failed to log credit transaction:', transactionError)
+      }
 
       // Reload data
       await loadData(profile.id)
@@ -303,31 +308,105 @@ export default function Dashboard() {
           .eq('event_id', event.id)
           .eq('status', 'confirmed')
 
-        if (!countError && currentConfirmedCount !== null && currentConfirmedCount < event.max_attendees) {
-          // Find the next waitlist member (lowest waitlist_position)
-          const { data: nextWaitlistMember, error: waitlistError } = await supabase
-            .from('bookings')
-            .select('id, user_id, credits_used, waitlist_position')
-            .eq('event_id', event.id)
-            .eq('status', 'waitlist')
-            .order('waitlist_position', { ascending: true })
-            .limit(1)
-            .maybeSingle()
-
-          if (!waitlistError && nextWaitlistMember) {
-            // Promote the waitlist member to confirmed
-            const { error: promoteError } = await supabase
+        if (countError) {
+          console.error('Error getting confirmed count:', countError)
+        } else {
+          console.log(`Event ${event.id}: Current confirmed count: ${currentConfirmedCount}, Max: ${event.max_attendees}`)
+          
+          if (currentConfirmedCount !== null && currentConfirmedCount < event.max_attendees) {
+            // Find the next waitlist member (lowest waitlist_position)
+            const { data: nextWaitlistMember, error: waitlistError } = await supabase
               .from('bookings')
-              .update({ 
-                status: 'confirmed',
-                waitlist_position: null
-              })
-              .eq('id', nextWaitlistMember.id)
+              .select('id, user_id, credits_used, waitlist_position')
+              .eq('event_id', event.id)
+              .eq('status', 'waitlist')
+              .order('waitlist_position', { ascending: true })
+              .limit(1)
+              .maybeSingle()
 
-            if (!promoteError) {
-              // Update waitlist positions for remaining waitlist members
-              await supabase.rpc('update_waitlist_positions', { event_uuid: event.id })
+            if (waitlistError) {
+              console.error('Error finding waitlist member:', waitlistError)
+            } else if (nextWaitlistMember) {
+              console.log(`Promoting waitlist member ${nextWaitlistMember.id} (position ${nextWaitlistMember.waitlist_position}) to confirmed`)
+              
+              // Promote the waitlist member to confirmed
+              const { error: promoteError } = await supabase
+                .from('bookings')
+                .update({ 
+                  status: 'confirmed',
+                  waitlist_position: null
+                })
+                .eq('id', nextWaitlistMember.id)
+
+              if (promoteError) {
+                console.error('Error promoting waitlist member:', promoteError)
+              } else {
+                console.log(`Successfully promoted waitlist member ${nextWaitlistMember.id} to confirmed`)
+                
+                // Small delay to ensure the promotion is committed
+                await new Promise(resolve => setTimeout(resolve, 100))
+                
+                // Update waitlist positions for remaining waitlist members
+                // First, get all remaining waitlist members (refresh after promotion)
+                const { data: remainingWaitlist, error: remainingError } = await supabase
+                  .from('bookings')
+                  .select('id, waitlist_position')
+                  .eq('event_id', event.id)
+                  .eq('status', 'waitlist')
+                  .order('waitlist_position', { ascending: true })
+
+                if (!remainingError && remainingWaitlist && remainingWaitlist.length > 0) {
+                  console.log(`Found ${remainingWaitlist.length} remaining waitlist members to update`)
+                  
+                  // Update positions sequentially (1, 2, 3, etc.)
+                  let successCount = 0
+                  for (let i = 0; i < remainingWaitlist.length; i++) {
+                    const newPosition = i + 1
+                    const oldPosition = remainingWaitlist[i].waitlist_position
+                    
+                    console.log(`Updating booking ${remainingWaitlist[i].id} from position ${oldPosition} to ${newPosition}`)
+                    
+                    const { data: updatedData, error: updateError } = await supabase
+                      .from('bookings')
+                      .update({ waitlist_position: newPosition })
+                      .eq('id', remainingWaitlist[i].id)
+                      .select()
+
+                    if (updateError) {
+                      console.error(`Error updating waitlist position for ${remainingWaitlist[i].id}:`, updateError)
+                    } else if (updatedData && updatedData.length > 0) {
+                      console.log(`✓ Successfully updated booking ${remainingWaitlist[i].id} to position ${newPosition}`)
+                      successCount++
+                    } else {
+                      console.warn(`⚠ No rows updated for booking ${remainingWaitlist[i].id}`)
+                    }
+                  }
+                  console.log(`Successfully updated ${successCount}/${remainingWaitlist.length} waitlist positions`)
+                  
+                  // Verify the updates by fetching the waitlist again
+                  const { data: verifyWaitlist, error: verifyError } = await supabase
+                    .from('bookings')
+                    .select('id, waitlist_position')
+                    .eq('event_id', event.id)
+                    .eq('status', 'waitlist')
+                    .order('waitlist_position', { ascending: true })
+                  
+                  if (!verifyError && verifyWaitlist) {
+                    console.log('Verification - Current waitlist positions:', verifyWaitlist.map(w => ({ id: w.id, position: w.waitlist_position })))
+                  } else if (verifyError) {
+                    console.error('Error verifying waitlist positions:', verifyError)
+                  }
+                } else if (remainingError) {
+                  console.error('Error fetching remaining waitlist:', remainingError)
+                } else {
+                  console.log('No remaining waitlist members to update')
+                }
+              }
+            } else {
+              console.log('No waitlist members found to promote')
             }
+          } else {
+            console.log(`Event is still at capacity (${currentConfirmedCount}/${event.max_attendees}), no promotion needed`)
           }
         }
       }
@@ -346,25 +425,35 @@ export default function Dashboard() {
 
         if (updateError) throw updateError
 
-        // Log refund transaction
-        await supabase.from('credit_transactions').insert({
-          user_id: profile.id,
-          amount: booking.credits_used,
-          transaction_type: 'refund',
-          reference_id: booking.id,
-          notes: `Refund for cancelled ${booking.status === 'waitlist' ? 'waitlist' : 'event'}: ${event.title}`
-        })
+        // Log refund transaction (non-blocking)
+        try {
+          await supabase.from('credit_transactions').insert({
+            user_id: profile.id,
+            amount: booking.credits_used,
+            transaction_type: 'refund',
+            reference_id: booking.id,
+            notes: `Refund for cancelled ${booking.status === 'waitlist' ? 'waitlist' : 'event'}: ${event.title}`
+          })
+        } catch (transactionError: any) {
+          // Log error but don't fail the refund
+          console.warn('Failed to log refund transaction:', transactionError)
+        }
 
         alert(`${booking.status === 'waitlist' ? 'Waitlist removed' : 'Booking cancelled'}. ${booking.credits_used} credit${booking.credits_used > 1 ? 's have' : ' has'} been refunded to your account.`)
       } else {
-        // Log cancellation without refund
-        await supabase.from('credit_transactions').insert({
-          user_id: profile.id,
-          amount: 0,
-          transaction_type: 'cancellation_no_refund',
-          reference_id: booking.id,
-          notes: `Cancelled event without refund (within ${cancellationWindow}h window): ${event.title}`
-        })
+        // Log cancellation without refund (non-blocking)
+        try {
+          await supabase.from('credit_transactions').insert({
+            user_id: profile.id,
+            amount: 0,
+            transaction_type: 'cancellation_no_refund',
+            reference_id: booking.id,
+            notes: `Cancelled event without refund (within ${cancellationWindow}h window): ${event.title}`
+          })
+        } catch (transactionError: any) {
+          // Log error but don't fail the cancellation
+          console.warn('Failed to log cancellation transaction:', transactionError)
+        }
 
         alert('Booking cancelled. No refund issued as cancellation was within the event window.')
       }
