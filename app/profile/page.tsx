@@ -180,7 +180,7 @@ export default function ProfilePage() {
   const memberSince = formatDate(profile.created_at)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-20">
       {/* Navigation Tabs */}
       <NavigationTabs />
 

@@ -11,10 +11,62 @@ export default function NavigationTabs() {
   const router = useRouter()
   const [userRole, setUserRole] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     checkUserRole()
   }, [])
+
+  useEffect(() => {
+    let channel: any = null
+
+    async function setupNotifications() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      loadUnreadCount()
+      
+      // Set up real-time subscription for notifications
+      channel = supabase
+        .channel('notifications-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            loadUnreadCount()
+          }
+        )
+        .subscribe()
+    }
+
+    setupNotifications()
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [])
+
+  async function loadUnreadCount() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('read', false)
+
+    if (!error && count !== null) {
+      setUnreadCount(count)
+    }
+  }
 
   async function checkUserRole() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -50,13 +102,13 @@ export default function NavigationTabs() {
   const isActive = (path: string) => pathname === path || pathname?.startsWith(path + '/')
 
   return (
-    <div className="bg-white shadow-sm border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <nav className="flex items-center justify-between py-2">
-          <div className="flex items-center gap-1 sm:gap-2">
+    <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 z-50 safe-area-inset-bottom">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
+        <nav className="flex items-center justify-around py-2 sm:justify-between">
+          <div className="flex items-center gap-1 sm:gap-2 flex-1 sm:flex-initial justify-around sm:justify-start">
             <Link
               href="/dashboard"
-              className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
+              className={`flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors ${
                 isActive('/dashboard')
                   ? 'bg-blue-50 text-blue-600'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -70,7 +122,7 @@ export default function NavigationTabs() {
 
             <Link
               href="/profile"
-              className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
+              className={`flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors ${
                 isActive('/profile') && !pathname?.startsWith('/profile/')
                   ? 'bg-blue-50 text-blue-600'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -85,7 +137,7 @@ export default function NavigationTabs() {
             {(userRole === 'event_creator' || userRole === 'admin') && (
               <Link
                 href="/events/manage"
-                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
+                className={`flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors ${
                   isActive('/events/manage')
                     ? 'bg-green-50 text-green-600'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -94,14 +146,15 @@ export default function NavigationTabs() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                <span className="text-xs font-medium text-center leading-tight">Manage Events</span>
+                <span className="text-xs font-medium text-center leading-tight hidden sm:inline">Manage Events</span>
+                <span className="text-xs font-medium text-center leading-tight sm:hidden">Events</span>
               </Link>
             )}
 
             {isAdmin && (
               <Link
                 href="/admin"
-                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
+                className={`flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors ${
                   isActive('/admin')
                     ? 'bg-purple-50 text-purple-600'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -116,15 +169,37 @@ export default function NavigationTabs() {
             )}
           </div>
 
-          <button
-            onClick={handleSignOut}
-            className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            <span className="text-xs font-medium">Logout</span>
-          </button>
+          <div className="flex items-center gap-1 sm:gap-2 flex-1 sm:flex-initial justify-around sm:justify-end">
+            <Link
+              href="/notifications"
+              className={`relative flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors ${
+                isActive('/notifications')
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center text-[10px]">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+              <span className="text-xs font-medium hidden sm:inline">Notifications</span>
+              <span className="text-xs font-medium sm:hidden">Alerts</span>
+            </Link>
+
+            <button
+              onClick={handleSignOut}
+              className="flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span className="text-xs font-medium">Logout</span>
+            </button>
+          </div>
         </nav>
       </div>
     </div>

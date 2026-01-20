@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Profile, Event, Booking } from '@/lib/supabase'
 import { formatDateTime, formatTime } from '@/lib/dateUtils'
 import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
+import { createNotification } from '@/lib/notifications'
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -21,6 +22,7 @@ export default function Dashboard() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [roleRequestStatus, setRoleRequestStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null)
   const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
+  const previousBookingsRef = useRef<any[]>([])
   const router = useRouter()
 
   useEffect(() => {
@@ -34,6 +36,101 @@ export default function Dashboard() {
 
     return () => clearInterval(interval)
   }, [])
+
+  // Set up real-time subscription for booking changes
+  useEffect(() => {
+    if (!profile) return
+
+    // Subscribe to changes in bookings table for this user
+    const channel = supabase
+      .channel('bookings-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'bookings',
+          filter: `user_id=eq.${profile.id}`
+        },
+        async (payload) => {
+          const updatedBooking = payload.new as any
+          const oldBooking = payload.old as any
+          
+          if (!profile) return
+          
+          // Check if waitlist position changed
+          if (oldBooking.waitlist_position !== updatedBooking.waitlist_position) {
+            if (updatedBooking.status === 'waitlist') {
+              if (updatedBooking.waitlist_position === null && oldBooking.waitlist_position !== null) {
+                // Position was cleared - might have been promoted
+                await createNotification(
+                  profile.id,
+                  'waitlist_position_changed',
+                  'Waitlist Position Updated',
+                  'Your waitlist position has been updated.',
+                  updatedBooking.id,
+                  updatedBooking.event_id
+                )
+              } else if (updatedBooking.waitlist_position !== null) {
+                const newPos = updatedBooking.waitlist_position
+                const oldPos = oldBooking.waitlist_position
+                if (oldPos !== null && newPos < oldPos) {
+                  await createNotification(
+                    profile.id,
+                    'waitlist_position_improved',
+                    'Waitlist Position Improved! 🎉',
+                    `Great news! Your waitlist position improved from #${oldPos} to #${newPos}`,
+                    updatedBooking.id,
+                    updatedBooking.event_id
+                  )
+                } else if (oldPos !== null && newPos > oldPos) {
+                  await createNotification(
+                    profile.id,
+                    'waitlist_position_changed',
+                    'Waitlist Position Changed',
+                    `Your waitlist position changed to #${newPos}`,
+                    updatedBooking.id,
+                    updatedBooking.event_id
+                  )
+                } else if (oldPos === null) {
+                  await createNotification(
+                    profile.id,
+                    'waitlist_position_changed',
+                    'Added to Waitlist',
+                    `You are now #${newPos} on the waitlist`,
+                    updatedBooking.id,
+                    updatedBooking.event_id
+                  )
+                }
+              }
+            }
+          }
+          
+          // Check if status changed from waitlist to confirmed
+          if (oldBooking.status === 'waitlist' && updatedBooking.status === 'confirmed') {
+            await createNotification(
+              profile.id,
+              'waitlist_promoted',
+              'Promoted to Confirmed! 🎉',
+              'Congratulations! You\'ve been promoted from the waitlist to confirmed!',
+              updatedBooking.id,
+              updatedBooking.event_id
+            )
+          }
+          
+          // Reload data to reflect changes
+          if (profile) {
+            loadData(profile.id)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id])
 
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -403,7 +500,7 @@ export default function Dashboard() {
       {/* Navigation Tabs */}
       <NavigationTabs />
 
-      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 pb-28">
         {/* Role Request Status / Apply Section */}
         {userRole === 'performer' && (
           <div className="mb-6">
@@ -715,7 +812,7 @@ export default function Dashboard() {
 
         {/* Past Bookings Section */}
         {myBookings.filter((booking) => new Date(booking.events.date) < currentTime).length > 0 && (
-          <div className="mt-8">
+          <div className="mt-8 mb-8">
             <h2 className="text-2xl font-bold mb-4 text-gray-900">Past Bookings</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {myBookings
