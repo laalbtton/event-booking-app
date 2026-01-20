@@ -301,96 +301,23 @@ export default function Dashboard() {
 
       // If a confirmed booking was cancelled and event has max_attendees, promote next waitlist member
       if (booking.status === 'confirmed' && event.max_attendees) {
-        // Get current confirmed count (after cancellation, this should be one less)
+        // Get current confirmed count (after cancellation)
         const { count: currentConfirmedCount, error: countError } = await supabase
           .from('bookings')
           .select('*', { count: 'exact', head: true })
           .eq('event_id', event.id)
           .eq('status', 'confirmed')
 
-        if (countError) {
-          console.error('Error getting confirmed count:', countError)
-        } else {
-          console.log(`Event ${event.id}: Current confirmed count: ${currentConfirmedCount}, Max: ${event.max_attendees}`)
+        if (!countError && currentConfirmedCount !== null && currentConfirmedCount < event.max_attendees) {
+          // Use database function to promote waitlist member and update positions
+          // This bypasses RLS since the function runs with SECURITY DEFINER
+          const { data: functionResult, error: functionError } = await supabase
+            .rpc('promote_waitlist_and_update_positions', { event_uuid: event.id })
           
-          if (currentConfirmedCount !== null && currentConfirmedCount < event.max_attendees) {
-            // Find the next waitlist member (lowest waitlist_position)
-            const { data: nextWaitlistMember, error: waitlistError } = await supabase
-              .from('bookings')
-              .select('id, user_id, credits_used, waitlist_position')
-              .eq('event_id', event.id)
-              .eq('status', 'waitlist')
-              .order('waitlist_position', { ascending: true })
-              .limit(1)
-              .maybeSingle()
-
-            if (waitlistError) {
-              console.error('Error finding waitlist member:', waitlistError)
-            } else if (nextWaitlistMember) {
-              console.log(`Promoting waitlist member ${nextWaitlistMember.id} (position ${nextWaitlistMember.waitlist_position}) to confirmed`)
-              
-              // Promote the waitlist member to confirmed
-              const { error: promoteError } = await supabase
-                .from('bookings')
-                .update({ 
-                  status: 'confirmed',
-                  waitlist_position: null
-                })
-                .eq('id', nextWaitlistMember.id)
-
-              if (promoteError) {
-                console.error('Error promoting waitlist member:', promoteError)
-              } else {
-                console.log(`Successfully promoted waitlist member ${nextWaitlistMember.id} to confirmed`)
-                
-                // Use database function to update all waitlist positions
-                // This bypasses RLS since the function runs with SECURITY DEFINER
-                const { data: functionResult, error: functionError } = await supabase
-                  .rpc('update_waitlist_positions', { event_uuid: event.id })
-                
-                if (functionError) {
-                  console.error('Error updating waitlist positions via function:', functionError)
-                  
-                  // Fallback: Try manual update (might fail due to RLS)
-                  console.log('Attempting fallback manual update...')
-                  const { data: remainingWaitlist, error: remainingError } = await supabase
-                    .from('bookings')
-                    .select('id, waitlist_position')
-                    .eq('event_id', event.id)
-                    .eq('status', 'waitlist')
-                    .order('waitlist_position', { ascending: true })
-
-                  if (!remainingError && remainingWaitlist && remainingWaitlist.length > 0) {
-                    for (let i = 0; i < remainingWaitlist.length; i++) {
-                      const newPosition = i + 1
-                      await supabase
-                        .from('bookings')
-                        .update({ waitlist_position: newPosition })
-                        .eq('id', remainingWaitlist[i].id)
-                    }
-                    console.log(`Fallback: Updated ${remainingWaitlist.length} waitlist positions`)
-                  }
-                } else {
-                  console.log('Successfully updated waitlist positions using database function')
-                  
-                  // Verify the updates
-                  const { data: verifyWaitlist, error: verifyError } = await supabase
-                    .from('bookings')
-                    .select('id, waitlist_position')
-                    .eq('event_id', event.id)
-                    .eq('status', 'waitlist')
-                    .order('waitlist_position', { ascending: true })
-                  
-                  if (!verifyError && verifyWaitlist) {
-                    console.log('Verification - Current waitlist positions:', verifyWaitlist.map(w => ({ id: w.id, position: w.waitlist_position })))
-                  }
-                }
-              }
-            } else {
-              console.log('No waitlist members found to promote')
-            }
-          } else {
-            console.log(`Event is still at capacity (${currentConfirmedCount}/${event.max_attendees}), no promotion needed`)
+          if (functionError) {
+            console.error('Error promoting waitlist member:', functionError)
+          } else if (functionResult && functionResult.success === false) {
+            console.error('Waitlist promotion failed:', functionResult.error || functionResult.message)
           }
         }
       }
