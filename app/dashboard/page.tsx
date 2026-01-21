@@ -59,86 +59,111 @@ export default function Dashboard() {
           
           if (!profile) return
           
-          // Check if waitlist position changed
-          if (oldBooking.waitlist_position !== updatedBooking.waitlist_position) {
-            if (updatedBooking.status === 'waitlist') {
-              if (updatedBooking.waitlist_position === null && oldBooking.waitlist_position !== null) {
-                // Position was cleared - might have been promoted
-                await createNotification(
-                  profile.id,
-                  'waitlist_position_changed',
-                  'Waitlist Position Updated',
-                  'Your waitlist position has been updated.',
-                  updatedBooking.id,
-                  updatedBooking.event_id
-                )
-              } else if (updatedBooking.waitlist_position !== null) {
-                const newPos = updatedBooking.waitlist_position
-                const oldPos = oldBooking.waitlist_position
-                if (oldPos !== null && newPos < oldPos) {
-                  await createNotification(
-                    profile.id,
-                    'waitlist_position_improved',
-                    'Waitlist Position Improved! 🎉',
-                    `Great news! Your waitlist position improved from #${oldPos} to #${newPos}`,
-                    updatedBooking.id,
-                    updatedBooking.event_id
-                  )
-                } else if (oldPos !== null && newPos > oldPos) {
-                  await createNotification(
-                    profile.id,
-                    'waitlist_position_changed',
-                    'Waitlist Position Changed',
-                    `Your waitlist position changed to #${newPos}`,
-                    updatedBooking.id,
-                    updatedBooking.event_id
-                  )
-                } else if (oldPos === null) {
-                  await createNotification(
-                    profile.id,
-                    'waitlist_position_changed',
-                    'Added to Waitlist',
-                    `You are now #${newPos} on the waitlist`,
-                    updatedBooking.id,
-                    updatedBooking.event_id
-                  )
-                }
-              }
+          // Check if this booking was waitlist before by checking local state
+          // payload.old might only contain ID, so we check our local bookings
+          const previousBooking = myBookings.find(b => b.id === updatedBooking.id)
+          const wasWaitlist = previousBooking?.status === 'waitlist'
+          const isNowConfirmed = updatedBooking.status === 'confirmed'
+          
+          // Check if status changed from waitlist to confirmed (PRIORITY: Handle promotion first)
+          // We check both: oldBooking.status (if available) OR our local state
+          if (isNowConfirmed && (oldBooking.status === 'waitlist' || wasWaitlist)) {
+            console.log('Waitlist promotion detected via real-time:', {
+              bookingId: updatedBooking.id,
+              eventId: updatedBooking.event_id,
+              userId: profile.id,
+              oldStatus: oldBooking.status || previousBooking?.status,
+              newStatus: updatedBooking.status
+            })
+            
+            // Create notification for waitlist promotion
+            try {
+              await createNotification(
+                profile.id,
+                'waitlist_promoted',
+                'Promoted to Confirmed! 🎉',
+                'Congratulations! You\'ve been promoted from the waitlist to confirmed!',
+                updatedBooking.id,
+                updatedBooking.event_id
+              )
+              console.log('Notification created for waitlist promotion')
+            } catch (notifError) {
+              console.error('Failed to create waitlist promotion notification:', notifError)
+            }
+            
+            // Send waitlist promotion email (non-blocking)
+            try {
+              await sendWaitlistPromotionEmail(profile.id, updatedBooking.event_id)
+              console.log('Waitlist promotion email sent')
+            } catch (emailError) {
+              console.warn('Failed to send waitlist promotion email:', emailError)
             }
           }
           
-          // Check if status changed from waitlist to confirmed
-          if (oldBooking.status === 'waitlist' && updatedBooking.status === 'confirmed') {
-            await createNotification(
-              profile.id,
-              'waitlist_promoted',
-              'Promoted to Confirmed! 🎉',
-              'Congratulations! You\'ve been promoted from the waitlist to confirmed!',
-              updatedBooking.id,
-              updatedBooking.event_id
-            )
-            
-            // Send waitlist promotion email (non-blocking)
-            sendWaitlistPromotionEmail(profile.id, updatedBooking.event_id).catch(err => {
-              console.warn('Failed to send waitlist promotion email:', err)
-            })
-          }
+          // Check if waitlist position changed (only if still on waitlist)
+          // Use local state to get old position if payload.old doesn't have it
+          const oldPosition = oldBooking.waitlist_position !== undefined 
+            ? oldBooking.waitlist_position 
+            : previousBooking?.waitlist_position
           
-          // Send email for waitlist position changes (only for significant improvements)
-          if (updatedBooking.status === 'waitlist' && updatedBooking.waitlist_position !== null) {
-            const newPos = updatedBooking.waitlist_position
-            const oldPos = oldBooking.waitlist_position
-            
-            // Send email if position improved significantly (moved up by 3+ positions) or if it's a new position
-            if (oldPos === null || (oldPos !== null && oldPos - newPos >= 3)) {
-              sendWaitlistPositionEmail(
+          if (updatedBooking.status === 'waitlist' && oldPosition !== updatedBooking.waitlist_position) {
+            if (updatedBooking.waitlist_position === null && oldPosition !== null) {
+              // Position was cleared - might have been promoted (but status check above should catch this)
+              await createNotification(
                 profile.id,
-                updatedBooking.event_id,
-                newPos,
-                oldPos || undefined
-              ).catch(err => {
-                console.warn('Failed to send waitlist position email:', err)
-              })
+                'waitlist_position_changed',
+                'Waitlist Position Updated',
+                'Your waitlist position has been updated.',
+                updatedBooking.id,
+                updatedBooking.event_id
+              )
+            } else if (updatedBooking.waitlist_position !== null) {
+              const newPos = updatedBooking.waitlist_position
+              const oldPos = oldPosition
+              
+              if (oldPos !== null && newPos < oldPos) {
+                // Position improved
+                await createNotification(
+                  profile.id,
+                  'waitlist_position_improved',
+                  'Waitlist Position Improved! 🎉',
+                  `Great news! Your waitlist position improved from #${oldPos} to #${newPos}`,
+                  updatedBooking.id,
+                  updatedBooking.event_id
+                )
+                
+                // Send email if position improved significantly (moved up by 3+ positions)
+                if (oldPos - newPos >= 3) {
+                  sendWaitlistPositionEmail(
+                    profile.id,
+                    updatedBooking.event_id,
+                    newPos,
+                    oldPos
+                  ).catch(err => {
+                    console.warn('Failed to send waitlist position email:', err)
+                  })
+                }
+              } else if (oldPos !== null && newPos > oldPos) {
+                // Position got worse (shouldn't happen, but handle it)
+                await createNotification(
+                  profile.id,
+                  'waitlist_position_changed',
+                  'Waitlist Position Changed',
+                  `Your waitlist position changed to #${newPos}`,
+                  updatedBooking.id,
+                  updatedBooking.event_id
+                )
+              } else if (oldPos === null) {
+                // New position assigned
+                await createNotification(
+                  profile.id,
+                  'waitlist_position_changed',
+                  'Added to Waitlist',
+                  `You are now #${newPos} on the waitlist`,
+                  updatedBooking.id,
+                  updatedBooking.event_id
+                )
+              }
             }
           }
           
@@ -154,7 +179,7 @@ export default function Dashboard() {
       supabase.removeChannel(channel)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id])
+  }, [profile?.id, myBookings])
 
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -450,6 +475,35 @@ export default function Dashboard() {
             console.error('Error promoting waitlist member:', functionError)
           } else if (functionResult && functionResult.success === false) {
             console.error('Waitlist promotion failed:', functionResult.error || functionResult.message)
+          } else if (functionResult && functionResult.promoted === true && functionResult.promoted_booking_id) {
+            // Someone was promoted! Send them notification and email
+            try {
+              // Fetch the promoted booking to get the user_id
+              const { data: promotedBooking, error: bookingFetchError } = await supabase
+                .from('bookings')
+                .select('user_id, event_id')
+                .eq('id', functionResult.promoted_booking_id)
+                .single()
+
+              if (!bookingFetchError && promotedBooking) {
+                // Create notification for the promoted user
+                await createNotification(
+                  promotedBooking.user_id,
+                  'waitlist_promoted',
+                  'Promoted to Confirmed! 🎉',
+                  `Congratulations! You've been promoted from the waitlist to confirmed for "${event.title}"!`,
+                  functionResult.promoted_booking_id,
+                  promotedBooking.event_id
+                )
+
+                // Send email to the promoted user (non-blocking)
+                sendWaitlistPromotionEmail(promotedBooking.user_id, promotedBooking.event_id).catch(err => {
+                  console.warn('Failed to send waitlist promotion email:', err)
+                })
+              }
+            } catch (promotionError) {
+              console.error('Error handling waitlist promotion notification:', promotionError)
+            }
           }
         }
       }
