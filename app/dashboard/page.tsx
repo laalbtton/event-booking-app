@@ -8,6 +8,7 @@ import { formatDateTime, formatTime } from '@/lib/dateUtils'
 import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
 import { createNotification } from '@/lib/notifications'
+import { sendBookingConfirmationEmail, sendWaitlistPromotionEmail, sendBookingCancellationEmail, sendWaitlistPositionEmail } from '@/lib/emailService'
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -116,6 +117,29 @@ export default function Dashboard() {
               updatedBooking.id,
               updatedBooking.event_id
             )
+            
+            // Send waitlist promotion email (non-blocking)
+            sendWaitlistPromotionEmail(profile.id, updatedBooking.event_id).catch(err => {
+              console.warn('Failed to send waitlist promotion email:', err)
+            })
+          }
+          
+          // Send email for waitlist position changes (only for significant improvements)
+          if (updatedBooking.status === 'waitlist' && updatedBooking.waitlist_position !== null) {
+            const newPos = updatedBooking.waitlist_position
+            const oldPos = oldBooking.waitlist_position
+            
+            // Send email if position improved significantly (moved up by 3+ positions) or if it's a new position
+            if (oldPos === null || (oldPos !== null && oldPos - newPos >= 3)) {
+              sendWaitlistPositionEmail(
+                profile.id,
+                updatedBooking.event_id,
+                newPos,
+                oldPos || undefined
+              ).catch(err => {
+                console.warn('Failed to send waitlist position email:', err)
+              })
+            }
           }
           
           // Reload data to reflect changes
@@ -334,6 +358,17 @@ export default function Dashboard() {
         console.warn('Failed to log credit transaction:', transactionError)
       }
 
+      // Send email notification (non-blocking)
+      if (bookingStatus === 'waitlist') {
+        // For waitlist, we'll send email when position is set
+        // Email will be sent via the notification system
+      } else {
+        // Send confirmation email for confirmed bookings
+        sendBookingConfirmationEmail(profile.id, newBooking.id, event.id).catch(err => {
+          console.warn('Failed to send booking confirmation email:', err)
+        })
+      }
+
       // Reload data
       await loadData(profile.id)
       
@@ -470,6 +505,21 @@ export default function Dashboard() {
       if (booking.status === 'confirmed') {
         await supabase.rpc('update_waitlist_positions', { event_uuid: event.id })
       }
+
+      // Send cancellation email (non-blocking)
+      const refundStatus = shouldRefund 
+        ? `Full refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''} processed`
+        : `No refund (cancelled within ${cancellationWindow}h window)`
+      
+      sendBookingCancellationEmail(
+        profile.id,
+        event.title,
+        formatDateTime(event.date),
+        shouldRefund ? booking.credits_used : 0,
+        refundStatus
+      ).catch(err => {
+        console.warn('Failed to send cancellation email:', err)
+      })
 
       // Reload data
       await loadData(profile.id)
