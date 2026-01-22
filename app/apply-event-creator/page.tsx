@@ -7,6 +7,12 @@ import type { Profile } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 type RoleChangeRequest = {
   id: string
@@ -109,208 +115,205 @@ export default function ApplyEventCreatorPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   if (existingRequest && existingRequest.status === 'pending') {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-background pb-20">
         <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <Link
-            href="/dashboard"
-            className="text-blue-600 hover:text-blue-800 font-medium mb-6 inline-block"
-          >
-            ← Back to Dashboard
-          </Link>
+          <Button variant="ghost" asChild className="mb-6">
+            <Link href="/dashboard">← Back to Dashboard</Link>
+          </Button>
 
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <div className="text-center mb-6">
-              <div className="text-yellow-600 text-6xl mb-4">⏳</div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Application Pending</h1>
-              <p className="text-gray-600">
+          <Card>
+            <CardHeader className="text-center">
+              <div className="text-6xl mb-4">⏳</div>
+              <CardTitle className="text-2xl md:text-3xl">Application Pending</CardTitle>
+              <CardDescription>
                 Your request to become an Event Creator is currently under review.
-              </p>
-            </div>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <Card className="border-yellow-200 bg-yellow-50/50">
+                <CardContent className="pt-6">
+                  <p className="text-sm text-yellow-800 mb-2">
+                    <strong>Submitted:</strong> {formatDateTime(existingRequest.created_at)}
+                  </p>
+                  {existingRequest.message && (
+                    <div className="mt-2">
+                      <p className="text-sm font-medium text-yellow-900">Your Message:</p>
+                      <p className="text-sm text-yellow-800 mt-1">{existingRequest.message}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-yellow-800">
-                <strong>Submitted:</strong> {formatDateTime(existingRequest.created_at)}
-              </p>
-              {existingRequest.message && (
-                <div className="mt-2">
-                  <p className="text-sm font-medium text-yellow-900">Your Message:</p>
-                  <p className="text-sm text-yellow-800 mt-1">{existingRequest.message}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="text-center">
-              <Link
-                href="/dashboard"
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium inline-block"
-              >
-                Back to Dashboard
-              </Link>
-            </div>
-          </div>
+              <div className="flex justify-center">
+                <Button asChild>
+                  <Link href="/dashboard">Back to Dashboard</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+        <NavigationTabs />
       </div>
     )
   }
 
   if (existingRequest && existingRequest.status === 'approved') {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-background pb-20">
         <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <Link
-            href="/dashboard"
-            className="text-blue-600 hover:text-blue-800 font-medium mb-6 inline-block"
-          >
-            ← Back to Dashboard
-          </Link>
+          <Button variant="ghost" asChild className="mb-6">
+            <Link href="/dashboard">← Back to Dashboard</Link>
+          </Button>
 
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <div className="text-center mb-6">
-              <div className="text-green-600 text-6xl mb-4">✓</div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Application Approved!</h1>
-              <p className="text-gray-600">
+          <Card>
+            <CardHeader className="text-center">
+              <div className="text-6xl mb-4">✓</div>
+              <CardTitle className="text-2xl md:text-3xl">Application Approved!</CardTitle>
+              <CardDescription>
                 Your request has been approved. You now have Event Creator privileges.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <Link
-                href="/events/manage"
-                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium inline-block mr-4"
-              >
-                Go to Event Management
-              </Link>
-              <Link
-                href="/dashboard"
-                className="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-medium inline-block"
-              >
-                Back to Dashboard
-              </Link>
-            </div>
-          </div>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button asChild className="bg-green-600 hover:bg-green-700">
+                  <Link href="/events/manage">Go to Event Management</Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/dashboard">Back to Dashboard</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+        <NavigationTabs />
       </div>
     )
   }
 
   if (existingRequest && existingRequest.status === 'rejected') {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-background pb-20">
         <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <Link
-            href="/dashboard"
-            className="text-blue-600 hover:text-blue-800 font-medium mb-6 inline-block"
-          >
-            ← Back to Dashboard
-          </Link>
+          <Button variant="ghost" asChild className="mb-6">
+            <Link href="/dashboard">← Back to Dashboard</Link>
+          </Button>
 
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <div className="text-center mb-6">
-              <div className="text-red-600 text-6xl mb-4">✗</div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Application Rejected</h1>
-              <p className="text-gray-600">
+          <Card>
+            <CardHeader className="text-center">
+              <div className="text-6xl mb-4">✗</div>
+              <CardTitle className="text-2xl md:text-3xl">Application Rejected</CardTitle>
+              <CardDescription>
                 Your previous request to become an Event Creator was rejected.
-              </p>
-            </div>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {existingRequest.admin_notes && (
+                <Card className="border-red-200 bg-red-50/50">
+                  <CardContent className="pt-6">
+                    <p className="text-sm font-medium text-red-900">Admin Notes:</p>
+                    <p className="text-sm text-red-800 mt-1">{existingRequest.admin_notes}</p>
+                  </CardContent>
+                </Card>
+              )}
 
-            {existingRequest.admin_notes && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                <p className="text-sm font-medium text-red-900">Admin Notes:</p>
-                <p className="text-sm text-red-800 mt-1">{existingRequest.admin_notes}</p>
+              <div className="flex justify-center">
+                <Button variant="outline" asChild>
+                  <Link href="/dashboard">Back to Dashboard</Link>
+                </Button>
               </div>
-            )}
-
-            <div className="text-center">
-              <Link
-                href="/dashboard"
-                className="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-medium inline-block"
-              >
-                Back to Dashboard
-              </Link>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
+        <NavigationTabs />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-background pb-20">
       <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <Link
-          href="/dashboard"
-          className="text-blue-600 hover:text-blue-800 font-medium mb-6 inline-block"
-        >
-          ← Back to Dashboard
-        </Link>
+        <Button variant="ghost" asChild className="mb-6">
+          <Link href="/dashboard">← Back to Dashboard</Link>
+        </Button>
 
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Apply to Become an Event Creator</h1>
-          <p className="text-gray-600 mb-6">
-            Event Creators can create and manage their own events. Fill out the form below to request Event Creator privileges.
-          </p>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl md:text-3xl">Apply to Become an Event Creator</CardTitle>
+            <CardDescription>
+              Event Creators can create and manage their own events. Fill out the form below to request Event Creator privileges.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {error && (
+              <Card className="border-destructive bg-destructive/15">
+                <CardContent className="pt-6">
+                  <p className="text-sm text-destructive">{error}</p>
+                </CardContent>
+              </Card>
+            )}
 
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-800 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
-          )}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="message">
+                  Why would you like to become an Event Creator? (Optional)
+                </Label>
+                <Textarea
+                  id="message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Tell us about your plans for creating events..."
+                  rows={6}
+                />
+                <p className="text-xs text-muted-foreground">
+                  This information will help admins review your application.
+                </p>
+              </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Why would you like to become an Event Creator? (Optional)
-              </label>
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Tell us about your plans for creating events..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                rows={6}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                This information will help admins review your application.
-              </p>
-            </div>
+              <Card className="border-blue-200 bg-blue-50/50">
+                <CardContent className="pt-6">
+                  <p className="text-sm font-medium text-blue-800 mb-2">
+                    What you'll be able to do:
+                  </p>
+                  <ul className="list-disc list-inside text-sm text-blue-700 space-y-1">
+                    <li>Create and manage your own events</li>
+                    <li>Set event themes, dates, and registration times</li>
+                    <li>Manage attendee lists and mark attendance</li>
+                    <li>Generate QR codes for your events</li>
+                    <li>Designate hosts for your events</li>
+                  </ul>
+                </CardContent>
+              </Card>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                <strong>What you'll be able to do:</strong>
-              </p>
-              <ul className="list-disc list-inside text-sm text-blue-700 mt-2 space-y-1">
-                <li>Create and manage your own events</li>
-                <li>Set event themes, dates, and registration times</li>
-                <li>Manage attendee lists and mark attendance</li>
-                <li>Generate QR codes for your events</li>
-                <li>Designate hosts for your events</li>
-              </ul>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium"
-              >
-                {submitting ? 'Submitting...' : 'Submit Application'}
-              </button>
-              <Link
-                href="/dashboard"
-                className="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-medium text-center"
-              >
-                Cancel
-              </Link>
-            </div>
-          </form>
-        </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1"
+                >
+                  {submitting ? 'Submitting...' : 'Submit Application'}
+                </Button>
+                <Button variant="outline" asChild className="flex-1">
+                  <Link href="/dashboard">Cancel</Link>
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
         <NavigationTabs />
       </div>
     </div>

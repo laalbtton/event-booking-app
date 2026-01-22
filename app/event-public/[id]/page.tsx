@@ -5,6 +5,13 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 
 type EventDetails = {
   id: string
@@ -114,25 +121,34 @@ export default function PublicEventPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-2xl text-gray-900">Loading event...</div>
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              <Skeleton className="h-8 w-3/4" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   if (!event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-        <div className="text-center bg-white p-8 rounded-lg shadow-lg max-w-md">
-          <h1 className="text-2xl font-bold mb-4 text-gray-900">Event Not Found</h1>
-          <p className="text-gray-600 mb-6">This event doesn't exist or has been removed.</p>
-          <Link 
-            href="/signup" 
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold inline-block"
-          >
-            Sign Up to Browse Events
-          </Link>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-center">Event Not Found</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-center text-muted-foreground">This event doesn't exist or has been removed.</p>
+            <Button asChild className="w-full">
+              <Link href="/signup">Sign Up to Browse Events</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -145,171 +161,180 @@ export default function PublicEventPage() {
   const isPastEvent = eventDate < new Date()
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-white shadow-md border-b-4 border-blue-600">
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold text-gray-900">Event Lineup</h1>
-          <p className="text-gray-600 mt-1">Public event information</p>
+      <div className="bg-background border-b shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">Event Lineup</h1>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
         {/* Event Info Card */}
-        <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 mb-8 border-t-4 border-blue-600">
-          <div className="flex items-start justify-between mb-4">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">{event.title}</h2>
-            {isPastEvent && (
-              <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-semibold">
-                Past Event
-              </span>
-            )}
-          </div>
-          
-          <p className="text-gray-700 text-lg mb-6">{event.description}</p>
-
-          {event.theme && (
-            <div className="mb-4">
-              <span className="inline-block bg-purple-100 text-purple-700 px-4 py-2 rounded-lg font-semibold">
-                🎨 Theme: {event.theme}
-              </span>
+        <Card className="mb-6 shadow-lg border-t-4 border-t-primary">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">{event.title}</CardTitle>
+              {isPastEvent && (
+                <Badge variant="secondary">Past Event</Badge>
+              )}
             </div>
-          )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-base md:text-lg text-muted-foreground leading-relaxed">{event.description}</p>
 
-          {hostProfile && (
-            <div className="mb-4">
-              <span className="inline-block bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg font-semibold">
-                👤 Host: {hostProfile.full_name}
-              </span>
-            </div>
-          )}
+            <div className="flex flex-wrap gap-2">
+              {event.theme && (
+                <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-100">
+                  🎨 Theme: {event.theme}
+                </Badge>
+              )}
 
-          {event.host_user_id && !hostProfile && (
-            <div className="mb-4">
-              <span className="inline-block bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-semibold">
-                👤 Host: TBD
-              </span>
-            </div>
-          )}
+              {hostProfile && (
+                <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
+                  👤 Host: {hostProfile.full_name}
+                </Badge>
+              )}
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="text-sm font-bold text-blue-900 mb-2">📅 DATE & TIME</h3>
-              <p className="text-base text-gray-900">{formatDateTime(event.date)}</p>
-            </div>
-
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <h3 className="text-sm font-bold text-purple-900 mb-2">📍 LOCATION</h3>
-              <p className="text-base text-gray-900">{event.location}</p>
-            </div>
-
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="text-sm font-bold text-green-900 mb-2">👥 CAPACITY</h3>
-              {event.max_attendees ? (
-                <p className="text-base text-gray-900">
-                  {confirmedBookings.length} / {event.max_attendees} registered
-                  {spotsAvailable !== null && spotsAvailable > 0 && (
-                    <span className="text-green-700 block text-sm mt-1">
-                      ({spotsAvailable} spot{spotsAvailable !== 1 ? 's' : ''} available)
-                    </span>
-                  )}
-                  {spotsAvailable === 0 && (
-                    <span className="text-red-700 block text-sm mt-1 font-semibold">(FULL)</span>
-                  )}
-                </p>
-              ) : (
-                <p className="text-base text-gray-900">{confirmedBookings.length} registered</p>
+              {event.host_user_id && !hostProfile && (
+                <Badge variant="secondary">
+                  👤 Host: TBD
+                </Badge>
               )}
             </div>
 
-            {waitlistBookings.length > 0 && (
-              <div className="bg-yellow-50 p-4 rounded-lg">
-                <h3 className="text-sm font-bold text-yellow-900 mb-2">⏳ WAITLIST</h3>
-                <p className="text-base text-gray-900">{waitlistBookings.length} on waitlist</p>
+            <div className="space-y-2.5 pt-2">
+              <div className="flex items-center text-sm md:text-base">
+                <span className="mr-2">📅</span>
+                <span>{formatDateTime(event.date)}</span>
               </div>
-            )}
-          </div>
-        </div>
+
+              <div className="flex items-center text-sm md:text-base">
+                <span className="mr-2">📍</span>
+                <span>{event.location}</span>
+              </div>
+
+              <div className="flex items-center text-sm md:text-base">
+                <span className="mr-2">💳</span>
+                <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
+              </div>
+
+              {event.max_attendees ? (
+                <div className="flex items-center text-sm md:text-base">
+                  <span className="mr-2">👥</span>
+                  <span>{confirmedBookings.length} / {event.max_attendees} registered
+                    {spotsAvailable !== null && spotsAvailable > 0 && (
+                      <Badge variant="outline" className="ml-2 text-green-600 border-green-600">
+                        {spotsAvailable} spot{spotsAvailable !== 1 ? 's' : ''} available
+                      </Badge>
+                    )}
+                    {spotsAvailable === 0 && (
+                      <Badge variant="destructive" className="ml-2">
+                        FULL
+                      </Badge>
+                    )}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center text-sm md:text-base">
+                  <span className="mr-2">👥</span>
+                  <span>{confirmedBookings.length} registered</span>
+                </div>
+              )}
+
+              {waitlistBookings.length > 0 && (
+                <div className="flex items-center text-sm md:text-base">
+                  <span className="mr-2">⏳</span>
+                  <span>{waitlistBookings.length} on waitlist</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Confirmed Attendees */}
-        <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-2xl font-bold text-gray-900">
+        <Card className="mb-6 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg sm:text-xl font-bold tracking-tight">
               Confirmed Attendees ({confirmedBookings.length})
-            </h3>
-          </div>
-
-          {confirmedBookings.length === 0 ? (
-            <p className="text-gray-500 text-center py-12 text-lg">No confirmed attendees yet</p>
-          ) : (
-            <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {confirmedBookings.map((booking, index) => (
-                <Link
-                  key={booking.id}
-                  href={`/profile/${booking.profiles.id}`}
-                  className="flex items-center p-4 bg-green-50 rounded-lg border-2 border-green-200 hover:border-green-400 transition-colors cursor-pointer"
-                >
-                  <div className="flex-shrink-0 w-12 h-12 bg-green-600 text-white rounded-full flex items-center justify-center font-bold text-lg mr-3 shadow-md">
-                    {index + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-base font-semibold text-gray-900 truncate hover:text-blue-600">
-                      {booking.profiles.full_name}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {confirmedBookings.length === 0 ? (
+              <p className="text-muted-foreground text-center py-6 text-sm">No confirmed attendees yet</p>
+            ) : (
+              <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
+                {confirmedBookings.map((booking, index) => (
+                  <Link
+                    key={booking.id}
+                    href={`/profile/${booking.profiles.id}`}
+                    className="flex items-center p-2 bg-green-50 rounded-lg border border-green-200 hover:border-green-400 hover:bg-green-100 transition-all cursor-pointer"
+                  >
+                    <Avatar className="w-8 h-8 mr-2 bg-green-600">
+                      <AvatarFallback className="text-white text-xs font-bold">
+                        {index + 1}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs md:text-sm font-medium truncate hover:text-primary transition-colors">
+                        {booking.profiles.full_name}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Waitlist */}
         {waitlistBookings.length > 0 && (
-          <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 mb-6">
-            <h3 className="text-2xl font-bold mb-6 text-gray-900">
-              Waitlist ({waitlistBookings.length})
-            </h3>
-
-            <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {waitlistBookings.map((booking) => (
-                <Link
-                  key={booking.id}
-                  href={`/profile/${booking.profiles.id}`}
-                  className="flex items-center p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200 hover:border-yellow-400 transition-colors cursor-pointer"
-                >
-                  <div className="flex-shrink-0 w-12 h-12 bg-yellow-500 text-white rounded-full flex items-center justify-center font-bold text-lg mr-3 shadow-md">
-                    {booking.waitlist_position}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-base font-semibold text-gray-900 truncate hover:text-blue-600">
-                      {booking.profiles.full_name}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
+          <Card className="mb-6 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg sm:text-xl font-bold tracking-tight">
+                Waitlist ({waitlistBookings.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
+                {waitlistBookings.map((booking) => (
+                  <Link
+                    key={booking.id}
+                    href={`/profile/${booking.profiles.id}`}
+                    className="flex items-center p-2 bg-yellow-50 rounded-lg border border-yellow-200 hover:border-yellow-400 hover:bg-yellow-100 transition-all cursor-pointer"
+                  >
+                    <Avatar className="w-8 h-8 mr-2 bg-yellow-500">
+                      <AvatarFallback className="text-white text-xs font-bold">
+                        {booking.waitlist_position}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs md:text-sm font-medium truncate hover:text-primary transition-colors">
+                        {booking.profiles.full_name}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Call to Action */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-700 rounded-lg shadow-lg p-8 text-center text-white">
-          <h3 className="text-2xl font-bold mb-3">Want to Join?</h3>
-          <p className="text-lg mb-6">Sign up to book events and manage your registrations</p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link 
-              href="/signup"
-              className="bg-white text-blue-700 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 inline-block text-lg shadow-lg"
-            >
-              Sign Up
-            </Link>
-            <Link 
-              href="/login"
-              className="bg-transparent border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-blue-700 inline-block text-lg"
-            >
-              Login
-            </Link>
-          </div>
-        </div>
+        <Card className="bg-gradient-to-r from-blue-600 to-purple-700 border-0 text-white shadow-lg">
+          <CardContent className="p-8 text-center">
+            <h3 className="text-xl sm:text-2xl font-bold mb-3">Want to Join?</h3>
+            <p className="text-base sm:text-lg mb-6 text-white/90">Sign up to book events and manage your registrations</p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button asChild size="lg" variant="secondary" className="bg-white text-blue-700 hover:bg-gray-100">
+                <Link href="/signup">Sign Up</Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-2 border-white text-white hover:bg-white hover:text-blue-700">
+                <Link href="/login">Login</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

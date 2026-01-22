@@ -7,6 +7,16 @@ import type { Profile, Event } from '@/lib/supabase'
 import { formatDateTime, formatDate } from '@/lib/dateUtils'
 import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
 type EventBooking = {
   id: string
@@ -188,157 +198,155 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              <Skeleton className="h-20 w-20 rounded-full mx-auto" />
+              <Skeleton className="h-8 w-3/4 mx-auto" />
+              <Skeleton className="h-4 w-full" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   if (!profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl">Profile not found</div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-center text-muted-foreground">Profile not found</p>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-background pb-20">
       {/* Navigation Tabs */}
       <NavigationTabs />
 
-      <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
         {/* Profile Card */}
-        <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 mb-6">
+        <Card className="mb-6 shadow-sm">
+          <CardContent className="p-6 sm:p-8">
           {!isEditing ? (
             <>
-              <div className="flex items-start gap-4 mb-6">
-                {/* Profile Picture */}
-                <div className="flex-shrink-0">
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt={profile.full_name || 'Profile'}
-                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
-                    />
-                  ) : (
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold border-2 border-gray-200">
-                      {getInitials(profile.full_name)}
-                    </div>
-                  )}
+            <div className="flex items-start gap-4 sm:gap-6 mb-6">
+              {/* Profile Picture */}
+              <Avatar className="w-20 h-20 sm:w-24 sm:h-24 border-2 border-border">
+                <AvatarImage src={avatarUrl || undefined} alt={profile.full_name || 'Profile'} />
+                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-bold">
+                  {getInitials(profile.full_name)}
+                </AvatarFallback>
+              </Avatar>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                  <div className="min-w-0">
+                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1 truncate">
+                      {profile.full_name || 'No name set'}
+                    </h2>
+                    <p className="text-sm text-muted-foreground truncate">{profile.email}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      onClick={copyPublicProfileLink}
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      title="Share Profile"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                      </svg>
+                    </Button>
+                    <Button
+                      onClick={() => setIsEditing(true)}
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      title="Edit Profile"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex-1">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h2 className="text-3xl font-bold text-gray-900 mb-1">
-                        {profile.full_name || 'No name set'}
-                      </h2>
-                      <p className="text-gray-600 text-sm">{profile.email}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={copyPublicProfileLink}
-                        className="bg-gray-100 text-gray-700 p-2 rounded-lg hover:bg-gray-200 transition-colors"
-                        title="Share Profile"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setIsEditing(true)}
-                        className="bg-gray-100 text-gray-700 p-2 rounded-lg hover:bg-gray-200 transition-colors"
-                        title="Edit Profile"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                    </div>
+                {/* Consolidated Stats - Horizontal Layout */}
+                <div className="flex items-center gap-6 pt-4 border-t">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-muted-foreground">Credits:</span>
+                    <span className="text-lg sm:text-xl font-bold text-primary">{profile.credits}</span>
                   </div>
-
-                  {/* Consolidated Stats - Horizontal Layout */}
-                  <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-200">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-gray-700">Credits:</span>
-                      <span className="text-lg font-bold text-blue-600">{profile.credits}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-gray-700">Attended:</span>
-                      <span className="text-lg font-bold text-green-600">{attendedCount}</span>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-muted-foreground">Attended:</span>
+                    <span className="text-lg sm:text-xl font-bold text-green-600">{attendedCount}</span>
                   </div>
                 </div>
               </div>
+            </div>
 
-              {profile.bio && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Bio</h3>
-                  <p className="text-gray-800 whitespace-pre-wrap">{profile.bio}</p>
-                </div>
-              )}
+            {profile.bio && (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold mb-2 tracking-tight">Bio</h3>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{profile.bio}</p>
+              </div>
+            )}
 
-              {/* Social Links */}
-              {(profile.website_link || profile.instagram_link || profile.youtube_link || profile.twitter_link) && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Social Links</h3>
-                  <div className="flex flex-wrap gap-3">
-                    {profile.website_link && (
-                      <a
-                        href={profile.website_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 font-medium"
-                      >
+            {/* Social Links */}
+            {(profile.website_link || profile.instagram_link || profile.youtube_link || profile.twitter_link) && (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold mb-3 tracking-tight">Social Links</h3>
+                <div className="flex flex-wrap gap-2">
+                  {profile.website_link && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={profile.website_link} target="_blank" rel="noopener noreferrer">
                         🌐 Website
                       </a>
-                    )}
-                    {profile.instagram_link && (
-                      <a
-                        href={profile.instagram_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-pink-100 text-pink-700 px-4 py-2 rounded-lg hover:bg-pink-200 font-medium"
-                      >
+                    </Button>
+                  )}
+                  {profile.instagram_link && (
+                    <Button variant="outline" size="sm" className="bg-pink-50 hover:bg-pink-100 border-pink-200" asChild>
+                      <a href={profile.instagram_link} target="_blank" rel="noopener noreferrer">
                         📷 Instagram
                       </a>
-                    )}
-                    {profile.youtube_link && (
-                      <a
-                        href={profile.youtube_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-red-100 text-red-700 px-4 py-2 rounded-lg hover:bg-red-200 font-medium"
-                      >
+                    </Button>
+                  )}
+                  {profile.youtube_link && (
+                    <Button variant="outline" size="sm" className="bg-red-50 hover:bg-red-100 border-red-200" asChild>
+                      <a href={profile.youtube_link} target="_blank" rel="noopener noreferrer">
                         ▶️ YouTube
                       </a>
-                    )}
-                    {profile.twitter_link && (
-                      <a
-                        href={profile.twitter_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-sky-100 text-sky-700 px-4 py-2 rounded-lg hover:bg-sky-200 font-medium"
-                      >
+                    </Button>
+                  )}
+                  {profile.twitter_link && (
+                    <Button variant="outline" size="sm" className="bg-sky-50 hover:bg-sky-100 border-sky-200" asChild>
+                      <a href={profile.twitter_link} target="_blank" rel="noopener noreferrer">
                         🐦 Twitter
                       </a>
-                    )}
-                  </div>
+                    </Button>
+                  )}
                 </div>
-              )}
+              </div>
+            )}
 
             </>
           ) : (
             <form onSubmit={handleSaveProfile} className="space-y-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-3xl font-bold text-gray-900">Edit Profile</h2>
-                <div className="flex gap-2">
-                  <button
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">Edit Profile</CardTitle>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <Button
                     type="button"
+                    variant="outline"
                     onClick={() => {
                       setIsEditing(false)
-                      // Reset form data
                       setFormData({
                         full_name: profile.full_name || '',
                         bio: profile.bio || '',
@@ -348,107 +356,116 @@ export default function ProfilePage() {
                         twitter_link: profile.twitter_link || ''
                       })
                     }}
-                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium"
+                    className="flex-1 sm:flex-initial"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
                     disabled={submitting}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium"
+                    className="flex-1 sm:flex-initial"
                   >
                     {submitting ? 'Saving...' : 'Save Changes'}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="space-y-2.5">
+                <Label htmlFor="fullName" className="text-sm font-semibold">
                   Full Name *
-                </label>
-                <input
+                </Label>
+                <Input
+                  id="fullName"
                   type="text"
                   value={formData.full_name}
                   onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
+                  className="h-11"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="space-y-2.5">
+                <Label htmlFor="bio" className="text-sm font-semibold">
                   Bio
-                </label>
-                <textarea
+                </Label>
+                <Textarea
+                  id="bio"
                   value={formData.bio}
                   onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={4}
                   placeholder="Tell us about yourself..."
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="space-y-2.5">
+                <Label htmlFor="website" className="text-sm font-semibold">
                   Website
-                </label>
-                <input
+                </Label>
+                <Input
+                  id="website"
                   type="url"
                   value={formData.website_link}
                   onChange={(e) => setFormData({ ...formData, website_link: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="https://example.com"
+                  className="h-11"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-2.5">
+                  <Label htmlFor="instagram" className="text-sm font-semibold">
                     Instagram
-                  </label>
-                  <input
+                  </Label>
+                  <Input
+                    id="instagram"
                     type="url"
                     value={formData.instagram_link}
                     onChange={(e) => setFormData({ ...formData, instagram_link: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="https://instagram.com/username"
+                    className="h-11"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="space-y-2.5">
+                  <Label htmlFor="youtube" className="text-sm font-semibold">
                     YouTube
-                  </label>
-                  <input
+                  </Label>
+                  <Input
+                    id="youtube"
                     type="url"
                     value={formData.youtube_link}
                     onChange={(e) => setFormData({ ...formData, youtube_link: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="https://youtube.com/@username"
+                    className="h-11"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="space-y-2.5">
+                  <Label htmlFor="twitter" className="text-sm font-semibold">
                     Twitter
-                  </label>
-                  <input
+                  </Label>
+                  <Input
+                    id="twitter"
                     type="url"
                     value={formData.twitter_link}
                     onChange={(e) => setFormData({ ...formData, twitter_link: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="https://twitter.com/username"
+                    className="h-11"
                   />
                 </div>
               </div>
             </form>
           )}
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Event Bookings */}
         {eventBookings.length > 0 && (
-          <div className="bg-white rounded-lg shadow-lg p-6 md:p-8">
-            <h3 className="text-2xl font-bold text-gray-900 mb-6">My Event Bookings</h3>
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Event Bookings</CardTitle>
+            </CardHeader>
+            <CardContent>
             <div className="space-y-4">
               {eventBookings.map((booking) => {
                 // Determine status display
@@ -490,52 +507,58 @@ export default function ProfilePage() {
                   <Link
                     key={booking.id}
                     href={`/events/${booking.event_id}`}
-                    className="group block border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-lg hover:bg-blue-50/30 transition-all duration-200 cursor-pointer"
+                    className="group block"
                   >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h4 className="font-bold text-lg text-gray-900 mb-1 group-hover:text-blue-700 transition-colors">{booking.title}</h4>
-                        <p className="text-sm text-gray-600">
-                          📅 {formatDateTime(booking.date)}
-                        </p>
-                        <p className="text-sm text-gray-600">📍 {booking.location}</p>
-                        <div className="flex items-center gap-3 mt-2">
-                          <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${statusColor}`}>
-                            {statusDisplay}
-                          </span>
-                          <span className="text-sm text-gray-600">
-                            💳 {booking.credits_used} credit{booking.credits_used !== 1 ? 's' : ''} used
-                          </span>
+                    <Card className="hover:border-primary hover:shadow-md transition-all duration-200 cursor-pointer">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <h4 className="font-bold text-base sm:text-lg group-hover:text-primary transition-colors truncate">{booking.title}</h4>
+                            <div className="space-y-1 text-sm text-muted-foreground">
+                              <p>📅 {formatDateTime(booking.date)}</p>
+                              <p>📍 {booking.location}</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              <Badge variant="outline" className={cn("text-xs", statusColor)}>
+                                {statusDisplay}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                💳 {booking.credits_used} credit{booking.credits_used !== 1 ? 's' : ''} used
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground pt-1">
+                              {actionLabel}: {formatDate(booking.booked_at)}
+                            </p>
+                          </div>
+                          <div className="flex-shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-muted group-hover:bg-primary flex items-center justify-center transition-colors">
+                              <svg className="w-5 h-5 text-muted-foreground group-hover:text-primary-foreground transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {actionLabel}: {formatDate(booking.booked_at)}
-                        </p>
-                      </div>
-                      <div className="flex-shrink-0 ml-4 flex items-center">
-                        <div className="w-8 h-8 rounded-full bg-gray-100 group-hover:bg-blue-500 flex items-center justify-center transition-colors">
-                          <svg className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
                   </Link>
                 )
               })}
-            </div>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {eventBookings.length === 0 && (
-          <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 text-center text-gray-500">
-            <p className="text-lg">No event bookings yet</p>
-            <Link
-              href="/dashboard"
-              className="text-blue-600 hover:text-blue-800 font-medium mt-2 inline-block"
-            >
-              Browse Events →
-            </Link>
-          </div>
+          <Card className="shadow-sm">
+            <CardContent className="p-8 text-center">
+              <p className="text-lg font-medium text-muted-foreground mb-3">No event bookings yet</p>
+              <Button variant="link" asChild>
+                <Link href="/dashboard">
+                  Browse Events →
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>

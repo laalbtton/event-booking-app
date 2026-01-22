@@ -7,6 +7,17 @@ import type { Event } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
 export default function EventManagementPage() {
   const [events, setEvents] = useState<Event[]>([])
@@ -271,55 +282,165 @@ export default function EventManagementPage() {
   }
 
   if (loading) {
-    return <div className="text-center py-8">Loading events...</div>
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <NavigationTabs />
+        <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+          <div className="space-y-4">
+            <Skeleton className="h-10 w-48" />
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <Skeleton className="h-64 w-full" />
+              <Skeleton className="h-64 w-full" />
+              <Skeleton className="h-64 w-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-background pb-20">
       {/* Navigation Tabs */}
       <NavigationTabs />
 
-      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold text-gray-900">My Events</h2>
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
-          >
+      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">My Events</CardTitle>
+          <Button onClick={() => setShowCreateForm(true)}>
             + Create Event
-          </button>
+          </Button>
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 border-b border-gray-200">
-          <nav className="flex space-x-8" aria-label="Tabs">
-            <button
-              onClick={() => setActiveTab('upcoming')}
-              className={`${
-                activeTab === 'upcoming'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-            >
-              Upcoming Events
-            </button>
-            <button
-              onClick={() => setActiveTab('past')}
-              className={`${
-                activeTab === 'past'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-            >
-              Past Events
-            </button>
-          </nav>
-        </div>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'upcoming' | 'past')} className="mb-6">
+          <TabsList>
+            <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
+            <TabsTrigger value="past">Past Events</TabsTrigger>
+          </TabsList>
 
-        {/* Events Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {events
-            .filter((event) => {
+          {/* Events Grid */}
+          <TabsContent value={activeTab} className="mt-6">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {events
+                .filter((event) => {
+                  const eventDate = new Date(event.date)
+                  const now = new Date()
+                  if (activeTab === 'upcoming') {
+                    return eventDate >= now
+                  } else {
+                    return eventDate < now
+                  }
+                })
+                .sort((a, b) => {
+                  const dateA = new Date(a.date).getTime()
+                  const dateB = new Date(b.date).getTime()
+                  return activeTab === 'upcoming' ? dateA - dateB : dateB - dateA
+                })
+                .map((event) => (
+                <Card key={event.id} className="shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg font-bold">{event.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-muted-foreground line-clamp-2">{event.description}</p>
+                    
+                    <div className="text-sm text-muted-foreground space-y-1.5">
+                      <p>📅 {formatDateTime(event.date)}</p>
+                      <p>📍 {event.location}</p>
+                      {event.theme && <p>🎨 Theme: {event.theme}</p>}
+                      <p>💳 {event.credits_required} credits</p>
+                      {event.max_attendees && <p>👥 Max {event.max_attendees} attendees</p>}
+                      <p>⏱️ Cancel up to {event.cancellation_hours || 4} hours before</p>
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex flex-wrap gap-2">
+                      {activeTab === 'upcoming' && (
+                        <>
+                          <Button
+                            onClick={() => handleEditEvent(event)}
+                            size="sm"
+                            className="flex-1"
+                            title="Edit Event"
+                          >
+                            ✏️ Edit Details
+                          </Button>
+                          
+                          <Button
+                            onClick={() => handleDeleteEvent(event.id, event.title)}
+                            variant="destructive"
+                            size="sm"
+                            title="Delete Event"
+                          >
+                            🗑️
+                          </Button>
+                        </>
+                      )}
+                      
+                      <Button
+                        onClick={() => {
+                          const publicUrl = `${window.location.origin}/event-public/${event.id}`
+                          navigator.clipboard.writeText(publicUrl)
+                          alert('Public link copied!')
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+                        title="Copy Public Link"
+                      >
+                        ⎘
+                      </Button>
+
+                      {activeTab === 'upcoming' && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700"
+                            asChild
+                            title="Generate QR Code"
+                          >
+                            <Link href={`/events/${event.id}/qr`}>
+                              ▦
+                            </Link>
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="bg-orange-50 hover:bg-orange-100 border-orange-200 text-orange-700"
+                            asChild
+                            title="Manage Attendance"
+                          >
+                            <Link href={`/events/${event.id}/attendance`}>
+                              👥
+                            </Link>
+                          </Button>
+                        </>
+                      )}
+
+                      {activeTab === 'past' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="bg-orange-50 hover:bg-orange-100 border-orange-200 text-orange-700 flex-1"
+                          asChild
+                          title="View Attendance"
+                        >
+                          <Link href={`/events/${event.id}/attendance`}>
+                            👥 View Attendance
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {events.filter((event) => {
               const eventDate = new Date(event.date)
               const now = new Date()
               if (activeTab === 'upcoming') {
@@ -327,109 +448,19 @@ export default function EventManagementPage() {
               } else {
                 return eventDate < now
               }
-            })
-            .sort((a, b) => {
-              const dateA = new Date(a.date).getTime()
-              const dateB = new Date(b.date).getTime()
-              // Upcoming: ascending (soonest first), Past: descending (most recent first)
-              return activeTab === 'upcoming' ? dateA - dateB : dateB - dateA
-            })
-            .map((event) => (
-            <div key={event.id} className="bg-white rounded-lg shadow p-6">
-              <h3 className="font-bold text-lg mb-2">{event.title}</h3>
-              <p className="text-gray-600 text-sm mb-4">{event.description}</p>
-              
-              <div className="text-sm text-gray-500 mb-4 space-y-1">
-                <p>📅 {formatDateTime(event.date)}</p>
-                <p>📍 {event.location}</p>
-                {event.theme && <p>🎨 Theme: {event.theme}</p>}
-                <p>💳 {event.credits_required} credits</p>
-                {event.max_attendees && <p>👥 Max {event.max_attendees} attendees</p>}
-                <p>⏱️ Cancel up to {event.cancellation_hours || 4} hours before</p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {activeTab === 'upcoming' && (
-                  <>
-                    <button
-                      onClick={() => handleEditEvent(event)}
-                      className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-medium"
-                      title="Edit Event"
-                    >
-                      ✏️ Edit Details
-                    </button>
-                    
-                    <button
-                      onClick={() => handleDeleteEvent(event.id, event.title)}
-                      className="bg-red-600 text-white px-3 py-2 rounded hover:bg-red-700 text-sm font-medium"
-                      title="Delete Event"
-                    >
-                      🗑️
-                    </button>
-                  </>
-                )}
-                
-                <button
-                  onClick={() => {
-                    const publicUrl = `${window.location.origin}/event-public/${event.id}`
-                    navigator.clipboard.writeText(publicUrl)
-                    alert('Public link copied!')
-                  }}
-                  className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700"
-                  title="Copy Public Link"
-                >
-                  ⎘
-                </button>
-
-                {activeTab === 'upcoming' && (
-                  <>
-                    <Link
-                      href={`/events/${event.id}/qr`}
-                      className="bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700 text-center inline-block"
-                      title="Generate QR Code"
-                    >
-                      ▦
-                    </Link>
-
-                    <Link
-                      href={`/events/${event.id}/attendance`}
-                      className="bg-orange-600 text-white px-3 py-2 rounded hover:bg-orange-700 text-center inline-block"
-                      title="Manage Attendance"
-                    >
-                      👥
-                    </Link>
-                  </>
-                )}
-
-                {activeTab === 'past' && (
-                  <Link
-                    href={`/events/${event.id}/attendance`}
-                    className="bg-orange-600 text-white px-3 py-2 rounded hover:bg-orange-700 text-center inline-block flex-1"
-                    title="View Attendance"
-                  >
-                    👥 View Attendance
-                  </Link>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {events.filter((event) => {
-          const eventDate = new Date(event.date)
-          const now = new Date()
-          if (activeTab === 'upcoming') {
-            return eventDate >= now
-          } else {
-            return eventDate < now
-          }
-        }).length === 0 && (
-          <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-            {activeTab === 'upcoming' 
-              ? 'No upcoming events. Create your first event!'
-              : 'No past events yet.'}
-          </div>
-        )}
+            }).length === 0 && (
+              <Card className="shadow-sm">
+                <CardContent className="p-8 text-center">
+                  <p className="text-lg font-medium text-muted-foreground">
+                    {activeTab === 'upcoming' 
+                      ? 'No upcoming events. Create your first event!'
+                      : 'No past events yet.'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
 
         {/* Create Event Modal */}
         {showCreateForm && (

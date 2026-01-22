@@ -6,6 +6,11 @@ import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { cn } from '@/lib/utils'
 
 
 
@@ -181,173 +186,171 @@ export default function EventDetailsPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* Event Info Card */}
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-8 border border-gray-200">
-            <h2 className="text-3xl font-bold mb-4 text-gray-900">{event.title}</h2>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-2xl md:text-3xl">{event.title}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-base md:text-lg text-muted-foreground">{event.description}</p>
 
-            <p className="text-gray-700 text-lg mb-6">{event.description}</p>
-
-            {event.theme && (
-              <div className="mb-4">
-                <span className="inline-block bg-purple-100 text-purple-700 px-4 py-2 rounded-lg font-semibold">
+            <div className="flex flex-wrap gap-2">
+              {event.theme && (
+                <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-100">
                   🎨 Theme: {event.theme}
-                </span>
-              </div>
-            )}
+                </Badge>
+              )}
 
-            {hostProfile && (
-              <div className="mb-4">
-                <span className="inline-block bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg font-semibold">
+              {hostProfile && (
+                <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
                   👤 Host: {hostProfile.full_name}
-                </span>
-              </div>
-            )}
+                </Badge>
+              )}
 
-            {event.host_user_id && !hostProfile && (
-              <div className="mb-4">
-                <span className="inline-block bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-semibold">
+              {event.host_user_id && !hostProfile && (
+                <Badge variant="secondary">
                   👤 Host: TBD
-                </span>
-              </div>
-            )}
-
-            <div className="grid md:grid-cols-2 gap-6 mb-6">
-                <div>
-                <h3 className="text-sm font-bold text-gray-700 mb-2">DATE & TIME</h3>
-                <p className="text-base text-gray-900">📅 {formatDateTime(event.date)}</p>
-                </div>
-
-                <div>
-                <h3 className="text-sm font-bold text-gray-700 mb-2">LOCATION</h3>
-                <p className="text-base text-gray-900">📍 {event.location}</p>
-                </div>
-
-                <div>
-                <h3 className="text-sm font-bold text-gray-700 mb-2">COST</h3>
-                <p className="text-base text-gray-900">💳 {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</p>
-                </div>
-
-            <div>
-              <h3 className="text-sm font-semibold text-gray-500 mb-2">CAPACITY</h3>
-              {event.max_attendees ? (
-                <p className="text-lg">
-                  👥 {confirmedBookings.length} / {event.max_attendees} confirmed
-                  {spotsAvailable !== null && spotsAvailable > 0 && (
-                    <span className="text-green-600 ml-2">
-                      ({spotsAvailable} spot{spotsAvailable !== 1 ? 's' : ''} left)
-                    </span>
-                  )}
-                  {spotsAvailable === 0 && (
-                    <span className="text-red-600 ml-2">(FULL)</span>
-                  )}
-                </p>
-              ) : (
-                <p className="text-lg">👥 {confirmedBookings.length} registered (Unlimited)</p>
+                </Badge>
               )}
             </div>
 
-            <div>
-              <h3 className="text-sm font-semibold text-gray-500 mb-2">CANCELLATION POLICY</h3>
-              <p className="text-lg">⏱️ Cancel up to {event.cancellation_hours}h before for full refund</p>
+            <div className="space-y-2 mb-4">
+                <div className="flex items-center text-sm md:text-base text-gray-900">
+                  <span className="mr-2">📅</span>
+                  <span>{formatDateTime(event.date)}</span>
+                </div>
+
+                <div className="flex items-center text-sm md:text-base text-gray-900">
+                  <span className="mr-2">📍</span>
+                  <span>{event.location}</span>
+                </div>
+
+                <div className="flex items-center text-sm md:text-base text-gray-900">
+                  <span className="mr-2">💳</span>
+                  <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
+                </div>
+
+                {event.max_attendees ? (
+                  <div className="flex items-center text-sm md:text-base text-gray-900">
+                    <span className="mr-2">👥</span>
+                    <span>{confirmedBookings.length} / {event.max_attendees} confirmed
+                      {spotsAvailable !== null && spotsAvailable > 0 && (
+                        <span className="text-green-600 ml-2">
+                          ({spotsAvailable} spot{spotsAvailable !== 1 ? 's' : ''} left)
+                        </span>
+                      )}
+                      {spotsAvailable === 0 && (
+                        <span className="text-red-600 ml-2">(FULL)</span>
+                      )}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center text-sm md:text-base text-gray-900">
+                    <span className="mr-2">👥</span>
+                    <span>{confirmedBookings.length} registered (Unlimited)</span>
+                  </div>
+                )}
+
+                <div className="flex items-center text-sm md:text-base text-gray-900">
+                  <span className="mr-2">⏱️</span>
+                  <span>Cancel up to {event.cancellation_hours}h before for full refund</span>
+                </div>
             </div>
 
-            <div className="mt-6 flex gap-3">
-              <button
+            <div className="flex flex-wrap gap-3">
+              <Button
                 onClick={copyPublicLink}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold text-sm shadow-md flex items-center gap-2"
+                size="sm"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                 </svg>
                 Share
-              </button>
+              </Button>
               {(isHost || isEventCreator) && (
-                <Link
-                  href={`/events/${eventId}/attendance`}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold text-sm shadow-md flex items-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                  </svg>
-                  Manage Attendees
-                </Link>
+                <Button asChild variant="default" className="bg-green-600 hover:bg-green-700">
+                  <Link href={`/events/${eventId}/attendance`}>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                    Manage Attendees
+                  </Link>
+                </Button>
               )}
             </div>
 
             {waitlistBookings.length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-500 mb-2">WAITLIST</h3>
-                <p className="text-lg">⏳ {waitlistBookings.length} on waitlist</p>
-              </div>
+              <p className="text-sm md:text-base text-muted-foreground">⏳ {waitlistBookings.length} on waitlist</p>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Confirmed Attendees */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h3 className="text-xl font-bold mb-4">
-            Confirmed Attendees ({confirmedBookings.length})
-          </h3>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg md:text-xl">
+              Confirmed Attendees ({confirmedBookings.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
 
-          {confirmedBookings.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No confirmed attendees yet</p>
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {confirmedBookings.map((booking, index) => (
-                <Link
-                  key={booking.id}
-                  href={`/profile/${booking.profiles.id}`}
-                  className="flex items-center p-3 bg-green-50 rounded-lg border-2 border-green-200 hover:border-green-400 hover:shadow-md transition-all cursor-pointer"
-                >
-                  <div className="flex-shrink-0 w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center font-bold mr-3 shadow-md">
-                    {index + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate hover:text-blue-600 transition-colors">
-                      {booking.profiles.full_name}
-                    </p>
-                    {currentUser && (
-                      <p className="text-xs text-gray-500 truncate">
-                        {booking.profiles.email}
+            {confirmedBookings.length === 0 ? (
+              <p className="text-muted-foreground text-center py-6 text-sm">No confirmed attendees yet</p>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
+                {confirmedBookings.map((booking, index) => (
+                  <Link
+                    key={booking.id}
+                    href={`/profile/${booking.profiles.id}`}
+                    className="flex items-center p-2 bg-green-50 rounded-lg border border-green-200 hover:border-green-400 hover:bg-green-100 transition-all cursor-pointer"
+                  >
+                    <Avatar className="w-8 h-8 mr-2 bg-green-500">
+                      <AvatarFallback className="text-white text-xs font-bold">
+                        {index + 1}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs md:text-sm font-medium truncate hover:text-primary transition-colors">
+                        {booking.profiles.full_name}
                       </p>
-                    )}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Waitlist */}
         {waitlistBookings.length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-xl font-bold mb-4">
-              Waitlist ({waitlistBookings.length})
-            </h3>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {waitlistBookings.map((booking) => (
-                <Link
-                  key={booking.id}
-                  href={`/profile/${booking.profiles.id}`}
-                  className="flex items-center p-3 bg-yellow-50 rounded-lg border-2 border-yellow-200 hover:border-yellow-400 hover:shadow-md transition-all cursor-pointer"
-                >
-                  <div className="flex-shrink-0 w-10 h-10 bg-yellow-500 text-white rounded-full flex items-center justify-center font-bold mr-3 shadow-md">
-                    {booking.waitlist_position}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate hover:text-blue-600 transition-colors">
-                      {booking.profiles.full_name}
-                    </p>
-                    {currentUser && (
-                      <p className="text-xs text-gray-500 truncate">
-                        {booking.profiles.email}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg md:text-xl">
+                Waitlist ({waitlistBookings.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
+                {waitlistBookings.map((booking) => (
+                  <Link
+                    key={booking.id}
+                    href={`/profile/${booking.profiles.id}`}
+                    className="flex items-center p-2 bg-yellow-50 rounded-lg border border-yellow-200 hover:border-yellow-400 hover:bg-yellow-100 transition-all cursor-pointer"
+                  >
+                    <Avatar className="w-8 h-8 mr-2 bg-yellow-500">
+                      <AvatarFallback className="text-white text-xs font-bold">
+                        {booking.waitlist_position}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs md:text-sm font-medium truncate hover:text-primary transition-colors">
+                        {booking.profiles.full_name}
                       </p>
-                    )}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 

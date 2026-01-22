@@ -1,11 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import NavigationTabs from '@/components/NavigationTabs'
-import { formatDateTime } from '@/lib/dateUtils'
-import Link from 'next/link'
+import { formatTime } from '@/lib/dateUtils'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
 type Notification = {
   id: string
@@ -22,7 +25,11 @@ export default function NotificationsPage() {
   const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
-  const [markingRead, setMarkingRead] = useState<string | null>(null)
+  const [swipingId, setSwipingId] = useState<string | null>(null)
+  const [swipeOffset, setSwipeOffset] = useState<Record<string, number>>({})
+  const [swipeDirection, setSwipeDirection] = useState<Record<string, 'left' | 'right'>>({})
+  const touchStartX = useRef<Record<string, number>>({})
+  const touchStartY = useRef<Record<string, number>>({})
 
   useEffect(() => {
     checkAuth()
@@ -47,7 +54,22 @@ export default function NotificationsPage() {
         .limit(100)
 
       if (error) throw error
-      setNotifications(data || [])
+      const loadedNotifications = data || []
+      setNotifications(loadedNotifications)
+
+      // Auto-mark unread notifications as read when page loads
+      const unreadIds = loadedNotifications.filter(n => !n.read).map(n => n.id)
+      if (unreadIds.length > 0) {
+        await supabase
+          .from('notifications')
+          .update({ read: true })
+          .in('id', unreadIds)
+        
+        // Update local state
+        setNotifications(prev =>
+          prev.map(n => unreadIds.includes(n.id) ? { ...n, read: true } : n)
+        )
+      }
     } catch (error) {
       console.error('Error loading notifications:', error)
     } finally {
@@ -56,9 +78,6 @@ export default function NotificationsPage() {
   }
 
   async function markAsRead(notificationId: string) {
-    if (markingRead === notificationId) return
-    
-    setMarkingRead(notificationId)
     try {
       const { error } = await supabase
         .from('notifications')
@@ -73,31 +92,99 @@ export default function NotificationsPage() {
       )
     } catch (error) {
       console.error('Error marking notification as read:', error)
-    } finally {
-      setMarkingRead(null)
     }
   }
 
-  async function markAllAsRead() {
-    const unreadIds = notifications.filter(n => !n.read).map(n => n.id)
-    if (unreadIds.length === 0) return
+  function handleNotificationClick(notification: Notification) {
+    // Mark as read when clicked
+    if (!notification.read) {
+      markAsRead(notification.id)
+    }
 
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .in('id', unreadIds)
-
-      if (error) throw error
-
-      // Update local state
-      setNotifications(prev =>
-        prev.map(n => ({ ...n, read: true }))
-      )
-    } catch (error) {
-      console.error('Error marking all as read:', error)
+    // Navigate to event if available
+    if (notification.related_event_id) {
+      router.push(`/events/${notification.related_event_id}`)
+    } else if (notification.related_booking_id) {
+      router.push('/dashboard')
     }
   }
+
+  function handleTouchStart(e: React.TouchEvent, notificationId: string) {
+    touchStartX.current[notificationId] = e.touches[0].clientX
+    touchStartY.current[notificationId] = e.touches[0].clientY
+    setSwipingId(notificationId)
+  }
+
+  function handleTouchMove(e: React.TouchEvent, notificationId: string) {
+    if (swipingId !== notificationId) return
+
+    const currentX = e.touches[0].clientX
+    const currentY = e.touches[0].clientY
+    const startX = touchStartX.current[notificationId]
+    const startY = touchStartY.current[notificationId]
+
+    const deltaX = currentX - startX
+    const deltaY = Math.abs(currentY - startY)
+
+    // Only allow horizontal swipe
+    if (deltaY < 50) {
+      if (deltaX < 0) {
+        // Swipe left (for delete)
+        const offset = Math.max(deltaX, -100) // Limit swipe to -100px
+        setSwipeOffset(prev => ({ ...prev, [notificationId]: offset }))
+        setSwipeDirection(prev => ({ ...prev, [notificationId]: 'left' }))
+      } else if (deltaX > 0) {
+        // Swipe right (for time)
+        const offset = Math.min(deltaX, 100) // Limit swipe to 100px
+        setSwipeOffset(prev => ({ ...prev, [notificationId]: offset }))
+        setSwipeDirection(prev => ({ ...prev, [notificationId]: 'right' }))
+      }
+    }
+  }
+
+  function handleTouchEnd(notificationId: string) {
+    const offset = swipeOffset[notificationId] || 0
+    const direction = swipeDirection[notificationId]
+    
+    if (direction === 'left' && offset < -50) {
+      // Swipe left threshold reached, delete notification
+      deleteNotification(notificationId)
+    }
+    
+    // Reset swipe state after a delay for right swipe (to show time)
+    if (direction === 'right' && offset > 50) {
+      setTimeout(() => {
+        setSwipeOffset(prev => {
+          const newState = { ...prev }
+          delete newState[notificationId]
+          return newState
+        })
+        setSwipeDirection(prev => {
+          const newState = { ...prev }
+          delete newState[notificationId]
+          return newState
+        })
+        setSwipingId(null)
+      }, 2000) // Show time for 2 seconds
+    } else {
+      // Reset immediately for left swipe or small movements
+      setSwipeOffset(prev => {
+        const newState = { ...prev }
+        delete newState[notificationId]
+        return newState
+      })
+      setSwipeDirection(prev => {
+        const newState = { ...prev }
+        delete newState[notificationId]
+        return newState
+      })
+      setSwipingId(null)
+    }
+    
+    touchStartX.current[notificationId] = 0
+    touchStartY.current[notificationId] = 0
+  }
+
 
   async function deleteNotification(notificationId: string) {
     try {
@@ -117,25 +204,38 @@ export default function NotificationsPage() {
 
   const unreadCount = notifications.filter(n => !n.read).length
 
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'waitlist_promoted':
-        return '🎉'
-      case 'waitlist_position_improved':
-        return '⬆️'
-      case 'waitlist_position_changed':
-        return '📊'
-      case 'booking_confirmed':
-        return '✅'
-      case 'booking_cancelled':
-        return '❌'
-      case 'event_updated':
-        return '📝'
-      case 'event_reminder':
-        return '📅'
-      default:
-        return '🔔'
+  function groupNotificationsByDate(notifications: Notification[]) {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const weekAgo = new Date(today)
+    weekAgo.setDate(weekAgo.getDate() - 7)
+
+    const groups: Record<string, Notification[]> = {
+      'Today': [],
+      'Yesterday': [],
+      'This Week': [],
+      'Older': []
     }
+
+    notifications.forEach(notification => {
+      const notificationDate = new Date(notification.created_at)
+      const notificationDay = new Date(notificationDate.getFullYear(), notificationDate.getMonth(), notificationDate.getDate())
+
+      if (notificationDay.getTime() === today.getTime()) {
+        groups['Today'].push(notification)
+      } else if (notificationDay.getTime() === yesterday.getTime()) {
+        groups['Yesterday'].push(notification)
+      } else if (notificationDate >= weekAgo) {
+        groups['This Week'].push(notification)
+      } else {
+        groups['Older'].push(notification)
+      }
+    })
+
+    // Remove empty groups
+    return Object.entries(groups).filter(([_, notifications]) => notifications.length > 0)
   }
 
   const getNotificationColor = (type: string) => {
@@ -159,131 +259,135 @@ export default function NotificationsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-background">
         <NavigationTabs />
-        <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <div className="text-center">Loading notifications...</div>
+        <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8 pb-20">
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-8 w-48" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </CardContent>
+          </Card>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-background pb-20">
       <NavigationTabs />
 
-      <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
-              {unreadCount > 0 && (
-                <p className="text-sm text-gray-600 mt-1">
-                  {unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">Notifications</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {notifications.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">🔔</div>
+                <p className="text-muted-foreground text-lg font-medium mb-2">No notifications yet</p>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  You'll see notifications here when your booking status changes
                 </p>
-              )}
-            </div>
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-              >
-                Mark all as read
-              </button>
-            )}
-          </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {groupNotificationsByDate(notifications).map(([dateGroup, groupNotifications]) => (
+                  <div key={dateGroup} className="space-y-3">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">
+                      {dateGroup}
+                    </h3>
+                    {groupNotifications.map((notification) => {
+                      const offset = swipeOffset[notification.id] || 0
+                      const direction = swipeDirection[notification.id]
+                      const showDelete = direction === 'left' && offset < -50
+                      const showTime = direction === 'right' && offset > 50
 
-          {notifications.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">🔔</div>
-              <p className="text-gray-600 text-lg">No notifications yet</p>
-              <p className="text-gray-500 text-sm mt-2">
-                You'll see notifications here when your booking status changes
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`border-l-4 rounded-lg p-4 transition-all ${
-                    notification.read
-                      ? 'bg-gray-50 border-gray-300'
-                      : `${getNotificationColor(notification.type)} border-opacity-100`
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="text-2xl flex-shrink-0">
-                      {getNotificationIcon(notification.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <h3 className={`font-semibold text-sm ${
-                            notification.read ? 'text-gray-700' : 'text-gray-900'
-                          }`}>
-                            {notification.title}
-                          </h3>
-                          <p className={`text-sm mt-1 ${
-                            notification.read ? 'text-gray-600' : 'text-gray-800'
-                          }`}>
-                            {notification.message}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-2">
-                            {formatDateTime(notification.created_at)}
-                          </p>
-                        </div>
-                        {!notification.read && (
-                          <div className="flex-shrink-0 w-2 h-2 bg-blue-600 rounded-full mt-1"></div>
-                        )}
-                      </div>
-                      
-                      {(notification.related_event_id || notification.related_booking_id) && (
-                        <div className="mt-3 flex gap-2">
-                          {notification.related_event_id && (
-                            <Link
-                              href={`/events/${notification.related_event_id}`}
-                              className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                              onClick={() => markAsRead(notification.id)}
-                            >
-                              View Event →
-                            </Link>
-                          )}
-                          {notification.related_booking_id && (
-                            <Link
-                              href="/dashboard"
-                              className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                              onClick={() => markAsRead(notification.id)}
-                            >
-                              View Booking →
-                            </Link>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-2 flex-shrink-0">
-                      {!notification.read && (
-                        <button
-                          onClick={() => markAsRead(notification.id)}
-                          disabled={markingRead === notification.id}
-                          className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 disabled:opacity-50"
+                      return (
+                        <div
+                          key={notification.id}
+                          className="relative overflow-hidden"
+                          onTouchStart={(e) => handleTouchStart(e, notification.id)}
+                          onTouchMove={(e) => handleTouchMove(e, notification.id)}
+                          onTouchEnd={() => handleTouchEnd(notification.id)}
                         >
-                          {markingRead === notification.id ? '...' : 'Mark read'}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => deleteNotification(notification.id)}
-                        className="text-xs text-gray-500 hover:text-red-600 px-2 py-1 rounded hover:bg-gray-100"
-                      >
-                        Delete
-                      </button>
-                    </div>
+                          {/* Delete button (revealed on swipe left) */}
+                          <div
+                            className={cn(
+                              "absolute right-0 top-0 h-full flex items-center justify-center bg-destructive text-destructive-foreground px-6 z-10 transition-transform duration-200",
+                              showDelete ? 'translate-x-0' : 'translate-x-full'
+                            )}
+                            style={{ width: '100px' }}
+                          >
+                            <span className="text-sm font-medium">Delete</span>
+                          </div>
+
+                          {/* Time display (revealed on swipe right) */}
+                          <div
+                            className={cn(
+                              "absolute left-0 top-0 h-full flex items-center justify-center bg-muted text-muted-foreground px-4 z-10 transition-transform duration-200",
+                              showTime ? 'translate-x-0' : '-translate-x-full'
+                            )}
+                            style={{ width: '80px' }}
+                          >
+                            <span className="text-xs font-medium">
+                              {formatTime(notification.created_at)}
+                            </span>
+                          </div>
+
+                          {/* Notification card */}
+                          <Card
+                            className={cn(
+                              "border-l-4 transition-all shadow-sm cursor-pointer relative z-20",
+                              notification.read
+                                ? 'bg-muted/30 border-muted'
+                                : getNotificationColor(notification.type),
+                              (offset < 0 || offset > 0) && 'shadow-lg'
+                            )}
+                            style={{
+                              transform: `translateX(${offset}px)`,
+                              transition: swipingId === notification.id ? 'none' : 'transform 0.2s ease-out'
+                            }}
+                            onClick={() => handleNotificationClick(notification)}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-3">
+                                <div className="flex-1 min-w-0 space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <h3 className={cn(
+                                      "font-semibold text-sm",
+                                      notification.read ? 'text-muted-foreground' : 'text-foreground'
+                                    )}>
+                                      {notification.title}
+                                    </h3>
+                                    {!notification.read && (
+                                      <Badge variant="default" className="h-2 w-2 p-0 rounded-full" />
+                                    )}
+                                  </div>
+                                  <p className={cn(
+                                    "text-sm leading-relaxed",
+                                    notification.read ? 'text-muted-foreground' : 'text-foreground'
+                                  )}>
+                                    {notification.message}
+                                  </p>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      )
+                    })}
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

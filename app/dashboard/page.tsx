@@ -9,6 +9,10 @@ import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
 import { createNotification } from '@/lib/notifications'
 import { sendBookingConfirmationEmail, sendWaitlistPromotionEmail, sendBookingCancellationEmail, sendWaitlistPositionEmail } from '@/lib/emailService'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -24,6 +28,8 @@ export default function Dashboard() {
   const [roleRequestStatus, setRoleRequestStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null)
   const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
   const previousBookingsRef = useRef<any[]>([])
+  const [settingAlert, setSettingAlert] = useState<string | null>(null)
+  const [alertSet, setAlertSet] = useState<Set<string>>(new Set())
   const router = useRouter()
 
   useEffect(() => {
@@ -349,10 +355,46 @@ export default function Dashboard() {
       if (bookingsError) throw bookingsError
       setMyBookings(bookingsData || [])
 
+      // Load existing registration alerts
+      const { data: alertsData, error: alertsError } = await supabase
+        .from('registration_alerts')
+        .select('event_id')
+        .eq('user_id', userId)
+
+      if (!alertsError && alertsData) {
+        setAlertSet(new Set(alertsData.map(a => a.event_id)))
+      }
+
     } catch (error: any) {
       setError(error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleSetAlert(eventId: string) {
+    if (!profile) return
+
+    setSettingAlert(eventId)
+    setError('')
+
+    try {
+      const response = await fetch('/api/set-registration-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to set alert')
+      }
+
+      setAlertSet(prev => new Set([...prev, eventId]))
+    } catch (error: any) {
+      setError(error.message)
+    } finally {
+      setSettingAlert(null)
     }
   }
 
@@ -668,78 +710,79 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Navigation Tabs */}
       <NavigationTabs />
 
-      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 pb-28">
+      <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 pb-28">
         {/* Role Request Status / Apply Section */}
         {userRole === 'performer' && (
           <div className="mb-6">
             {roleRequestStatus === 'pending' && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-semibold text-yellow-900">Application Pending</h3>
-                  <p className="text-sm text-yellow-700">Your request to become an Event Creator is under review.</p>
-                </div>
-                <Link
-                  href="/apply-event-creator"
-                  className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 font-medium"
-                >
-                  View Status
-                </Link>
-              </div>
+              <Card className="border-yellow-200 bg-yellow-50/50 shadow-sm">
+                <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="space-y-1">
+                    <CardTitle className="text-base sm:text-lg font-semibold text-yellow-900">Application Pending</CardTitle>
+                    <p className="text-sm text-yellow-700 leading-relaxed">Your request to become an Event Creator is under review.</p>
+                  </div>
+                  <Button asChild variant="default" className="bg-yellow-600 hover:bg-yellow-700 shrink-0">
+                    <Link href="/apply-event-creator">View Status</Link>
+                  </Button>
+                </CardContent>
+              </Card>
             )}
             {roleRequestStatus === 'rejected' && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-semibold text-red-900">Application Rejected</h3>
-                  <p className="text-sm text-red-700">Your previous request was rejected. You can submit a new application.</p>
-                </div>
-                <Link
-                  href="/apply-event-creator"
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-medium"
-                >
-                  Reapply
-                </Link>
-              </div>
+              <Card className="border-red-200 bg-red-50/50 shadow-sm">
+                <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="space-y-1">
+                    <CardTitle className="text-base sm:text-lg font-semibold text-red-900">Application Rejected</CardTitle>
+                    <p className="text-sm text-red-700 leading-relaxed">Your previous request was rejected. You can submit a new application.</p>
+                  </div>
+                  <Button asChild variant="destructive" className="shrink-0">
+                    <Link href="/apply-event-creator">Reapply</Link>
+                  </Button>
+                </CardContent>
+              </Card>
             )}
             {!roleRequestStatus && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-semibold text-blue-900">Become an Event Creator</h3>
-                  <p className="text-sm text-blue-700">Create and manage your own events! Apply now.</p>
-                </div>
-                <Link
-                  href="/apply-event-creator"
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
-                >
-                  Apply Now
-                </Link>
-              </div>
+              <Card className="border-blue-200 bg-blue-50/50 shadow-sm">
+                <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="space-y-1">
+                    <CardTitle className="text-base sm:text-lg font-semibold text-blue-900">Become an Event Creator</CardTitle>
+                    <p className="text-sm text-blue-700 leading-relaxed">Create and manage your own events! Apply now.</p>
+                  </div>
+                  <Button asChild className="shrink-0">
+                    <Link href="/apply-event-creator">Apply Now</Link>
+                  </Button>
+                </CardContent>
+              </Card>
             )}
           </div>
         )}
 
         {/* Credits Card */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-700 rounded-lg shadow-lg p-6 mb-8 text-white">
-          <h2 className="text-lg font-semibold mb-2">Welcome, {profile?.full_name}!</h2>
-          <div className="flex items-baseline">
-            <span className="text-5xl font-bold drop-shadow-md">{profile?.credits || 0}</span>
-            <span className="text-xl ml-2 drop-shadow">credits available</span>
-          </div>
-        </div>
+        <Card className="bg-gradient-to-r from-blue-600 to-purple-700 border-0 text-white shadow-lg mb-8">
+          <CardContent className="p-6 sm:p-8">
+            <h2 className="text-base sm:text-lg font-semibold mb-3 text-white/90">Welcome, {profile?.full_name}!</h2>
+            <div className="flex items-baseline gap-2">
+              <span className="text-4xl sm:text-5xl lg:text-6xl font-bold drop-shadow-md tracking-tight">{profile?.credits || 0}</span>
+              <span className="text-lg sm:text-xl ml-1 drop-shadow text-white/90">credits available</span>
+            </div>
+          </CardContent>
+        </Card>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
+          <Card className="border-destructive bg-destructive/15 mb-6 shadow-sm">
+            <CardContent className="p-4">
+              <p className="text-destructive text-sm leading-relaxed">{error}</p>
+            </CardContent>
+          </Card>
         )}
 
         {/* My Bookings Section - Upcoming Only */}
         {myBookings.filter((booking) => new Date(booking.events.date) >= currentTime).length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold mb-4 text-gray-900">My Bookings</h2>
+          <div className="mb-8 sm:mb-10">
+            <h2 className="text-xl sm:text-2xl font-bold mb-5 sm:mb-6 tracking-tight">My Bookings</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {myBookings
                 .filter((booking) => new Date(booking.events.date) >= currentTime)
@@ -773,98 +816,99 @@ export default function Dashboard() {
                 const borderColor = isWaitlist ? 'border-yellow-500' : 'border-green-500'
 
                 return (
-                  <div key={booking.id} className={`bg-white rounded-lg shadow p-4 border-l-4 ${borderColor}`}>
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-bold text-lg flex-1">
-                        <Link 
-                          href={`/events/${booking.event_id}`}
-                          className="text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {booking.events.title}
-                        </Link>
-                      </h3>
-                      {!isPast && (
-                        isWaitlist ? (
-                          <span className="text-yellow-600 font-semibold text-xs ml-2 whitespace-nowrap">
-                            ⏳ #{booking.waitlist_position}
-                          </span>
+                  <Card key={booking.id} className={cn("border-l-4", isWaitlist ? "border-l-yellow-500" : "border-l-green-500")}>
+                    <CardHeader className="pb-3">
+                      <div className="flex justify-between items-start">
+                        <CardTitle className="text-base md:text-lg flex-1">
+                          <Link 
+                            href={`/events/${booking.event_id}`}
+                            className="text-primary hover:underline"
+                          >
+                            {booking.events.title}
+                          </Link>
+                        </CardTitle>
+                        {!isPast && (
+                          isWaitlist ? (
+                            <Badge variant="outline" className="text-yellow-600 border-yellow-600 ml-2">
+                              ⏳ #{booking.waitlist_position}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-green-600 border-green-600 ml-2">
+                              ✓
+                            </Badge>
+                          )
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-sm text-muted-foreground line-clamp-2">{booking.events.description}</p>
+                      
+                      <div className="text-xs text-muted-foreground">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <div className="flex items-center gap-1">
+                            <span>📅</span>
+                            <span>{formatDateTime(booking.events.date)}</span>
+                          </div>
+                          {booking.events.max_attendees && (
+                            <div className="whitespace-nowrap">👥 Max {booking.events.max_attendees}</div>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1">
+                            <span>📍</span>
+                            <span>{booking.events.location}</span>
+                          </div>
+                          {booking.events.theme && (
+                            <div className="whitespace-nowrap">🎨 {booking.events.theme}</div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1 text-muted-foreground">
+                          <span>💳</span>
+                          <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
+                        </div>
+                        {!isPast ? (
+                          <Badge variant="secondary" className="text-xs">
+                            ⏰ In {timeDisplay}
+                          </Badge>
                         ) : (
-                          <span className="text-green-600 font-semibold text-xs ml-2">✓</span>
-                        )
-                      )}
-                    </div>
-                    
-                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">{booking.events.description}</p>
-                    
-                    <div className="flex justify-between gap-4 text-xs text-gray-600 mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-1 mb-1">
-                          <span>📅</span>
-                          <span>{formatDateTime(booking.events.date)}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span>📍</span>
-                          <span>{booking.events.location}</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        {booking.events.max_attendees && (
-                          <div className="mb-1">
-                            <span>👥 Max {booking.events.max_attendees}</span>
-                          </div>
-                        )}
-                        {booking.events.theme && (
-                          <div>
-                            <span>🎨 {booking.events.theme}</span>
-                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            ✓ Completed
+                          </Badge>
                         )}
                       </div>
-                    </div>
-                    
-                    <div className="flex items-center justify-between text-xs mb-3">
-                      <div className="flex items-center gap-1">
-                        <span>💳</span>
-                        <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
-                      </div>
-                      {!isPast ? (
-                        <div className="flex items-center gap-1 text-blue-600 font-semibold">
-                          <span>⏰</span>
-                          <span>In {timeDisplay}</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-gray-400">
-                          <span>✓</span>
-                          <span>Completed</span>
+
+                      {canCancel && (
+                        <div className="space-y-2 pt-2 border-t">
+                          <Button
+                            onClick={() => handleCancelBooking(booking)}
+                            disabled={cancellingBooking === booking.id}
+                            variant="destructive"
+                            size="sm"
+                            className="w-full"
+                          >
+                            {cancellingBooking === booking.id 
+                              ? 'Cancelling...' 
+                              : isWaitlist 
+                                ? 'Leave Waitlist' 
+                                : 'Cancel Booking'
+                            }
+                          </Button>
+
+                          <p className="text-xs text-muted-foreground text-center">
+                            {isWaitlist
+                              ? `✓ Full refund if you leave waitlist`
+                              : willGetRefund 
+                                ? `✓ Full refund available (${timeDisplay} until event)`
+                                : `⚠️ No refund (within ${cancellationWindow}h window) (${timeDisplay} until event)`
+                            }
+                          </p>
                         </div>
                       )}
-                    </div>
-
-                    {canCancel && (
-                      <>
-                        <button
-                          onClick={() => handleCancelBooking(booking)}
-                          disabled={cancellingBooking === booking.id}
-                          className="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:bg-gray-400 text-sm font-medium"
-                        >
-                          {cancellingBooking === booking.id 
-                            ? 'Cancelling...' 
-                            : isWaitlist 
-                              ? 'Leave Waitlist' 
-                              : 'Cancel Booking'
-                          }
-                        </button>
-
-                        <p className="text-xs text-gray-500 mt-2 text-center">
-                          {isWaitlist
-                            ? `✓ Full refund if you leave waitlist`
-                            : willGetRefund 
-                              ? `✓ Full refund available (${timeDisplay} until event)`
-                              : `⚠️ No refund (within ${cancellationWindow}h window) (${timeDisplay} until event)`
-                          }
-                        </p>
-                      </>
-                    )}
-                  </div>
+                    </CardContent>
+                  </Card>
                 )
               })}
             </div>
@@ -873,12 +917,14 @@ export default function Dashboard() {
 
         {/* Available Events Section */}
         <div>
-          <h2 className="text-2xl font-bold mb-4 text-gray-900">Available Events</h2>
+          <h2 className="text-xl sm:text-2xl font-bold mb-5 sm:mb-6 tracking-tight">Available Events</h2>
           
           {events.length === 0 ? (
-            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-              No upcoming events available
-            </div>
+            <Card>
+              <CardContent className="p-8 text-center text-muted-foreground">
+                No upcoming events available
+              </CardContent>
+            </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {events.map((event) => {
@@ -896,86 +942,109 @@ export default function Dashboard() {
                 const isFull = event.max_attendees !== null && confirmedCount >= event.max_attendees
 
                 return (
-                  <div key={event.id} className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-bold text-lg flex-1 text-gray-900">
-                        <Link 
-                          href={`/events/${event.id}`}
-                          className="text-blue-700 hover:text-blue-900 hover:underline"
-                        >
-                          {event.title}
-                        </Link>
-                      </h3>
-                      <span className="text-lg font-semibold text-blue-700 ml-2 whitespace-nowrap">
-                        {event.credits_required} {event.credits_required === 1 ? 'credit' : 'credits'}
-                      </span>
-                    </div>
-                    
-                    <p className="text-gray-700 text-sm mb-3 line-clamp-2">{event.description}</p>
-                    
-                    <div className="flex justify-between gap-4 text-xs text-gray-600 mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-1 mb-1">
-                          <span>📅</span>
-                          <span>{formatDateTime(event.date)}</span>
+                  <Card key={event.id}>
+                    <CardHeader className="pb-3">
+                      <div className="flex justify-between items-start gap-2">
+                        <CardTitle className="text-base md:text-lg flex-1">
+                          <Link 
+                            href={`/events/${event.id}`}
+                            className="text-primary hover:underline"
+                          >
+                            {event.title}
+                          </Link>
+                        </CardTitle>
+                        <Badge variant="secondary" className="whitespace-nowrap">
+                          {event.credits_required} {event.credits_required === 1 ? 'credit' : 'credits'}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-sm text-muted-foreground line-clamp-2">{event.description}</p>
+                      
+                      <div className="text-xs text-muted-foreground">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <div className="flex items-center gap-1">
+                            <span>📅</span>
+                            <span>{formatDateTime(event.date)}</span>
+                          </div>
+                          {event.max_attendees && (
+                            <div className="whitespace-nowrap">👥 Max {event.max_attendees}</div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1">
-                          <span>📍</span>
-                          <span>{event.location}</span>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <div className="flex items-center gap-1">
+                            <span>📍</span>
+                            <span>{event.location}</span>
+                          </div>
+                          {event.theme && (
+                            <div className="whitespace-nowrap">🎨 {event.theme}</div>
+                          )}
                         </div>
                         {!isRegistrationOpen && registrationOpensAt && (
-                          <div className="flex items-center gap-1 text-orange-600 font-semibold mt-1">
-                            <span>⏰</span>
-                            <span>Opens: {formatDateTime(registrationOpensAt)}</span>
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t">
+                            <Badge variant="outline" className="text-orange-600 border-orange-600 whitespace-nowrap">
+                              ⏰ Opens: {formatDateTime(registrationOpensAt)}
+                            </Badge>
                           </div>
                         )}
                       </div>
-                      <div className="text-right">
-                        {event.max_attendees && (
-                          <div className="mb-1">
-                            <span>👥 Max {event.max_attendees}</span>
-                          </div>
-                        )}
-                        {event.theme && (
-                          <div>
-                            <span>🎨 {event.theme}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
-                      <p className="text-xs text-gray-500">
-                        ⏱️ Cancel {event.cancellation_hours || 4}h before
-                      </p>
-                      
-                      {isBooked ? (
-                        booking.status === 'waitlist' ? (
-                          <span className="text-yellow-600 font-semibold text-xs">⏳ Waitlisted</span>
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                        <p className="text-xs text-muted-foreground">
+                          ⏱️ Cancel {event.cancellation_hours || 4}h before
+                        </p>
+                        
+                        {isBooked ? (
+                          booking.status === 'waitlist' ? (
+                            <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                              ⏳ Waitlisted
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-green-600 border-green-600">
+                              ✓ Booked
+                            </Badge>
+                          )
+                        ) : !isRegistrationOpen ? (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-orange-600 border-orange-600">
+                              Not Open
+                            </Badge>
+                            {!alertSet.has(event.id) && (
+                              <Button
+                                onClick={() => handleSetAlert(event.id)}
+                                disabled={settingAlert === event.id}
+                                size="sm"
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {settingAlert === event.id ? 'Setting...' : 'Alert Me'}
+                              </Button>
+                            )}
+                            {alertSet.has(event.id) && (
+                              <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
+                                ✓ Alert Set
+                              </Badge>
+                            )}
+                          </div>
                         ) : (
-                          <span className="text-green-600 font-semibold text-xs">✓ Booked</span>
-                        )
-                      ) : !isRegistrationOpen ? (
-                        <span className="text-orange-600 font-semibold text-xs">
-                          Not Open
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleBookEvent(event)}
-                          disabled={!canAfford || isBooking}
-                          className="bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-xs font-medium whitespace-nowrap"
-                        >
-                          {isBooking 
-                            ? 'Booking...' 
-                            : !canAfford 
-                              ? 'Not enough credits' 
-                              : isFull 
-                                ? 'Join Waitlist' 
-                                : 'Book Event'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                          <Button
+                            onClick={() => handleBookEvent(event)}
+                            disabled={!canAfford || isBooking}
+                            size="sm"
+                            className="text-xs"
+                          >
+                            {isBooking 
+                              ? 'Booking...' 
+                              : !canAfford 
+                                ? 'Not enough credits' 
+                                : isFull 
+                                  ? 'Join Waitlist' 
+                                  : 'Book Event'}
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
                 )
               })}
             </div>
@@ -996,63 +1065,63 @@ export default function Dashboard() {
                   const borderColor = isWaitlist ? 'border-yellow-500' : 'border-gray-400'
 
                   return (
-                    <div key={booking.id} className={`bg-white rounded-lg shadow p-4 border-l-4 ${borderColor} opacity-75`}>
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-bold text-lg flex-1">
-                          <Link 
-                            href={`/events/${booking.event_id}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline"
-                          >
-                            {booking.events.title}
-                          </Link>
-                        </h3>
-                        {isWaitlist ? (
-                          <span className="text-yellow-600 font-semibold text-xs ml-2 whitespace-nowrap">
-                            ⏳ #{booking.waitlist_position}
-                          </span>
-                        ) : (
-                          <span className="text-green-600 font-semibold text-xs ml-2">✓</span>
-                        )}
-                      </div>
-                      
-                      <p className="text-gray-600 text-sm mb-3 line-clamp-2">{booking.events.description}</p>
-                      
-                      <div className="flex justify-between gap-4 text-xs text-gray-500 mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-1 mb-1">
-                            <span>📅</span>
-                            <span>{formatDateTime(booking.events.date)}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span>📍</span>
-                            <span>{booking.events.location}</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          {booking.events.max_attendees && (
-                            <div className="mb-1">
-                              <span>👥 Max {booking.events.max_attendees}</span>
-                            </div>
-                          )}
-                          {booking.events.theme && (
-                            <div>
-                              <span>🎨 {booking.events.theme}</span>
-                            </div>
+                    <Card key={booking.id} className={cn("opacity-75 border-l-4", isWaitlist ? "border-l-yellow-500" : "border-l-gray-400")}>
+                      <CardHeader className="pb-3">
+                        <div className="flex justify-between items-start">
+                          <CardTitle className="text-base md:text-lg flex-1">
+                            <Link 
+                              href={`/events/${booking.event_id}`}
+                              className="text-primary hover:underline"
+                            >
+                              {booking.events.title}
+                            </Link>
+                          </CardTitle>
+                          {isWaitlist ? (
+                            <Badge variant="outline" className="text-yellow-600 border-yellow-600 ml-2">
+                              ⏳ #{booking.waitlist_position}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-green-600 border-green-600 ml-2">
+                              ✓
+                            </Badge>
                           )}
                         </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1">
-                          <span>💳</span>
-                          <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground line-clamp-2">{booking.events.description}</p>
+                        
+                        <div className="text-xs text-muted-foreground">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <div className="flex items-center gap-1">
+                              <span>📅</span>
+                              <span>{formatDateTime(booking.events.date)}</span>
+                            </div>
+                            {booking.events.max_attendees && (
+                              <div className="whitespace-nowrap">👥 Max {booking.events.max_attendees}</div>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1">
+                              <span>📍</span>
+                              <span>{booking.events.location}</span>
+                            </div>
+                            {booking.events.theme && (
+                              <div className="whitespace-nowrap">🎨 {booking.events.theme}</div>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 text-gray-400">
-                          <span>✓</span>
-                          <span>Completed</span>
+                        
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <span>💳</span>
+                            <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            ✓ Completed
+                          </Badge>
                         </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
                   )
                 })}
             </div>
