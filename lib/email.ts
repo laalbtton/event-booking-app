@@ -7,6 +7,7 @@
  * - Waitlist promotions
  * - Waitlist position changes
  * - Event updates
+ * - Event reminders
  */
 
 type EmailData = {
@@ -281,6 +282,66 @@ export function getWaitlistPositionEmail(data: {
               ? 'You\'re getting closer! We\'ll notify you if a spot opens up.'
               : 'We\'ll notify you as soon as a spot becomes available.'
             }
+          </p>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
+          <p>© 2025 Laal Button. All rights reserved.</p>
+        </div>
+      </body>
+    </html>
+  `
+}
+
+/**
+ * Email template for event reminder
+ */
+export function getEventReminderEmail(data: {
+  userName: string
+  eventTitle: string
+  eventDate: string
+  eventLocation: string
+  timeUntilEvent: string
+  eventUrl: string
+}): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0;">📅 Event Reminder</h1>
+        </div>
+        
+        <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">
+          <p style="font-size: 16px; margin-bottom: 20px;">Hi ${data.userName},</p>
+          
+          <p style="font-size: 16px; margin-bottom: 20px;">
+            This is a friendly reminder that you have an upcoming event: <strong>${data.eventTitle}</strong>
+          </p>
+          
+          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
+            <h2 style="margin-top: 0; color: #111827;">Event Details</h2>
+            <p style="margin: 10px 0;"><strong>📅 Date & Time:</strong> ${data.eventDate}</p>
+            <p style="margin: 10px 0;"><strong>📍 Location:</strong> ${data.eventLocation}</p>
+            <p style="margin: 10px 0;"><strong>⏰ Time Until Event:</strong> ${data.timeUntilEvent}</p>
+          </div>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${data.eventUrl}" style="background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+              View Event Details
+            </a>
+          </div>
+          
+          <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
+            We look forward to seeing you there!
+          </p>
+          
+          <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">
+            If you can no longer attend, please cancel your booking from your dashboard to free up your spot.
           </p>
         </div>
         

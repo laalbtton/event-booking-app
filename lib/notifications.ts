@@ -7,6 +7,7 @@ export type NotificationType =
   | 'booking_confirmed'
   | 'booking_cancelled'
   | 'event_updated'
+  | 'event_reminder'
   | 'general'
 
 /**

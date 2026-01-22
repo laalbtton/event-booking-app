@@ -19,52 +19,120 @@ export default function NavigationTabs() {
 
   useEffect(() => {
     let channel: any = null
+    let refreshInterval: NodeJS.Timeout | null = null
 
     async function setupNotifications() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      loadUnreadCount()
+      // Load initial count
+      await loadUnreadCount()
       
       // Set up real-time subscription for notifications
+      // Use a unique channel name per user to avoid conflicts
       channel = supabase
-        .channel('notifications-changes')
+        .channel(`notifications-changes-${user.id}`)
         .on(
           'postgres_changes',
           {
-            event: '*',
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log('New notification received:', payload)
+            // Immediately update count when new notification is inserted
+            loadUnreadCount()
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log('Notification updated:', payload)
+            // Update count when notification is marked as read/unread
+            loadUnreadCount()
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
             schema: 'public',
             table: 'notifications',
             filter: `user_id=eq.${user.id}`,
           },
           () => {
+            console.log('Notification deleted')
+            // Update count when notification is deleted
             loadUnreadCount()
           }
         )
-        .subscribe()
+        .subscribe((status) => {
+          console.log('Notifications subscription status:', status)
+          if (status === 'SUBSCRIBED') {
+            console.log('Successfully subscribed to notifications')
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('Error subscribing to notifications')
+            // Retry after a delay
+            setTimeout(() => {
+              loadUnreadCount()
+            }, 1000)
+          }
+        })
+
+      // Fallback: Periodic refresh every 30 seconds to ensure count stays updated
+      // This helps catch any notifications that might be missed by real-time
+      refreshInterval = setInterval(() => {
+        loadUnreadCount()
+      }, 30000) // 30 seconds
     }
 
     setupNotifications()
 
     return () => {
       if (channel) {
+        console.log('Cleaning up notifications subscription')
         supabase.removeChannel(channel)
+      }
+      if (refreshInterval) {
+        clearInterval(refreshInterval)
       }
     }
   }, [])
 
   async function loadUnreadCount() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setUnreadCount(0)
+        return
+      }
 
-    const { count, error } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('read', false)
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('read', false)
 
-    if (!error && count !== null) {
-      setUnreadCount(count)
+      if (error) {
+        console.error('Error loading unread count:', error)
+        return
+      }
+
+      if (count !== null) {
+        setUnreadCount(count)
+      } else {
+        setUnreadCount(0)
+      }
+    } catch (error) {
+      console.error('Exception loading unread count:', error)
     }
   }
 

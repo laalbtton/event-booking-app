@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('waitlist_promoted', 'waitlist_position_changed', 'waitlist_position_improved', 'booking_confirmed', 'booking_cancelled', 'event_updated', 'general')),
+  type TEXT NOT NULL CHECK (type IN ('waitlist_promoted', 'waitlist_position_changed', 'waitlist_position_improved', 'booking_confirmed', 'booking_cancelled', 'event_updated', 'event_reminder', 'general')),
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   read BOOLEAN DEFAULT FALSE,

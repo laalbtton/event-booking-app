@@ -131,6 +131,8 @@ export default function NotificationsPage() {
         return '❌'
       case 'event_updated':
         return '📝'
+      case 'event_reminder':
+        return '📅'
       default:
         return '🔔'
     }
@@ -148,6 +150,8 @@ export default function NotificationsPage() {
         return 'border-red-500 bg-red-50'
       case 'event_updated':
         return 'border-yellow-500 bg-yellow-50'
+      case 'event_reminder':
+        return 'border-purple-500 bg-purple-50'
       default:
         return 'border-gray-500 bg-gray-50'
     }

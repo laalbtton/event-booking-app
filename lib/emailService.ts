@@ -12,6 +12,7 @@ import {
   getWaitlistPromotionEmail,
   getBookingCancellationEmail,
   getWaitlistPositionEmail,
+  getEventReminderEmail,
 } from './email'
 
 /**
@@ -236,6 +237,70 @@ export async function sendWaitlistPositionEmail(
     return response.ok
   } catch (error) {
     console.error('Error sending waitlist position email:', error)
+    return false
+  }
+}
+
+/**
+ * Send event reminder email
+ */
+export async function sendEventReminderEmail(
+  userId: string,
+  bookingId: string,
+  eventId: string,
+  timeUntilEvent: string
+): Promise<boolean> {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', userId)
+      .single()
+
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select(`
+        events (
+          id,
+          title,
+          date,
+          location
+        )
+      `)
+      .eq('id', bookingId)
+      .single()
+
+    if (!profile || !booking || !booking.events) {
+      console.error('Missing data for event reminder email')
+      return false
+    }
+
+    const event = booking.events as any
+    const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/events/${eventId}`
+
+    const html = getEventReminderEmail({
+      userName: profile.full_name || 'there',
+      eventTitle: event.title,
+      eventDate: formatDateTime(event.date),
+      eventLocation: event.location || 'TBD',
+      timeUntilEvent,
+      eventUrl,
+    })
+
+    // Call API route to send email
+    const response = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: profile.email,
+        subject: `📅 Reminder: ${event.title} is coming up!`,
+        html,
+      }),
+    })
+
+    return response.ok
+  } catch (error) {
+    console.error('Error sending event reminder email:', error)
     return false
   }
 }
