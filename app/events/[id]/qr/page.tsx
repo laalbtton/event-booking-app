@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { QRCodeSVG } from 'qrcode.react'
 import Link from 'next/link'
+import NavigationTabs from '@/components/NavigationTabs'
 
 export default function EventQRCodePage() {
   const params = useParams()
