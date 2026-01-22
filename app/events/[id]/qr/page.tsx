@@ -94,7 +94,7 @@ export default function EventQRCodePage() {
   }, [eventId])
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-20">
       <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="bg-white rounded-lg shadow-lg p-8">
           <div className="flex justify-between items-center mb-6">
@@ -145,6 +145,9 @@ export default function EventQRCodePage() {
           )}
         </div>
       </div>
+
+      {/* Bottom Navigation */}
+      <NavigationTabs />
     </div>
   )
 }

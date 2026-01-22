@@ -10,6 +10,7 @@ import Link from 'next/link'
 
 type EventBooking = {
   id: string
+  event_id: string
   title: string
   date: string
   location: string
@@ -27,6 +28,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const router = useRouter()
 
   const [formData, setFormData] = useState({
@@ -50,7 +52,28 @@ export default function ProfilePage() {
       return
     }
 
+    // Get avatar URL from user metadata (for Google OAuth users)
+    const avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture || null
+    setAvatarUrl(avatar)
+
     loadProfile(user.id)
+  }
+
+  // Generate initials from name
+  function getInitials(name: string | null | undefined): string {
+    if (!name) return '?'
+    const parts = name.trim().split(/\s+/)
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    }
+    return name.substring(0, 2).toUpperCase()
+  }
+
+  function copyPublicProfileLink() {
+    if (!profile) return
+    const publicUrl = `${window.location.origin}/profile/${profile.id}`
+    navigator.clipboard.writeText(publicUrl)
+    alert('Public profile link copied to clipboard!')
   }
 
   async function loadProfile(userId: string) {
@@ -81,6 +104,7 @@ export default function ProfilePage() {
         .from('bookings')
         .select(`
           id,
+          event_id,
           credits_used,
           status,
           attendance_status,
@@ -100,7 +124,8 @@ export default function ProfilePage() {
       if (bookingsError) throw bookingsError
       
       const events = (bookingsData || []).map((b: any) => ({
-        id: b.events.id,
+        id: b.id,
+        event_id: b.events.id,
         title: b.events.title,
         date: b.events.date,
         location: b.events.location,
@@ -177,8 +202,6 @@ export default function ProfilePage() {
     )
   }
 
-  const memberSince = formatDate(profile.created_at)
-
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Navigation Tabs */}
@@ -189,19 +212,64 @@ export default function ProfilePage() {
         <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 mb-6">
           {!isEditing ? (
             <>
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                    {profile.full_name || 'No name set'}
-                  </h2>
-                  <p className="text-gray-600">{profile.email}</p>
+              <div className="flex items-start gap-4 mb-6">
+                {/* Profile Picture */}
+                <div className="flex-shrink-0">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={profile.full_name || 'Profile'}
+                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold border-2 border-gray-200">
+                      {getInitials(profile.full_name)}
+                    </div>
+                  )}
                 </div>
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
-                >
-                  Edit Profile
-                </button>
+
+                <div className="flex-1">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h2 className="text-3xl font-bold text-gray-900 mb-1">
+                        {profile.full_name || 'No name set'}
+                      </h2>
+                      <p className="text-gray-600 text-sm">{profile.email}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={copyPublicProfileLink}
+                        className="bg-gray-100 text-gray-700 p-2 rounded-lg hover:bg-gray-200 transition-colors"
+                        title="Share Profile"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => setIsEditing(true)}
+                        className="bg-gray-100 text-gray-700 p-2 rounded-lg hover:bg-gray-200 transition-colors"
+                        title="Edit Profile"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Consolidated Stats - Horizontal Layout */}
+                  <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-700">Credits:</span>
+                      <span className="text-lg font-bold text-blue-600">{profile.credits}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-700">Attended:</span>
+                      <span className="text-lg font-bold text-green-600">{attendedCount}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {profile.bio && (
@@ -260,21 +328,6 @@ export default function ProfilePage() {
                 </div>
               )}
 
-              {/* Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="text-sm font-semibold text-blue-900 mb-1">Credits</h3>
-                  <p className="text-2xl font-bold text-blue-700">{profile.credits}</p>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <h3 className="text-sm font-semibold text-green-900 mb-1">Events Attended</h3>
-                  <p className="text-2xl font-bold text-green-700">{attendedCount}</p>
-                </div>
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <h3 className="text-sm font-semibold text-purple-900 mb-1">Member Since</h3>
-                  <p className="text-lg font-bold text-purple-700">{memberSince}</p>
-                </div>
-              </div>
             </>
           ) : (
             <form onSubmit={handleSaveProfile} className="space-y-6">
@@ -422,14 +475,26 @@ export default function ProfilePage() {
                   statusColor = 'bg-gray-100 text-gray-700'
                 }
 
+                // Determine which label to show based on action
+                // Note: We use booked_at for all dates since bookings table doesn't have updated_at
+                let actionLabel = 'Booked'
+                if (booking.status === 'cancelled') {
+                  actionLabel = 'Cancelled'
+                } else if (booking.attendance_status === 'attended') {
+                  actionLabel = 'Attended'
+                } else if (booking.attendance_status === 'no_show') {
+                  actionLabel = 'Marked as No Show'
+                }
+
                 return (
-                  <div
+                  <Link
                     key={booking.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                    href={`/events/${booking.event_id}`}
+                    className="group block border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-lg hover:bg-blue-50/30 transition-all duration-200 cursor-pointer"
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <h4 className="font-bold text-lg text-gray-900 mb-1">{booking.title}</h4>
+                        <h4 className="font-bold text-lg text-gray-900 mb-1 group-hover:text-blue-700 transition-colors">{booking.title}</h4>
                         <p className="text-sm text-gray-600">
                           📅 {formatDateTime(booking.date)}
                         </p>
@@ -443,17 +508,18 @@ export default function ProfilePage() {
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          Booked: {formatDate(booking.booked_at)}
+                          {actionLabel}: {formatDate(booking.booked_at)}
                         </p>
                       </div>
-                      <Link
-                        href={`/event-public/${booking.id}`}
-                        className="text-blue-600 hover:text-blue-800 font-medium text-sm ml-4"
-                      >
-                        View Event →
-                      </Link>
+                      <div className="flex-shrink-0 ml-4 flex items-center">
+                        <div className="w-8 h-8 rounded-full bg-gray-100 group-hover:bg-blue-500 flex items-center justify-center transition-colors">
+                          <svg className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </Link>
                 )
               })}
             </div>

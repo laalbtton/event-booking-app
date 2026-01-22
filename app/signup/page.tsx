@@ -33,9 +33,16 @@ export default function SignupPage() {
 
       if (error) throw error
 
+      // Check if email confirmation is required
+      // If user is null or email is not confirmed, they need to verify their email
+      if (!data.user || !data.user.email_confirmed_at) {
+        setSuccess(true)
+        // Don't redirect - show email verification message instead
+        return
+      }
+
+      // If email is already confirmed (shouldn't happen normally, but handle it)
       setSuccess(true)
-      
-      // Redirect to dashboard after 2 seconds
       setTimeout(() => {
         router.push('/dashboard')
       }, 2000)
@@ -78,9 +85,30 @@ export default function SignupPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
-          <div className="text-green-600 text-6xl mb-4">✓</div>
-          <h2 className="text-2xl font-bold mb-2 text-gray-900">Account Created!</h2>
-          <p className="text-gray-700">Redirecting to your dashboard...</p>
+          <div className="text-blue-600 text-6xl mb-4">📧</div>
+          <h2 className="text-2xl font-bold mb-4 text-gray-900">Check Your Email!</h2>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-left">
+            <p className="text-gray-700 mb-3">
+              We've sent a verification email to <strong>{email}</strong>
+            </p>
+            <p className="text-sm text-gray-600 mb-3">
+              Please click the link in the email to verify your account before you can access the dashboard.
+            </p>
+            <p className="text-sm text-gray-600">
+              Once verified, you can log in and start booking events!
+            </p>
+          </div>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Didn't receive the email? Check your spam folder or try signing up again.
+            </p>
+            <Link
+              href="/login"
+              className="inline-block w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-semibold text-base shadow-md transition-colors"
+            >
+              Go to Login
+            </Link>
+          </div>
         </div>
       </div>
     )

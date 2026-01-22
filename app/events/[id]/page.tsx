@@ -27,6 +27,7 @@ type AttendeeBooking = {
   status: string
   waitlist_position: number | null
   profiles: {
+    id: string
     full_name: string
     email: string
   }
@@ -43,6 +44,8 @@ export default function EventDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [hostProfile, setHostProfile] = useState<{ full_name: string } | null>(null)
+  const [isHost, setIsHost] = useState(false)
+  const [isEventCreator, setIsEventCreator] = useState(false)
 
 
   function copyPublicLink() {
@@ -73,6 +76,16 @@ export default function EventDetailsPage() {
       if (eventError) throw eventError
       setEvent(eventData)
 
+      // Check if current user is the host
+      if (user && eventData.host_user_id === user.id) {
+        setIsHost(true)
+      }
+
+      // Check if current user is the event creator
+      if (user && eventData.created_by === user.id) {
+        setIsEventCreator(true)
+      }
+
       // Load host profile if host is assigned
       if (eventData.host_user_id) {
         const { data: hostData, error: hostError } = await supabase
@@ -93,7 +106,7 @@ export default function EventDetailsPage() {
           id,
           status,
           waitlist_position,
-          profiles (full_name, email)
+          profiles (id, full_name, email)
         `)
         .eq('event_id', eventId)
         .eq('status', 'confirmed')
@@ -109,7 +122,7 @@ export default function EventDetailsPage() {
           id,
           status,
           waitlist_position,
-          profiles (full_name, email)
+          profiles (id, full_name, email)
         `)
         .eq('event_id', eventId)
         .eq('status', 'waitlist')
@@ -237,7 +250,7 @@ export default function EventDetailsPage() {
               <p className="text-lg">⏱️ Cancel up to {event.cancellation_hours}h before for full refund</p>
             </div>
 
-            <div className="mt-6">
+            <div className="mt-6 flex gap-3">
               <button
                 onClick={copyPublicLink}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold text-sm shadow-md flex items-center gap-2"
@@ -247,6 +260,17 @@ export default function EventDetailsPage() {
                 </svg>
                 Share
               </button>
+              {(isHost || isEventCreator) && (
+                <Link
+                  href={`/events/${eventId}/attendance`}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold text-sm shadow-md flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  Manage Attendees
+                </Link>
+              )}
             </div>
 
             {waitlistBookings.length > 0 && (
@@ -269,15 +293,16 @@ export default function EventDetailsPage() {
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {confirmedBookings.map((booking, index) => (
-                <div 
-                  key={booking.id} 
-                  className="flex items-center p-3 bg-green-50 rounded-lg border border-green-200"
+                <Link
+                  key={booking.id}
+                  href={`/profile/${booking.profiles.id}`}
+                  className="flex items-center p-3 bg-green-50 rounded-lg border-2 border-green-200 hover:border-green-400 hover:shadow-md transition-all cursor-pointer"
                 >
-                  <div className="flex-shrink-0 w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center font-bold mr-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center font-bold mr-3 shadow-md">
                     {index + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-sm font-medium text-gray-900 truncate hover:text-blue-600 transition-colors">
                       {booking.profiles.full_name}
                     </p>
                     {currentUser && (
@@ -286,7 +311,7 @@ export default function EventDetailsPage() {
                       </p>
                     )}
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
@@ -301,15 +326,16 @@ export default function EventDetailsPage() {
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {waitlistBookings.map((booking) => (
-                <div 
-                  key={booking.id} 
-                  className="flex items-center p-3 bg-yellow-50 rounded-lg border border-yellow-200"
+                <Link
+                  key={booking.id}
+                  href={`/profile/${booking.profiles.id}`}
+                  className="flex items-center p-3 bg-yellow-50 rounded-lg border-2 border-yellow-200 hover:border-yellow-400 hover:shadow-md transition-all cursor-pointer"
                 >
-                  <div className="flex-shrink-0 w-10 h-10 bg-yellow-500 text-white rounded-full flex items-center justify-center font-bold mr-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-yellow-500 text-white rounded-full flex items-center justify-center font-bold mr-3 shadow-md">
                     {booking.waitlist_position}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-sm font-medium text-gray-900 truncate hover:text-blue-600 transition-colors">
                       {booking.profiles.full_name}
                     </p>
                     {currentUser && (
@@ -318,7 +344,7 @@ export default function EventDetailsPage() {
                       </p>
                     )}
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>

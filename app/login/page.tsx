@@ -39,7 +39,12 @@ export default function LoginPage() {
         router.push('/dashboard')
       }
     } catch (error: any) {
-      setError(error.message)
+      // Provide more helpful error messages
+      if (error.message?.includes('Email not confirmed') || error.message?.includes('email_not_confirmed')) {
+        setError('Please verify your email address before logging in. Check your inbox for the verification email.')
+      } else {
+        setError(error.message)
+      }
     } finally {
       setLoading(false)
     }

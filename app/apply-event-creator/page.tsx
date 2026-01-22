@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
+import NavigationTabs from '@/components/NavigationTabs'
 
 type RoleChangeRequest = {
   id: string
@@ -116,7 +117,7 @@ export default function ApplyEventCreatorPage() {
 
   if (existingRequest && existingRequest.status === 'pending') {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 pb-20">
         <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
           <Link
             href="/dashboard"
@@ -162,7 +163,7 @@ export default function ApplyEventCreatorPage() {
 
   if (existingRequest && existingRequest.status === 'approved') {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 pb-20">
         <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
           <Link
             href="/dashboard"
@@ -202,7 +203,7 @@ export default function ApplyEventCreatorPage() {
 
   if (existingRequest && existingRequest.status === 'rejected') {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 pb-20">
         <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
           <Link
             href="/dashboard"
@@ -242,7 +243,7 @@ export default function ApplyEventCreatorPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-20">
       <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <Link
           href="/dashboard"
@@ -310,6 +311,7 @@ export default function ApplyEventCreatorPage() {
             </div>
           </form>
         </div>
+        <NavigationTabs />
       </div>
     </div>
   )

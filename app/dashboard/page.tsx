@@ -173,6 +173,74 @@ export default function Dashboard() {
           }
         }
       )
+      // Also listen to ALL booking changes (INSERT, UPDATE, DELETE) to update event capacity
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'bookings'
+        },
+        async (payload) => {
+          // When a new confirmed booking is created, increase count
+          if (payload.new && (payload.new as any).status === 'confirmed') {
+            const eventId = (payload.new as any).event_id
+            setEventConfirmedCounts(prev => ({
+              ...prev,
+              [eventId]: (prev[eventId] || 0) + 1
+            }))
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'bookings'
+        },
+        async (payload) => {
+          // Update event confirmed counts when booking status changes
+          const newBooking = payload.new as any
+          const oldBooking = payload.old as any
+          if (!newBooking || !oldBooking) return
+          
+          const eventId = newBooking.event_id
+          
+          // If status changed from confirmed to something else, decrease count
+          if (oldBooking.status === 'confirmed' && newBooking.status !== 'confirmed') {
+            setEventConfirmedCounts(prev => ({
+              ...prev,
+              [eventId]: Math.max(0, (prev[eventId] || 0) - 1)
+            }))
+          }
+          // If status changed to confirmed, increase count
+          else if (oldBooking.status !== 'confirmed' && newBooking.status === 'confirmed') {
+            setEventConfirmedCounts(prev => ({
+              ...prev,
+              [eventId]: (prev[eventId] || 0) + 1
+            }))
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'bookings'
+        },
+        async (payload) => {
+          // When a confirmed booking is deleted, decrease count
+          if (payload.old && (payload.old as any).status === 'confirmed') {
+            const eventId = (payload.old as any).event_id
+            setEventConfirmedCounts(prev => ({
+              ...prev,
+              [eventId]: Math.max(0, (prev[eventId] || 0) - 1)
+            }))
+          }
+        }
+      )
       .subscribe()
 
     return () => {

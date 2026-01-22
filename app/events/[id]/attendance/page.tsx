@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime, formatTime } from '@/lib/dateUtils'
 import Link from 'next/link'
+import NavigationTabs from '@/components/NavigationTabs'
 
 type BookingWithProfile = {
   id: string
@@ -38,6 +39,7 @@ export default function AttendancePage() {
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [canManageHost, setCanManageHost] = useState(false)
   const [stats, setStats] = useState({
     total: 0,
     confirmed: 0,
@@ -70,12 +72,6 @@ export default function AttendancePage() {
       return
     }
 
-    // Only event_creator and admin can access this page
-    if (profile.role !== 'event_creator' && profile.role !== 'admin') {
-      router.push('/dashboard')
-      return
-    }
-
     setUserRole(profile.role)
     await loadData(user.id)
   }
@@ -103,11 +99,20 @@ export default function AttendancePage() {
 
       if (eventError) throw eventError
 
-      // Event creators can only access their own events
-      if (currentUserRole === 'event_creator' && eventData.created_by !== userId) {
-        router.push('/events/manage')
+      // Check access: event creators can only access their own events
+      // Admins can access all events
+      // Hosts can access events where they are assigned as host
+      const isEventCreator = currentUserRole === 'event_creator' && eventData.created_by === userId
+      const isAdmin = currentUserRole === 'admin'
+      const isHost = eventData.host_user_id === userId
+
+      if (!isEventCreator && !isAdmin && !isHost) {
+        router.push('/dashboard')
         return
       }
+
+      // Only event creators and admins can manage host assignments
+      setCanManageHost(isEventCreator || isAdmin)
 
       setEvent(eventData)
 
@@ -227,16 +232,16 @@ export default function AttendancePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Link
-              href="/events/manage"
+              href={`/events/${eventId}`}
               className="text-blue-600 hover:text-blue-800 font-medium"
             >
-              ← Back to Events
+              ← Back to Event Details
             </Link>
             <h1 className="text-2xl font-bold text-gray-900">Attendance Management</h1>
           </div>
@@ -251,30 +256,32 @@ export default function AttendancePage() {
             📅 {formatDateTime(event.date)}
           </p>
           
-          {/* Host Section */}
-          <div className="border-t pt-4 mt-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Event Host</h3>
-            {hostProfile ? (
-              <div className="flex items-center justify-between bg-indigo-50 p-4 rounded-lg">
-                <div>
-                  <p className="font-semibold text-indigo-900">👤 {hostProfile.full_name}</p>
-                  <p className="text-sm text-indigo-700">Currently assigned as host</p>
+          {/* Host Section - Only show if user can manage hosts */}
+          {canManageHost && (
+            <div className="border-t pt-4 mt-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Event Host</h3>
+              {hostProfile ? (
+                <div className="flex items-center justify-between bg-indigo-50 p-4 rounded-lg">
+                  <div>
+                    <p className="font-semibold text-indigo-900">👤 {hostProfile.full_name}</p>
+                    <p className="text-sm text-indigo-700">Currently assigned as host</p>
+                  </div>
+                  <button
+                    onClick={() => setHost(null)}
+                    disabled={updating === 'host'}
+                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
+                  >
+                    {updating === 'host' ? 'Removing...' : 'Remove Host'}
+                  </button>
                 </div>
-                <button
-                  onClick={() => setHost(null)}
-                  disabled={updating === 'host'}
-                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
-                >
-                  {updating === 'host' ? 'Removing...' : 'Remove Host'}
-                </button>
-              </div>
-            ) : (
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-gray-600 mb-2">No host assigned (TBD)</p>
-                <p className="text-sm text-gray-500">Select a host from the attendees list below</p>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-gray-600 mb-2">No host assigned (TBD)</p>
+                  <p className="text-sm text-gray-500">Select a host from the attendees list below</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Stats */}
@@ -380,17 +387,19 @@ export default function AttendancePage() {
                                 </button>
                               )}
                             </div>
-                            <button
-                              onClick={() => setHost(booking.user_id)}
-                              disabled={updating === 'host' || event.host_user_id === booking.user_id}
-                              className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
-                            >
-                              {updating === 'host' && event.host_user_id === booking.user_id 
-                                ? '...' 
-                                : event.host_user_id === booking.user_id 
-                                  ? '✓ Current Host' 
-                                  : 'Set as Host'}
-                            </button>
+                            {canManageHost && (
+                              <button
+                                onClick={() => setHost(booking.user_id)}
+                                disabled={updating === 'host' || event.host_user_id === booking.user_id}
+                                className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
+                              >
+                                {updating === 'host' && event.host_user_id === booking.user_id 
+                                  ? '...' 
+                                  : event.host_user_id === booking.user_id 
+                                    ? '✓ Current Host' 
+                                    : 'Set as Host'}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -402,6 +411,9 @@ export default function AttendancePage() {
           )}
         </div>
       </div>
+
+      {/* Bottom Navigation */}
+      <NavigationTabs />
     </div>
   )
 }
