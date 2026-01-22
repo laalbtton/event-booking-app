@@ -15,10 +15,17 @@ export default function EventQRCodePage() {
   const [event, setEvent] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [publicUrl, setPublicUrl] = useState('')
 
   useEffect(() => {
     checkAccess()
   }, [])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && eventId) {
+      setPublicUrl(`${window.location.origin}/event-public/${eventId}`)
+    }
+  }, [eventId])
 
   async function checkAccess() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -85,14 +92,6 @@ export default function EventQRCodePage() {
       </div>
     )
   }
-
-  const [publicUrl, setPublicUrl] = useState('')
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setPublicUrl(`${window.location.origin}/event-public/${eventId}`)
-    }
-  }, [eventId])
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">

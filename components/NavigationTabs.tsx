@@ -25,76 +25,86 @@ export default function NavigationTabs() {
     let refreshInterval: NodeJS.Timeout | null = null
 
     async function setupNotifications() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
 
-      // Load initial count
-      await loadUnreadCount()
-      
-      // Set up real-time subscription for notifications
-      // Use a unique channel name per user to avoid conflicts
-      channel = supabase
-        .channel(`notifications-changes-${user.id}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${user.id}`,
-          },
-          (payload) => {
-            console.log('New notification received:', payload)
-            // Immediately update count when new notification is inserted
-            loadUnreadCount()
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${user.id}`,
-          },
-          (payload) => {
-            console.log('Notification updated:', payload)
-            // Update count when notification is marked as read/unread
-            loadUnreadCount()
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => {
-            console.log('Notification deleted')
-            // Update count when notification is deleted
-            loadUnreadCount()
-          }
-        )
-        .subscribe((status) => {
-          console.log('Notifications subscription status:', status)
-          if (status === 'SUBSCRIBED') {
-            console.log('Successfully subscribed to notifications')
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('Error subscribing to notifications')
-            // Retry after a delay
-            setTimeout(() => {
-              loadUnreadCount()
-            }, 1000)
-          }
-        })
+        // Load initial count
+        await loadUnreadCount()
+        
+        // Set up real-time subscription for notifications
+        // Use a unique channel name per user to avoid conflicts
+        try {
+          channel = supabase
+            .channel(`notifications-changes-${user.id}`)
+            .on(
+              'postgres_changes',
+              {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'notifications',
+                filter: `user_id=eq.${user.id}`,
+              },
+              (payload) => {
+                console.log('New notification received:', payload)
+                // Immediately update count when new notification is inserted
+                loadUnreadCount()
+              }
+            )
+            .on(
+              'postgres_changes',
+              {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'notifications',
+                filter: `user_id=eq.${user.id}`,
+              },
+              (payload) => {
+                console.log('Notification updated:', payload)
+                // Update count when notification is marked as read/unread
+                loadUnreadCount()
+              }
+            )
+            .on(
+              'postgres_changes',
+              {
+                event: 'DELETE',
+                schema: 'public',
+                table: 'notifications',
+                filter: `user_id=eq.${user.id}`,
+              },
+              () => {
+                console.log('Notification deleted')
+                // Update count when notification is deleted
+                loadUnreadCount()
+              }
+            )
+            .subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                console.log('Successfully subscribed to notifications')
+              } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                // Silently handle subscription errors - fallback to periodic refresh
+                // This can happen if real-time replication is not enabled or network issues occur
+                console.warn('Notifications subscription unavailable, using periodic refresh')
+              }
+            })
+        } catch (subscriptionError) {
+          // If subscription fails, we'll rely on periodic refresh
+          console.warn('Failed to set up notifications subscription, using periodic refresh:', subscriptionError)
+        }
 
-      // Fallback: Periodic refresh every 30 seconds to ensure count stays updated
-      // This helps catch any notifications that might be missed by real-time
-      refreshInterval = setInterval(() => {
-        loadUnreadCount()
-      }, 30000) // 30 seconds
+        // Fallback: Periodic refresh every 30 seconds to ensure count stays updated
+        // This helps catch any notifications that might be missed by real-time
+        refreshInterval = setInterval(() => {
+          loadUnreadCount()
+        }, 30000) // 30 seconds
+      } catch (error) {
+        // If setup fails completely, still try to load count periodically
+        console.warn('Error setting up notifications, using periodic refresh only:', error)
+        refreshInterval = setInterval(() => {
+          loadUnreadCount()
+        }, 30000)
+      }
     }
 
     setupNotifications()

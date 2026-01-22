@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { QrCode, Link as LinkIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function EventManagementPage() {
@@ -390,7 +391,7 @@ export default function EventManagementPage() {
                         className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
                         title="Copy Public Link"
                       >
-                        ⎘
+                        <LinkIcon className="w-4 h-4" />
                       </Button>
 
                       {activeTab === 'upcoming' && (
@@ -403,7 +404,7 @@ export default function EventManagementPage() {
                             title="Generate QR Code"
                           >
                             <Link href={`/events/${event.id}/qr`}>
-                              ▦
+                              <QrCode className="w-4 h-4" />
                             </Link>
                           </Button>
 

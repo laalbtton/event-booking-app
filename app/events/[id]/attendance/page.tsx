@@ -3,9 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { formatDateTime, formatTime } from '@/lib/dateUtils'
+import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { GripVertical, User, CheckCircle2, XCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type BookingWithProfile = {
   id: string
@@ -28,6 +34,15 @@ type EventDetails = {
   created_by: string | null
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+}
+
 export default function AttendancePage() {
   const params = useParams()
   const router = useRouter()
@@ -47,6 +62,9 @@ export default function AttendancePage() {
     noShow: 0,
     pending: 0
   })
+  const [draggedItem, setDraggedItem] = useState<string | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [isDraggingOverHost, setIsDraggingOverHost] = useState(false)
 
   useEffect(() => {
     checkAuth()
@@ -156,7 +174,7 @@ export default function AttendancePage() {
       // Calculate stats
       const total = bookingsData?.length || 0
       const attended = bookingsData?.filter((b: any) => b.attendance_status === 'attended').length || 0
-      const noShow = bookingsData?.filter((b: any) => b.attendance_status === 'no_show').length || 0
+      const noShow = total - attended // All non-attended are no shows by default
       const confirmed = bookingsData?.filter((b: any) => !b.attendance_status || b.attendance_status === 'confirmed').length || 0
       const pending = bookingsData?.filter((b: any) => !b.attendance_status).length || 0
 
@@ -176,7 +194,7 @@ export default function AttendancePage() {
     }
   }
 
-  async function updateAttendance(bookingId: string, status: 'attended' | 'no_show' | null) {
+  async function updateAttendance(bookingId: string, status: 'attended' | null) {
     setUpdating(bookingId)
     try {
       const { error } = await supabase
@@ -206,13 +224,73 @@ export default function AttendancePage() {
       if (error) throw error
 
       await loadData((await supabase.auth.getUser()).data.user!.id)
-      alert(userId ? 'Host assigned successfully!' : 'Host removed successfully!')
     } catch (error: any) {
       console.error('Error setting host:', error)
       alert('Error setting host: ' + error.message)
     } finally {
       setUpdating(null)
     }
+  }
+
+  async function reorderBookings(newOrder: BookingWithProfile[]) {
+    // Note: This is a UI-only reorder. If you need to persist order in the database,
+    // you would need to add an order field to the bookings table.
+    setBookings(newOrder)
+  }
+
+  function handleDragStart(e: React.DragEvent, bookingId: string) {
+    setDraggedItem(bookingId)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  function handleDragOver(e: React.DragEvent, index?: number) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (index !== undefined) {
+      setDragOverIndex(index)
+    }
+  }
+
+  function handleDragLeave() {
+    setDragOverIndex(null)
+    setIsDraggingOverHost(false)
+  }
+
+  function handleDrop(e: React.DragEvent, targetIndex?: number) {
+    e.preventDefault()
+    
+    if (!draggedItem) return
+
+    // Handle drop on host zone
+    if (isDraggingOverHost && canManageHost) {
+      const booking = bookings.find(b => b.id === draggedItem)
+      if (booking) {
+        setHost(booking.user_id)
+      }
+      setIsDraggingOverHost(false)
+      setDraggedItem(null)
+      return
+    }
+
+    // Handle reordering
+    if (targetIndex !== undefined && draggedItem) {
+      const draggedIndex = bookings.findIndex(b => b.id === draggedItem)
+      if (draggedIndex !== -1 && draggedIndex !== targetIndex) {
+        const newBookings = [...bookings]
+        const [removed] = newBookings.splice(draggedIndex, 1)
+        newBookings.splice(targetIndex, 0, removed)
+        reorderBookings(newBookings)
+      }
+    }
+
+    setDragOverIndex(null)
+    setDraggedItem(null)
+  }
+
+  function handleHostDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setIsDraggingOverHost(true)
   }
 
   if (loading) {
@@ -235,7 +313,7 @@ export default function AttendancePage() {
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
       <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
             <Link
               href={`/events/${eventId}`}
@@ -250,165 +328,187 @@ export default function AttendancePage() {
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* Event Info */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">{event.title}</h2>
-          <p className="text-gray-600 mb-4">
-            📅 {formatDateTime(event.date)}
-          </p>
-          
-          {/* Host Section - Only show if user can manage hosts */}
-          {canManageHost && (
-            <div className="border-t pt-4 mt-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Event Host</h3>
-              {hostProfile ? (
-                <div className="flex items-center justify-between bg-indigo-50 p-4 rounded-lg">
-                  <div>
-                    <p className="font-semibold text-indigo-900">👤 {hostProfile.full_name}</p>
-                    <p className="text-sm text-indigo-700">Currently assigned as host</p>
-                  </div>
-                  <button
-                    onClick={() => setHost(null)}
-                    disabled={updating === 'host'}
-                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
-                  >
-                    {updating === 'host' ? 'Removing...' : 'Remove Host'}
-                  </button>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-2xl">{event.title}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {formatDateTime(event.date)}
+            </p>
+          </CardHeader>
+          <CardContent>
+            {/* Host Section - Only show if user can manage hosts */}
+            {canManageHost && (
+              <div className="border-t pt-4 mt-4">
+                <h3 className="text-lg font-semibold mb-3">Event Host</h3>
+                <div
+                  onDragOver={handleHostDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={cn(
+                    "min-h-[100px] p-4 rounded-lg border-2 border-dashed transition-colors",
+                    isDraggingOverHost
+                      ? "bg-indigo-100 border-indigo-400"
+                      : hostProfile
+                      ? "bg-indigo-50 border-indigo-200"
+                      : "bg-gray-50 border-gray-300"
+                  )}
+                >
+                  {hostProfile ? (
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarFallback>
+                          {getInitials(hostProfile.full_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-semibold text-indigo-900">{hostProfile.full_name}</p>
+                        <p className="text-sm text-indigo-700">Currently assigned as host</p>
+                      </div>
+                      <Button
+                        onClick={() => setHost(null)}
+                        disabled={updating === 'host'}
+                        variant="destructive"
+                        size="sm"
+                      >
+                        {updating === 'host' ? 'Removing...' : 'Remove Host'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-center">
+                      <div>
+                        <User className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                        <p className="text-gray-600 mb-1">No host assigned</p>
+                        <p className="text-sm text-gray-500">Drag an attendee here to assign as host</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-gray-600 mb-2">No host assigned (TBD)</p>
-                  <p className="text-sm text-gray-500">Select a host from the attendees list below</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <h3 className="text-sm font-semibold text-blue-900 mb-1">Total Registered</h3>
-            <p className="text-2xl font-bold text-blue-700">{stats.total}</p>
-          </div>
-          <div className="bg-green-50 p-4 rounded-lg">
-            <h3 className="text-sm font-semibold text-green-900 mb-1">Attended</h3>
-            <p className="text-2xl font-bold text-green-700">{stats.attended}</p>
-          </div>
-          <div className="bg-red-50 p-4 rounded-lg">
-            <h3 className="text-sm font-semibold text-red-900 mb-1">No Show</h3>
-            <p className="text-2xl font-bold text-red-700">{stats.noShow}</p>
-          </div>
-          <div className="bg-yellow-50 p-4 rounded-lg">
-            <h3 className="text-sm font-semibold text-yellow-900 mb-1">Pending</h3>
-            <p className="text-2xl font-bold text-yellow-700">{stats.pending}</p>
-          </div>
-        </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Bookings List */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">
-            Confirmed Bookings ({bookings.length})
-          </h3>
+        <Card>
+          <CardHeader>
+            <CardTitle>Confirmed Bookings ({bookings.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {bookings.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No confirmed bookings for this event</p>
+            ) : (
+              <div className="space-y-2">
+                {bookings.map((booking, index) => {
+                  const attendanceStatus = booking.attendance_status
+                  const isUpdating = updating === booking.id
+                  const isDragged = draggedItem === booking.id
+                  const isDragOver = dragOverIndex === index
 
-          {bookings.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No confirmed bookings for this event</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Email</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Booked At</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bookings.map((booking) => {
-                    const attendanceStatus = booking.attendance_status
-                    const isUpdating = updating === booking.id
+                  return (
+                    <div
+                      key={booking.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, booking.id)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={cn(
+                        "flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all cursor-move",
+                        isDragged && "opacity-50",
+                        isDragOver && "border-blue-400 bg-blue-50",
+                        !isDragged && !isDragOver && "hover:bg-gray-50"
+                      )}
+                    >
+                      <GripVertical className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                      
+                      <Avatar className="flex-shrink-0">
+                        <AvatarFallback>
+                          {getInitials(booking.profiles.full_name || 'N/A')}
+                        </AvatarFallback>
+                      </Avatar>
 
-                    return (
-                      <tr key={booking.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4">
-                          <Link
-                            href={`/profile/${booking.profiles.id}`}
-                            className="text-blue-600 hover:text-blue-800 font-medium"
-                          >
-                            {booking.profiles.full_name || 'No name'}
-                          </Link>
-                        </td>
-                        <td className="py-3 px-4 text-gray-600">{booking.profiles.email}</td>
-                        <td className="py-3 px-4 text-gray-600 text-sm">
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          href={`/profile/${booking.profiles.id}`}
+                          className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {booking.profiles.full_name || 'No name'}
+                        </Link>
+                        <span className="hidden sm:inline text-xs text-muted-foreground">
                           {formatDateTime(booking.booked_at)}
-                        </td>
-                        <td className="py-3 px-4">
-                          {attendanceStatus === 'attended' && (
-                            <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-sm font-semibold">
-                              ✓ Attended
-                            </span>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {attendanceStatus === 'attended' ? (
+                          <Badge variant="default" className="bg-green-100 text-green-700 border-green-200">
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            <span className="hidden sm:inline">Attended</span>
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive">
+                            <XCircle className="w-3 h-3 mr-1" />
+                            <span className="hidden sm:inline">No Show</span>
+                          </Badge>
+                        )}
+                        
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => updateAttendance(booking.id, attendanceStatus === 'attended' ? null : 'attended')}
+                            disabled={isUpdating}
+                            variant={attendanceStatus === 'attended' ? 'secondary' : 'default'}
+                            size="sm"
+                            className={attendanceStatus === 'attended' ? 'bg-green-600 hover:bg-green-700' : ''}
+                          >
+                            {isUpdating ? '...' : attendanceStatus === 'attended' ? '✓' : '✓'}
+                          </Button>
+                          {attendanceStatus && (
+                            <Button
+                              onClick={() => updateAttendance(booking.id, null)}
+                              disabled={isUpdating}
+                              variant="outline"
+                              size="sm"
+                            >
+                              Reset
+                            </Button>
                           )}
-                          {attendanceStatus === 'no_show' && (
-                            <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-sm font-semibold">
-                              ✗ No Show
-                            </span>
-                          )}
-                          {!attendanceStatus && (
-                            <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-sm font-semibold">
-                              ⏳ Pending
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex flex-col gap-2">
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => updateAttendance(booking.id, 'attended')}
-                                disabled={isUpdating || attendanceStatus === 'attended'}
-                                className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
-                              >
-                                {isUpdating && attendanceStatus !== 'attended' ? '...' : 'Mark Attended'}
-                              </button>
-                              <button
-                                onClick={() => updateAttendance(booking.id, 'no_show')}
-                                disabled={isUpdating || attendanceStatus === 'no_show'}
-                                className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
-                              >
-                                {isUpdating && attendanceStatus !== 'no_show' ? '...' : 'Mark No Show'}
-                              </button>
-                              {attendanceStatus && (
-                                <button
-                                  onClick={() => updateAttendance(booking.id, null)}
-                                  disabled={isUpdating}
-                                  className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
-                                >
-                                  {isUpdating ? '...' : 'Reset'}
-                                </button>
-                              )}
-                            </div>
-                            {canManageHost && (
-                              <button
-                                onClick={() => setHost(booking.user_id)}
-                                disabled={updating === 'host' || event.host_user_id === booking.user_id}
-                                className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
-                              >
-                                {updating === 'host' && event.host_user_id === booking.user_id 
-                                  ? '...' 
-                                  : event.host_user_id === booking.user_id 
-                                    ? '✓ Current Host' 
-                                    : 'Set as Host'}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Stats - Moved to bottom */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mt-6">
+          <Card>
+            <CardContent className="p-3 md:p-6">
+              <div className="text-xs md:text-sm font-medium text-muted-foreground mb-0.5 md:mb-1">Total Registered</div>
+              <div className="text-xl md:text-2xl font-bold text-blue-700">{stats.total}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 md:p-6">
+              <div className="text-xs md:text-sm font-medium text-muted-foreground mb-0.5 md:mb-1">Attended</div>
+              <div className="text-xl md:text-2xl font-bold text-green-700">{stats.attended}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 md:p-6">
+              <div className="text-xs md:text-sm font-medium text-muted-foreground mb-0.5 md:mb-1">No Show</div>
+              <div className="text-xl md:text-2xl font-bold text-red-700">{stats.noShow}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 md:p-6">
+              <div className="text-xs md:text-sm font-medium text-muted-foreground mb-0.5 md:mb-1">Pending</div>
+              <div className="text-xl md:text-2xl font-bold text-yellow-700">{stats.pending}</div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
