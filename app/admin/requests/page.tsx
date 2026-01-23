@@ -136,9 +136,9 @@ export default function AdminRequestsPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-gray-900">Role Change Requests</h2>
-        <div className="flex gap-2">
+      <div className="mb-6">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">Role Change Requests</h2>
+        <div className="flex flex-wrap gap-2">
           <Button
             variant={filter === 'all' ? 'default' : 'outline'}
             size="sm"

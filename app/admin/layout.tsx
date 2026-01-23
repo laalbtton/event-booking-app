@@ -113,7 +113,7 @@ export default function AdminLayout({
                   : 'text-gray-700 hover:text-gray-900'
               }`}
             >
-              Role Requests
+              Requests
             </Link>
           </nav>
         </div>
