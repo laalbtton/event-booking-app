@@ -20,6 +20,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { QrCode, Link as LinkIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+type Venue = {
+  id: string
+  name: string
+  address: string
+}
+
 export default function EventManagementPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,6 +35,7 @@ export default function EventManagementPage() {
   const [submitting, setSubmitting] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
+  const [venues, setVenues] = useState<Venue[]>([])
   const router = useRouter()
   
   const [formData, setFormData] = useState({
@@ -36,7 +43,7 @@ export default function EventManagementPage() {
     description: '',
     theme: '',
     date: '',
-    location: '',
+    venue_id: '',
     credits_required: '5',
     max_attendees: '',
     cancellation_hours: '4',
@@ -46,6 +53,7 @@ export default function EventManagementPage() {
 
   useEffect(() => {
     checkAccess()
+    loadVenues()
   }, [])
 
   async function checkAccess() {
@@ -86,7 +94,7 @@ export default function EventManagementPage() {
     // Event creators can only see their own events, admins see all
     let query = supabase
       .from('events')
-      .select('*')
+      .select('*, venue_id')
       .order('date', { ascending: true })
 
     if (userRole === 'event_creator') {
@@ -107,7 +115,7 @@ export default function EventManagementPage() {
       description: '',
       theme: '',
       date: '',
-      location: '',
+      venue_id: '',
       credits_required: '5',
       max_attendees: '',
       cancellation_hours: '4',
@@ -124,12 +132,28 @@ export default function EventManagementPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
+      // Get venue address if venue is selected
+      let location = ''
+      if (formData.venue_id) {
+        const selectedVenue = venues.find(v => v.id === formData.venue_id)
+        if (selectedVenue) {
+          location = `${selectedVenue.name}, ${selectedVenue.address}`
+        }
+      }
+
+      if (!formData.venue_id) {
+        alert('Please select a venue')
+        setSubmitting(false)
+        return
+      }
+
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
         date: new Date(formData.date).toISOString(),
-        location: formData.location,
+        venue_id: formData.venue_id || null,
+        location: location,
         credits_required: parseInt(formData.credits_required),
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
         cancellation_hours: parseInt(formData.cancellation_hours),
@@ -164,7 +188,7 @@ export default function EventManagementPage() {
     }
   }
 
-  function handleEditEvent(event: Event) {
+  async function handleEditEvent(event: Event) {
     setEditingEvent(event)
     const eventDate = new Date(event.date)
     const localDateTime = new Date(eventDate.getTime() - eventDate.getTimezoneOffset() * 60000)
@@ -177,12 +201,18 @@ export default function EventManagementPage() {
           .slice(0, 16)
       : ''
 
+    // Load venue_id if it exists
+    let venueId = ''
+    if ((event as any).venue_id) {
+      venueId = (event as any).venue_id
+    }
+
     setFormData({
       title: event.title,
       description: event.description || '',
       theme: event.theme || '',
       date: localDateTime,
-      location: event.location || '',
+      venue_id: venueId,
       credits_required: event.credits_required.toString(),
       max_attendees: event.max_attendees ? event.max_attendees.toString() : '',
       cancellation_hours: event.cancellation_hours.toString(),
@@ -523,17 +553,21 @@ export default function EventManagementPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Location *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    placeholder="e.g., Online, Downtown Office, etc."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  <Label htmlFor="create-venue">Venue *</Label>
+                  <select
+                    id="create-venue"
+                    value={formData.venue_id}
+                    onChange={(e) => setFormData({ ...formData, venue_id: e.target.value })}
+                    className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                     required
-                  />
+                  >
+                    <option value="">Select a venue</option>
+                    {venues.map((venue) => (
+                      <option key={venue.id} value={venue.id}>
+                        {venue.name} - {venue.address}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
@@ -699,17 +733,21 @@ export default function EventManagementPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Location *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    placeholder="e.g., Online, Downtown Office, etc."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  <Label htmlFor="create-venue">Venue *</Label>
+                  <select
+                    id="create-venue"
+                    value={formData.venue_id}
+                    onChange={(e) => setFormData({ ...formData, venue_id: e.target.value })}
+                    className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                     required
-                  />
+                  >
+                    <option value="">Select a venue</option>
+                    {venues.map((venue) => (
+                      <option key={venue.id} value={venue.id}>
+                        {venue.name} - {venue.address}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">

@@ -15,6 +15,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { QrCode, Link as LinkIcon, Edit, Trash2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+type Venue = {
+  id: string
+  name: string
+  address: string
+}
+
 export default function AdminEventsPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
@@ -22,13 +28,14 @@ export default function AdminEventsPage() {
   const [showEditForm, setShowEditForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [venues, setVenues] = useState<Venue[]>([])
   
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     theme: '',
     date: '',
-    location: '',
+    venue_id: '',
     credits_required: '5',
     max_attendees: '',
     cancellation_hours: '4',
@@ -38,13 +45,28 @@ export default function AdminEventsPage() {
 
   useEffect(() => {
     loadEvents()
+    loadVenues()
   }, [])
+
+  async function loadVenues() {
+    try {
+      const { data: venuesData, error: venuesError } = await supabase
+        .from('venues')
+        .select('id, name, address')
+        .order('name', { ascending: true })
+
+      if (venuesError) throw venuesError
+      setVenues(venuesData || [])
+    } catch (error: any) {
+      console.error('Error loading venues:', error)
+    }
+  }
 
   async function loadEvents() {
     setLoading(true)
     const { data, error } = await supabase
       .from('events')
-      .select('*')
+      .select('*, venue_id')
       .order('date', { ascending: true })
 
     if (!error && data) {
@@ -58,12 +80,28 @@ export default function AdminEventsPage() {
     setSubmitting(true)
 
     try {
+      // Get venue address if venue is selected
+      let location = ''
+      if (formData.venue_id) {
+        const selectedVenue = venues.find(v => v.id === formData.venue_id)
+        if (selectedVenue) {
+          location = `${selectedVenue.name}, ${selectedVenue.address}`
+        }
+      }
+
+      if (!formData.venue_id) {
+        alert('Please select a venue')
+        setSubmitting(false)
+        return
+      }
+
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
         date: new Date(formData.date).toISOString(),
-        location: formData.location,
+        venue_id: formData.venue_id || null,
+        location: location,
         credits_required: parseInt(formData.credits_required),
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
         cancellation_hours: parseInt(formData.cancellation_hours),
@@ -111,12 +149,18 @@ export default function AdminEventsPage() {
           .slice(0, 16)
       : ''
 
+    // Load venue_id if it exists
+    let venueId = ''
+    if ((event as any).venue_id) {
+      venueId = (event as any).venue_id
+    }
+
     setFormData({
       title: event.title,
       description: event.description || '',
       theme: event.theme || '',
       date: localDateTime,
-      location: event.location || '',
+      venue_id: venueId,
       credits_required: event.credits_required.toString(),
       max_attendees: event.max_attendees ? event.max_attendees.toString() : '',
       cancellation_hours: event.cancellation_hours.toString(),
@@ -179,7 +223,7 @@ export default function AdminEventsPage() {
       description: '',
       theme: '',
       date: '',
-      location: '',
+      venue_id: '',
       credits_required: '5',
       max_attendees: '',
       cancellation_hours: '4',
@@ -377,15 +421,21 @@ export default function AdminEventsPage() {
             </div>
 
             <div>
-              <Label htmlFor="edit-location">Location *</Label>
-              <Input
-                id="edit-location"
-                type="text"
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                placeholder="e.g., Online, Downtown Office, etc."
+              <Label htmlFor="edit-venue">Venue *</Label>
+              <select
+                id="edit-venue"
+                value={formData.venue_id}
+                onChange={(e) => setFormData({ ...formData, venue_id: e.target.value })}
+                className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                 required
-              />
+              >
+                <option value="">Select a venue</option>
+                {venues.map((venue) => (
+                  <option key={venue.id} value={venue.id}>
+                    {venue.name} - {venue.address}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
@@ -543,15 +593,21 @@ export default function AdminEventsPage() {
             </div>
 
             <div>
-              <Label htmlFor="create-location">Location *</Label>
-              <Input
-                id="create-location"
-                type="text"
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                placeholder="e.g., Online, Downtown Office, etc."
+              <Label htmlFor="create-venue">Venue *</Label>
+              <select
+                id="create-venue"
+                value={formData.venue_id}
+                onChange={(e) => setFormData({ ...formData, venue_id: e.target.value })}
+                className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                 required
-              />
+              >
+                <option value="">Select a venue</option>
+                {venues.map((venue) => (
+                  <option key={venue.id} value={venue.id}>
+                    {venue.name} - {venue.address}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-3 gap-4">

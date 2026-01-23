@@ -86,14 +86,14 @@ export default function AdminLayout({
               Users
             </Link>
             <Link
-              href="/admin/events"
+              href="/admin/venues"
               className={`font-medium transition-colors ${
-                pathname === '/admin/events'
+                pathname === '/admin/venues'
                   ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
                   : 'text-gray-700 hover:text-gray-900'
               }`}
             >
-              Events
+              Venues
             </Link>
             <Link
               href="/admin/bookings"
