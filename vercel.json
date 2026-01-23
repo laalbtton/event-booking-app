@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/check-registration-opens",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 8 * * *"
     }
   ]
 }

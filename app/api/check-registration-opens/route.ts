@@ -8,15 +8,15 @@ export async function GET(request: NextRequest) {
   try {
     const now = new Date()
     
-    // Find events where registration just opened (within the last 5 minutes)
-    // This allows for some delay in cron execution
-    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000)
+    // Find events where registration opened since the last check (within the last 24 hours)
+    // Since we run once per day, we check for events that opened in the past 24 hours
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
     
     const { data: events, error: eventsError } = await supabase
       .from('events')
       .select('id, title, date, location, registration_opens_at')
       .not('registration_opens_at', 'is', null)
-      .gte('registration_opens_at', fiveMinutesAgo.toISOString())
+      .gte('registration_opens_at', oneDayAgo.toISOString())
       .lte('registration_opens_at', now.toISOString())
 
     if (eventsError) {
@@ -97,10 +97,6 @@ export async function GET(request: NextRequest) {
           })
 
           if (!emailSent) {
-            console.error(`Failed to send email to ${profile.email} for event ${event.id}`)
-          }
-
-          if (!emailResponse.ok) {
             console.error(`Failed to send email to ${profile.email} for event ${event.id}`)
           }
 
