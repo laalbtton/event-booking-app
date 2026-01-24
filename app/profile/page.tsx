@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type EventBooking = {
@@ -84,6 +85,11 @@ export default function ProfilePage() {
     const publicUrl = `${window.location.origin}/profile/${profile.id}`
     navigator.clipboard.writeText(publicUrl)
     alert('Public profile link copied to clipboard!')
+  }
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    router.push('/')
   }
 
   async function loadProfile(userId: string) {
@@ -252,7 +258,7 @@ export default function ProfilePage() {
                     </h2>
                     <p className="text-sm text-muted-foreground truncate">{profile.email}</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
                     <Button
                       onClick={copyPublicProfileLink}
                       variant="ghost"
@@ -274,6 +280,15 @@ export default function ProfilePage() {
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
+                    </Button>
+                    <Button
+                      onClick={handleSignOut}
+                      variant="outline"
+                      size="sm"
+                      className="h-9"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign out
                     </Button>
                   </div>
                 </div>

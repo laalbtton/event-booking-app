@@ -7,6 +7,11 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { MessageSquare, MoreHorizontal, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function NavigationTabs() {
@@ -15,10 +20,26 @@ export default function NavigationTabs() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState('')
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [feedbackForm, setFeedbackForm] = useState({
+    email: '',
+    rating: '',
+    message: '',
+  })
 
   useEffect(() => {
     checkUserRole()
   }, [])
+
+  useEffect(() => {
+    if (feedbackOpen && userEmail && !feedbackForm.email) {
+      setFeedbackForm((prev) => ({ ...prev, email: userEmail }))
+    }
+  }, [feedbackOpen, userEmail, feedbackForm.email])
 
   useEffect(() => {
     let channel: any = null
@@ -152,6 +173,8 @@ export default function NavigationTabs() {
   async function checkUserRole() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
+    setUserId(user.id)
+    setUserEmail(user.email || '')
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -180,16 +203,58 @@ export default function NavigationTabs() {
     router.push('/')
   }
 
+  async function handleSubmitFeedback(e: React.FormEvent) {
+    e.preventDefault()
+    if (!feedbackForm.message.trim()) {
+      alert('Please enter your feedback.')
+      return
+    }
+
+    setFeedbackSubmitting(true)
+    try {
+      const payload = {
+        email: feedbackForm.email || userEmail || '',
+        rating: feedbackForm.rating ? Number(feedbackForm.rating) : null,
+        message: feedbackForm.message.trim(),
+        path: pathname || '',
+        userId,
+        userRole,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+      }
+
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to send feedback')
+      }
+
+      alert('Thanks for the feedback!')
+      setFeedbackForm((prev) => ({ ...prev, rating: '', message: '' }))
+      setFeedbackOpen(false)
+    } catch (error) {
+      console.error('Error sending feedback:', error)
+      alert('Sorry, we could not send your feedback. Please try again.')
+    } finally {
+      setFeedbackSubmitting(false)
+    }
+  }
+
   const isActive = (path: string) => pathname === path || pathname?.startsWith(path + '/')
+  const navItemClass =
+    'flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors'
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 z-50 safe-area-inset-bottom">
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
         <nav className="flex items-center justify-around py-2 sm:justify-between">
-          <div className="flex items-center gap-1 sm:gap-2 flex-1 sm:flex-initial justify-around sm:justify-start">
+          <div className="flex items-center gap-1 sm:gap-2 flex-1 justify-around">
             <Link
               href="/dashboard"
-              className={`flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors ${
+              className={`${navItemClass} ${
                 isActive('/dashboard')
                   ? 'bg-blue-50 text-blue-600'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -203,7 +268,7 @@ export default function NavigationTabs() {
 
             <Link
               href="/profile"
-              className={`flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors ${
+              className={`${navItemClass} ${
                 isActive('/profile') && !pathname?.startsWith('/profile/')
                   ? 'bg-blue-50 text-blue-600'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -218,7 +283,7 @@ export default function NavigationTabs() {
             {(userRole === 'event_creator' || userRole === 'admin') && (
               <Link
                 href="/events/manage"
-                className={`flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors ${
+                className={`${navItemClass} ${
                   isActive('/events/manage')
                     ? 'bg-green-50 text-green-600'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -235,7 +300,7 @@ export default function NavigationTabs() {
             {isAdmin && (
               <Link
                 href="/admin"
-                className={`flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors ${
+                className={`${navItemClass} ${
                   isActive('/admin')
                     ? 'bg-purple-50 text-purple-600'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -248,12 +313,18 @@ export default function NavigationTabs() {
                 <span className="text-xs font-medium text-center leading-tight">Admin</span>
               </Link>
             )}
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-2 flex-1 sm:flex-initial justify-around sm:justify-end">
+            <Button
+              onClick={() => setFeedbackOpen(true)}
+              variant="ghost"
+              size="sm"
+              className={`${navItemClass} h-auto`}
+            >
+              <MessageSquare className="w-5 h-5" />
+              <span className="text-xs font-medium">Feedback</span>
+            </Button>
             <Link
               href="/notifications"
-              className={`relative flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors ${
+              className={`relative ${navItemClass} ${
                 isActive('/notifications')
                   ? 'bg-blue-50 text-blue-600'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -275,19 +346,103 @@ export default function NavigationTabs() {
             </Link>
 
             <Button
-              onClick={handleSignOut}
+              onClick={() => setMoreOpen(true)}
               variant="ghost"
               size="sm"
-              className="flex flex-col items-center gap-1 h-auto py-1.5 sm:py-2"
+              className={`${navItemClass} h-auto`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              <span className="text-xs font-medium">Logout</span>
+              <MoreHorizontal className="w-5 h-5" />
+              <span className="text-xs font-medium">More</span>
             </Button>
           </div>
         </nav>
       </div>
+
+      <Dialog open={feedbackOpen} onOpenChange={setFeedbackOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Feedback</DialogTitle>
+            <DialogDescription>
+              Help us improve during alpha testing.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitFeedback} className="space-y-4">
+            <div>
+              <Label htmlFor="feedback-email">Your Email (optional)</Label>
+              <Input
+                id="feedback-email"
+                type="email"
+                value={feedbackForm.email}
+                onChange={(e) => setFeedbackForm((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="you@example.com"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="feedback-rating">Rating (optional)</Label>
+              <select
+                id="feedback-rating"
+                value={feedbackForm.rating}
+                onChange={(e) => setFeedbackForm((prev) => ({ ...prev, rating: e.target.value }))}
+                className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Select rating</option>
+                <option value="5">5 - Excellent</option>
+                <option value="4">4 - Good</option>
+                <option value="3">3 - Okay</option>
+                <option value="2">2 - Needs work</option>
+                <option value="1">1 - Poor</option>
+              </select>
+            </div>
+
+            <div>
+              <Label htmlFor="feedback-message">Feedback *</Label>
+              <Textarea
+                id="feedback-message"
+                value={feedbackForm.message}
+                onChange={(e) => setFeedbackForm((prev) => ({ ...prev, message: e.target.value }))}
+                placeholder="What worked well? What needs improvement?"
+                rows={4}
+                required
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <Button type="submit" disabled={feedbackSubmitting} className="flex-1">
+                {feedbackSubmitting ? 'Sending...' : 'Send Feedback'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFeedbackOpen(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>More</DialogTitle>
+            <DialogDescription>Quick actions</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Button
+              variant="destructive"
+              className="w-full justify-start"
+              onClick={handleSignOut}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign out
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

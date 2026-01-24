@@ -109,6 +109,20 @@ export default function EventManagementPage() {
     setLoading(false)
   }
 
+  async function loadVenues() {
+    try {
+      const { data: venuesData, error: venuesError } = await supabase
+        .from('venues')
+        .select('id, name, address')
+        .order('name', { ascending: true })
+
+      if (venuesError) throw venuesError
+      setVenues(venuesData || [])
+    } catch (error: any) {
+      console.error('Error loading venues:', error)
+    }
+  }
+
   function resetFormData() {
     setFormData({
       title: '',
