@@ -74,9 +74,6 @@ export default function SignupPage() {
         provider: 'google',
         options: {
           redirectTo: redirectUrl,
-          queryParams: {
-            redirect_to: redirectUrl,
-          },
         },
       })
 

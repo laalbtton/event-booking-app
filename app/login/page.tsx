@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
@@ -17,6 +17,55 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    async function handleHashAuth() {
+      if (typeof window === 'undefined') return
+
+      const hashParams = new URLSearchParams(window.location.hash.replace('#', ''))
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token')
+
+      if (!accessToken || !refreshToken) return
+
+      setLoading(true)
+      setError('')
+      try {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+
+        if (sessionError) {
+          throw sessionError
+        }
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        if (userError || !user) {
+          throw userError || new Error('No user returned after OAuth')
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+
+        if (profile?.role === 'admin') {
+          router.replace('/admin')
+        } else {
+          router.replace('/dashboard')
+        }
+      } catch (authError: any) {
+        console.error('OAuth hash sign-in error:', authError)
+        setError('Google sign-in failed. Please try again.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    handleHashAuth()
+  }, [router])
 
   // Email/password login (existing)
   async function handleSubmit(e: React.FormEvent) {
@@ -71,9 +120,6 @@ export default function LoginPage() {
         provider: 'google',
         options: {
           redirectTo: redirectUrl,
-          queryParams: {
-            redirect_to: redirectUrl,
-          },
         },
       })
 
