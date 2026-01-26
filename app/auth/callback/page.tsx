@@ -52,11 +52,20 @@ export default function AuthCallbackPage() {
           return
         }
 
+        const avatarFromAuth = user.user_metadata?.avatar_url || user.user_metadata?.picture || null
+
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, avatar_url')
           .eq('id', user.id)
           .single()
+
+        if (!profileError && profile && !profile.avatar_url && avatarFromAuth) {
+          await supabase
+            .from('profiles')
+            .update({ avatar_url: avatarFromAuth, updated_at: new Date().toISOString() })
+            .eq('id', user.id)
+        }
 
         if (!profileError && profile?.role === 'admin') {
           router.replace('/admin')

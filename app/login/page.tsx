@@ -45,11 +45,20 @@ export default function LoginPage() {
           throw userError || new Error('No user returned after OAuth')
         }
 
+        const avatarFromAuth = user.user_metadata?.avatar_url || user.user_metadata?.picture || null
+
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, avatar_url')
           .eq('id', user.id)
           .single()
+
+        if (profile && !profile.avatar_url && avatarFromAuth) {
+          await supabase
+            .from('profiles')
+            .update({ avatar_url: avatarFromAuth, updated_at: new Date().toISOString() })
+            .eq('id', user.id)
+        }
 
         if (profile?.role === 'admin') {
           router.replace('/admin')

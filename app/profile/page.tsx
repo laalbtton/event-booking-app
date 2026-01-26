@@ -40,6 +40,7 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [authAvatarUrl, setAuthAvatarUrl] = useState<string | null>(null)
   const router = useRouter()
 
   const [formData, setFormData] = useState({
@@ -65,6 +66,7 @@ export default function ProfilePage() {
 
     // Get avatar URL from user metadata (for Google OAuth users)
     const avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture || null
+    setAuthAvatarUrl(avatar)
     setAvatarUrl(avatar)
 
     loadProfile(user.id)
@@ -104,6 +106,18 @@ export default function ProfilePage() {
 
       if (profileError) throw profileError
       setProfile(profileData)
+
+      // Prefer stored avatar_url, fallback to auth metadata
+      const resolvedAvatar = profileData.avatar_url || authAvatarUrl
+      setAvatarUrl(resolvedAvatar || null)
+
+      // Persist Google avatar to profiles if missing
+      if (!profileData.avatar_url && authAvatarUrl) {
+        await supabase
+          .from('profiles')
+          .update({ avatar_url: authAvatarUrl, updated_at: new Date().toISOString() })
+          .eq('id', userId)
+      }
       
       // Set form data
       setFormData({
