@@ -318,6 +318,7 @@ export default function Dashboard() {
       const { data: eventsData, error: eventsError } = await supabase
         .from('events')
         .select('*')
+        .neq('status', 'cancelled')
         .gte('date', new Date().toISOString())
         .order('date', { ascending: true })
 
@@ -342,7 +343,7 @@ export default function Dashboard() {
         }
       }
 
-      // Load user's bookings (confirmed AND waitlist)
+      // Load user's bookings (confirmed, waitlist, cancelled)
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select(`
@@ -350,7 +351,7 @@ export default function Dashboard() {
           events (*)
         `)
         .eq('user_id', userId)
-        .in('status', ['confirmed', 'waitlist'])
+        .in('status', ['confirmed', 'waitlist', 'cancelled'])
 
       if (bookingsError) throw bookingsError
       setMyBookings(bookingsData || [])
@@ -784,12 +785,12 @@ export default function Dashboard() {
         )}
 
         {/* My Bookings Section - Upcoming Only */}
-        {myBookings.filter((booking) => new Date(booking.events.date) >= currentTime).length > 0 && (
+        {myBookings.filter((booking) => new Date(booking.events.date) >= currentTime && booking.status !== 'cancelled' && booking.events.status !== 'cancelled').length > 0 && (
           <div className="mb-8 sm:mb-10">
             <h2 className="text-xl sm:text-2xl font-bold mb-5 sm:mb-6 tracking-tight">My Bookings</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {myBookings
-                .filter((booking) => new Date(booking.events.date) >= currentTime)
+                .filter((booking) => new Date(booking.events.date) >= currentTime && booking.status !== 'cancelled' && booking.events.status !== 'cancelled')
                 .map((booking) => {
                 const eventDate = new Date(booking.events.date)
                 const now = currentTime
@@ -1093,82 +1094,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Past Bookings Section */}
-        {myBookings.filter((booking) => new Date(booking.events.date) < currentTime).length > 0 && (
-          <div className="mt-8 mb-8">
-            <h2 className="text-2xl font-bold mb-4 text-gray-900">Past Bookings</h2>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {myBookings
-                .filter((booking) => new Date(booking.events.date) < currentTime)
-                .sort((a, b) => new Date(b.events.date).getTime() - new Date(a.events.date).getTime())
-                .map((booking) => {
-                  const eventDate = new Date(booking.events.date)
-                  const isWaitlist = booking.status === 'waitlist'
-                  const borderColor = isWaitlist ? 'border-yellow-500' : 'border-gray-400'
-
-                  return (
-                    <Card key={booking.id} className={cn("opacity-75 border-l-4", isWaitlist ? "border-l-yellow-500" : "border-l-gray-400")}>
-                      <CardHeader className="pb-3">
-                        <div className="flex justify-between items-start">
-                          <CardTitle className="text-base md:text-lg flex-1">
-                            <Link 
-                              href={`/events/${booking.event_id}`}
-                              className="text-primary hover:underline"
-                            >
-                              {booking.events.title}
-                            </Link>
-                          </CardTitle>
-                          {isWaitlist ? (
-                            <Badge variant="outline" className="text-yellow-600 border-yellow-600 ml-2">
-                              ⏳ #{booking.waitlist_position}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-green-600 border-green-600 ml-2">
-                              ✓
-                            </Badge>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <p className="text-sm text-muted-foreground line-clamp-2">{booking.events.description}</p>
-                        
-                        <div className="text-xs text-muted-foreground">
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <div className="flex items-center gap-1">
-                              <span>📅</span>
-                              <span>{formatDateTime(booking.events.date)}</span>
-                            </div>
-                            {booking.events.max_attendees && (
-                              <div className="whitespace-nowrap">👥 Max {booking.events.max_attendees}</div>
-                            )}
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1">
-                              <span>📍</span>
-                              <span>{booking.events.location}</span>
-                            </div>
-                            <div className="whitespace-nowrap">
-                              {booking.events.theme ? `🎨 ${booking.events.theme} • ` : ''}🔞 {booking.events.rating || '18+'}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <span>💳</span>
-                            <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
-                          </div>
-                          <Badge variant="outline" className="text-xs">
-                            ✓ Completed
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
