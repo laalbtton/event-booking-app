@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Profile, Event } from '@/lib/supabase'
-import { formatDateTime, formatDate } from '@/lib/dateUtils'
+import { formatDateTime, formatDate, formatTime } from '@/lib/dateUtils'
 import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -30,6 +30,7 @@ type EventBooking = {
   status: string
   attendance_status: string | null
   waitlist_position: number | null
+  event_status?: string | null
 }
 
 export default function ProfilePage() {
@@ -41,6 +42,11 @@ export default function ProfilePage() {
   const [submitting, setSubmitting] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [authAvatarUrl, setAuthAvatarUrl] = useState<string | null>(null)
+  const [swipingId, setSwipingId] = useState<string | null>(null)
+  const [swipeOffset, setSwipeOffset] = useState<Record<string, number>>({})
+  const [swipeDirection, setSwipeDirection] = useState<Record<string, 'right' | 'left'>>({})
+  const touchStartX = useRef<Record<string, number>>({})
+  const touchStartY = useRef<Record<string, number>>({})
   const router = useRouter()
 
   const [formData, setFormData] = useState({
@@ -144,7 +150,8 @@ export default function ProfilePage() {
             id,
             title,
             date,
-            location
+            location,
+            status
           )
         `)
         .eq('user_id', userId)
@@ -163,7 +170,8 @@ export default function ProfilePage() {
         credits_used: b.credits_used,
         status: b.status,
         attendance_status: b.attendance_status,
-        waitlist_position: b.waitlist_position
+        waitlist_position: b.waitlist_position,
+        event_status: b.events.status
       }))
       setEventBookings(events)
 
@@ -209,6 +217,72 @@ export default function ProfilePage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  function handleTouchStart(e: React.TouchEvent, rowId: string) {
+    touchStartX.current[rowId] = e.touches[0].clientX
+    touchStartY.current[rowId] = e.touches[0].clientY
+    setSwipingId(rowId)
+  }
+
+  function handleTouchMove(e: React.TouchEvent, rowId: string) {
+    if (swipingId !== rowId) return
+
+    const currentX = e.touches[0].clientX
+    const currentY = e.touches[0].clientY
+    const startX = touchStartX.current[rowId]
+    const startY = touchStartY.current[rowId]
+
+    const deltaX = currentX - startX
+    const deltaY = Math.abs(currentY - startY)
+
+    if (deltaY < 50) {
+      if (deltaX > 0) {
+        const offset = Math.min(deltaX, 100)
+        setSwipeOffset(prev => ({ ...prev, [rowId]: offset }))
+        setSwipeDirection(prev => ({ ...prev, [rowId]: 'right' }))
+      } else if (deltaX < 0) {
+        const offset = Math.max(deltaX, -40)
+        setSwipeOffset(prev => ({ ...prev, [rowId]: offset }))
+        setSwipeDirection(prev => ({ ...prev, [rowId]: 'left' }))
+      }
+    }
+  }
+
+  function handleTouchEnd(rowId: string) {
+    const offset = swipeOffset[rowId] || 0
+    const direction = swipeDirection[rowId]
+
+    if (direction === 'right' && offset > 50) {
+      setTimeout(() => {
+        setSwipeOffset(prev => {
+          const next = { ...prev }
+          delete next[rowId]
+          return next
+        })
+        setSwipeDirection(prev => {
+          const next = { ...prev }
+          delete next[rowId]
+          return next
+        })
+        setSwipingId(null)
+      }, 2000)
+    } else {
+      setSwipeOffset(prev => {
+        const next = { ...prev }
+        delete next[rowId]
+        return next
+      })
+      setSwipeDirection(prev => {
+        const next = { ...prev }
+        delete next[rowId]
+        return next
+      })
+      setSwipingId(null)
+    }
+
+    touchStartX.current[rowId] = 0
+    touchStartY.current[rowId] = 0
   }
 
   if (loading) {
@@ -487,87 +561,121 @@ export default function ProfilePage() {
         {eventBookings.length > 0 && (
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Event Bookings</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Event Activity</CardTitle>
             </CardHeader>
             <CardContent>
-            <div className="space-y-4">
-              {eventBookings.map((booking) => {
-                // Determine status display
-                let statusDisplay = ''
-                let statusColor = ''
-                
-                if (booking.attendance_status === 'attended') {
-                  statusDisplay = '✓ Attended'
-                  statusColor = 'bg-green-100 text-green-700'
-                } else if (booking.attendance_status === 'no_show') {
-                  statusDisplay = '✗ No Show'
-                  statusColor = 'bg-red-100 text-red-700'
-                } else if (booking.status === 'cancelled') {
-                  statusDisplay = 'Cancelled'
-                  statusColor = 'bg-gray-100 text-gray-700'
-                } else if (booking.status === 'waitlist') {
-                  statusDisplay = `⏳ Waitlist${booking.waitlist_position ? ` #${booking.waitlist_position}` : ''}`
-                  statusColor = 'bg-yellow-100 text-yellow-700'
-                } else if (booking.status === 'confirmed') {
-                  statusDisplay = 'Confirmed'
-                  statusColor = 'bg-blue-100 text-blue-700'
-                } else {
-                  statusDisplay = booking.status
-                  statusColor = 'bg-gray-100 text-gray-700'
-                }
+              {(() => {
+                const rows = eventBookings.map((booking) => {
+                  const isEventCancelled = booking.status === 'cancelled' && booking.event_status === 'cancelled'
+                  const activity = isEventCancelled
+                    ? 'Event cancelled'
+                    : booking.status === 'cancelled'
+                      ? 'Cancelled'
+                      : 'Booked'
+                  const activityDate =
+                    booking.booked_at
+                  const balanceDelta =
+                    activity === 'Booked' ? -booking.credits_used : booking.credits_used
+                  const displayAmount =
+                    activity === 'Booked' ? -booking.credits_used : booking.credits_used
 
-                // Determine which label to show based on action
-                // Note: We use booked_at for all dates since bookings table doesn't have updated_at
-                let actionLabel = 'Booked'
-                if (booking.status === 'cancelled') {
-                  actionLabel = 'Cancelled'
-                } else if (booking.attendance_status === 'attended') {
-                  actionLabel = 'Attended'
-                } else if (booking.attendance_status === 'no_show') {
-                  actionLabel = 'Marked as No Show'
-                }
+                  return {
+                    ...booking,
+                    activity,
+                    activityDate,
+                    balanceDelta,
+                    displayAmount,
+                  }
+                })
+
+                rows.sort((a, b) => new Date(b.activityDate).getTime() - new Date(a.activityDate).getTime())
+
+                let runningBalance = profile?.credits ?? 0
+                const rowsWithBalance = rows.map((row) => {
+                  const balance = runningBalance
+                  runningBalance = balance - row.balanceDelta
+                  return { ...row, balance }
+                })
 
                 return (
-                  <Link
-                    key={booking.id}
-                    href={`/events/${booking.event_id}`}
-                    className="group block"
-                  >
-                    <Card className="hover:border-primary hover:shadow-md transition-all duration-200 cursor-pointer">
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start gap-4">
-                          <div className="flex-1 min-w-0 space-y-2">
-                            <h4 className="font-bold text-base sm:text-lg group-hover:text-primary transition-colors truncate">{booking.title}</h4>
-                            <div className="space-y-1 text-sm text-muted-foreground">
-                              <p>📅 {formatDateTime(booking.date)}</p>
-                              <p>📍 {booking.location}</p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 pt-1">
-                              <Badge variant="outline" className={cn("text-xs", statusColor)}>
-                                {statusDisplay}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                💳 {booking.credits_used} credit{booking.credits_used !== 1 ? 's' : ''} used
-                              </span>
-                            </div>
-                            <p className="text-xs text-muted-foreground pt-1">
-                              {actionLabel}: {formatDate(booking.booked_at)}
-                            </p>
-                          </div>
-                          <div className="flex-shrink-0">
-                            <div className="w-8 h-8 rounded-full bg-muted group-hover:bg-primary flex items-center justify-center transition-colors">
-                              <svg className="w-5 h-5 text-muted-foreground group-hover:text-primary-foreground transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-border text-sm">
+                      <tbody className="divide-y divide-border">
+                        {(() => {
+                          const formatActivityDate = (value: string) =>
+                            new Date(value).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })
+
+                          const grouped = rowsWithBalance.reduce((acc: Record<string, typeof rowsWithBalance>, row) => {
+                            const key = formatActivityDate(row.activityDate)
+                            if (!acc[key]) acc[key] = []
+                            acc[key].push(row)
+                            return acc
+                          }, {})
+
+                          const orderedDates: string[] = []
+                          rowsWithBalance.forEach((row) => {
+                            const key = formatActivityDate(row.activityDate)
+                            if (!orderedDates.includes(key)) {
+                              orderedDates.push(key)
+                            }
+                          })
+
+                          return orderedDates.flatMap((groupDate) => [
+                            (
+                              <tr key={`${groupDate}-header`}>
+                                <td colSpan={3} className="px-4 py-2 text-xs font-semibold text-muted-foreground bg-muted/30">
+                                  {groupDate}
+                                </td>
+                              </tr>
+                            ),
+                            ...(grouped[groupDate] || []).map((row) => (
+                              <tr
+                                key={row.id}
+                                className="hover:bg-muted/30"
+                                style={{ transform: `translateX(${swipeOffset[row.id] || 0}px)` }}
+                                onTouchStart={(e) => handleTouchStart(e, row.id)}
+                                onTouchMove={(e) => handleTouchMove(e, row.id)}
+                                onTouchEnd={() => handleTouchEnd(row.id)}
+                              >
+                                <td className="px-4 py-3">
+                                  <div className="font-medium text-foreground truncate max-w-[220px] sm:max-w-[320px]">
+                                    <Link href={`/events/${row.event_id}`} className="hover:underline">
+                                      {row.title}
+                                    </Link>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">{row.activity}</div>
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                                  {new Date(row.date).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}
+                                </td>
+                                <td className="px-4 py-3 text-right text-muted-foreground">
+                                  <div className="text-sm">
+                                    {row.displayAmount > 0 ? '+' : ''}{row.displayAmount}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">Bal {row.balance}</div>
+                                  {swipeDirection[row.id] === 'right' && (swipeOffset[row.id] || 0) > 50 && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {formatTime(row.activityDate)}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          ])
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
                 )
-              })}
-              </div>
+              })()}
             </CardContent>
           </Card>
         )}
