@@ -256,7 +256,7 @@ export default function EventManagementPage() {
         description: formData.description,
         theme: formData.theme || null,
         date: new Date(formData.date).toISOString(),
-        location: formData.location,
+        location: location,
         credits_required: parseInt(formData.credits_required),
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
         cancellation_hours: parseInt(formData.cancellation_hours),
