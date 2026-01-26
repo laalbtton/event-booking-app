@@ -19,6 +19,8 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { QrCode, Link as LinkIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { createNotification } from '@/lib/notifications'
+import { sendEventCancelledEmail } from '@/lib/emailService'
 
 type Venue = {
   id: string
@@ -42,6 +44,7 @@ export default function EventManagementPage() {
     title: '',
     description: '',
     theme: '',
+    rating: '18+',
     date: '',
     venue_id: '',
     credits_required: '5',
@@ -128,6 +131,7 @@ export default function EventManagementPage() {
       title: '',
       description: '',
       theme: '',
+      rating: '18+',
       date: '',
       venue_id: '',
       credits_required: '5',
@@ -165,6 +169,7 @@ export default function EventManagementPage() {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
+        rating: formData.rating || '18+',
         date: new Date(formData.date).toISOString(),
         venue_id: formData.venue_id || null,
         location: location,
@@ -176,7 +181,8 @@ export default function EventManagementPage() {
           : formData.registration_opens_at 
             ? new Date(formData.registration_opens_at).toISOString() 
             : null,
-        created_by: user.id // Track who created the event
+        created_by: user.id, // Track who created the event
+        host_user_id: user.id // Assign creator as host by default
       }
 
       const { data, error } = await supabase
@@ -188,6 +194,21 @@ export default function EventManagementPage() {
       if (error) {
         console.error('Error creating event:', error)
         throw error
+      }
+
+      // Assign creator as attending by default (non-blocking)
+      try {
+        await supabase
+          .from('bookings')
+          .insert({
+            user_id: user.id,
+            event_id: data.id,
+            credits_used: 0,
+            status: 'confirmed',
+            attendance_status: null,
+          })
+      } catch (bookingError) {
+        console.warn('Failed to auto-book creator as attendee:', bookingError)
       }
 
       alert('Event created successfully!')
@@ -225,6 +246,7 @@ export default function EventManagementPage() {
       title: event.title,
       description: event.description || '',
       theme: event.theme || '',
+      rating: (event as any).rating || '18+',
       date: localDateTime,
       venue_id: venueId,
       credits_required: event.credits_required.toString(),
@@ -255,6 +277,7 @@ export default function EventManagementPage() {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
+        rating: formData.rating || '18+',
         date: new Date(formData.date).toISOString(),
         location: location,
         credits_required: parseInt(formData.credits_required),
@@ -291,8 +314,8 @@ export default function EventManagementPage() {
     }
   }
 
-  async function handleDeleteEvent(eventId: string, eventTitle: string) {
-    if (!confirm(`Are you sure you want to delete "${eventTitle}"?`)) {
+  async function handleCancelEvent(eventId: string, eventTitle: string) {
+    if (!confirm(`Cancel "${eventTitle}" and refund all attendees? This cannot be undone.`)) {
       return
     }
 
@@ -300,28 +323,96 @@ export default function EventManagementPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      // Check if user can delete this event
+      // Check if user can cancel this event
       const { data: event } = await supabase
         .from('events')
-        .select('created_by')
+        .select('created_by, status, date')
         .eq('id', eventId)
         .single()
 
       if (userRole === 'event_creator' && event?.created_by !== user.id) {
-        throw new Error('You can only delete events you created')
+        throw new Error('You can only cancel events you created')
       }
 
-      const { error } = await supabase
+      if (event?.status === 'cancelled') {
+        alert('This event is already cancelled.')
+        return
+      }
+
+      const { error: updateError } = await supabase
         .from('events')
-        .delete()
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
         .eq('id', eventId)
 
-      if (error) throw error
+      if (updateError) throw updateError
 
-      alert('Event deleted successfully!')
+      const { data: bookings, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('id, user_id, credits_used, status')
+        .eq('event_id', eventId)
+        .in('status', ['confirmed', 'waitlist'])
+
+      if (bookingsError) throw bookingsError
+
+      if (bookings && bookings.length > 0) {
+        for (const booking of bookings) {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('credits')
+            .eq('id', booking.user_id)
+            .single()
+
+          if (profileError) throw profileError
+
+          if (booking.credits_used > 0) {
+            const { error: creditError } = await supabase
+              .from('profiles')
+              .update({ credits: (profile?.credits || 0) + booking.credits_used })
+              .eq('id', booking.user_id)
+
+            if (creditError) throw creditError
+
+            await supabase.from('credit_transactions').insert({
+              user_id: booking.user_id,
+              amount: booking.credits_used,
+              transaction_type: 'refund',
+              reference_id: booking.id,
+              notes: `Refund for cancelled event: ${eventTitle}`
+            })
+          }
+
+          await supabase
+            .from('bookings')
+            .update({ status: 'cancelled', cancellation_date: new Date().toISOString() })
+            .eq('id', booking.id)
+
+          createNotification(
+            booking.user_id,
+            'general',
+            'Event cancelled',
+            `"${eventTitle}" was cancelled. A full refund has been issued.`,
+            booking.id,
+            eventId
+          ).catch(() => {
+            // Non-blocking notification failures
+          })
+
+          sendEventCancelledEmail(
+            booking.user_id,
+            eventTitle,
+            formatDateTime(event?.date || new Date().toISOString()),
+            booking.credits_used,
+            eventId
+          ).catch(() => {
+            // Non-blocking email failures
+          })
+        }
+      }
+
+      alert('Event cancelled and refunds processed.')
       loadEvents()
     } catch (error: any) {
-      console.error('Error deleting event:', error)
+      console.error('Error cancelling event:', error)
       alert('Error: ' + error.message)
     }
   }
@@ -385,7 +476,12 @@ export default function EventManagementPage() {
                 .map((event) => (
                 <Card key={event.id} className="shadow-sm">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg font-bold">{event.title}</CardTitle>
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-lg font-bold">{event.title}</CardTitle>
+                      {event.status === 'cancelled' && (
+                        <Badge variant="destructive">Cancelled</Badge>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <p className="text-sm text-muted-foreground line-clamp-2">{event.description}</p>
@@ -394,6 +490,7 @@ export default function EventManagementPage() {
                       <p>📅 {formatDateTime(event.date)}</p>
                       <p>📍 {event.location}</p>
                       {event.theme && <p>🎨 Theme: {event.theme}</p>}
+                      <p>🔞 {event.rating || '18+'}</p>
                       <p>💳 {event.credits_required} credits</p>
                       {event.max_attendees && <p>👥 Max {event.max_attendees} attendees</p>}
                       <p>⏱️ Cancel up to {event.cancellation_hours || 4} hours before</p>
@@ -409,17 +506,19 @@ export default function EventManagementPage() {
                             size="sm"
                             className="flex-1"
                             title="Edit Event"
+                            disabled={event.status === 'cancelled'}
                           >
                             ✏️ Edit Details
                           </Button>
                           
                           <Button
-                            onClick={() => handleDeleteEvent(event.id, event.title)}
+                            onClick={() => handleCancelEvent(event.id, event.title)}
                             variant="destructive"
                             size="sm"
-                            title="Delete Event"
+                            disabled={event.status === 'cancelled'}
+                            title="Cancel Event"
                           >
-                            🗑️
+                            Cancel
                           </Button>
                         </>
                       )}
@@ -551,6 +650,38 @@ export default function EventManagementPage() {
                     placeholder="e.g., Networking, Workshop, Social, etc."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Rating
+                  </label>
+                  <select
+                    value={formData.rating}
+                    onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                    className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="18+">18+</option>
+                    <option value="All Ages">All Ages</option>
+                    <option value="16+">16+</option>
+                    <option value="13+">13+</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Rating
+                  </label>
+                  <select
+                    value={formData.rating}
+                    onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                    className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="18+">18+</option>
+                    <option value="All Ages">All Ages</option>
+                    <option value="16+">16+</option>
+                    <option value="13+">13+</option>
+                  </select>
                 </div>
 
                 <div>

@@ -405,6 +405,10 @@ export default function Dashboard() {
     setError('')
 
     try {
+      if (event.status === 'cancelled') {
+        throw new Error('This event has been cancelled')
+      }
+
       // Check if registration is open
       if (event.registration_opens_at) {
         const registrationOpensAt = new Date(event.registration_opens_at)
@@ -858,9 +862,9 @@ export default function Dashboard() {
                             <span>📍</span>
                             <span>{booking.events.location}</span>
                           </div>
-                          {booking.events.theme && (
-                            <div className="whitespace-nowrap">🎨 {booking.events.theme}</div>
-                          )}
+                          <div className="whitespace-nowrap">
+                            {booking.events.theme ? `🎨 ${booking.events.theme} • ` : ''}🔞 {booking.events.rating || '18+'}
+                          </div>
                         </div>
                       </div>
                       
@@ -976,9 +980,9 @@ export default function Dashboard() {
                             <span>📍</span>
                             <span>{event.location}</span>
                           </div>
-                          {event.theme && (
-                            <div className="whitespace-nowrap">🎨 {event.theme}</div>
-                          )}
+                          <div className="whitespace-nowrap">
+                            {event.theme ? `🎨 ${event.theme} • ` : ''}🔞 {event.rating || '18+'}
+                          </div>
                         </div>
                         {!isRegistrationOpen && registrationOpensAt && (
                           <div className="flex items-center justify-between gap-2 pt-1 border-t">
@@ -1004,6 +1008,8 @@ export default function Dashboard() {
                               ✓ Booked
                             </Badge>
                           )
+                        ) : event.status === 'cancelled' ? (
+                          <Badge variant="destructive">Cancelled</Badge>
                         ) : !isRegistrationOpen ? (
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="text-orange-600 border-orange-600">
@@ -1105,9 +1111,9 @@ export default function Dashboard() {
                               <span>📍</span>
                               <span>{booking.events.location}</span>
                             </div>
-                            {booking.events.theme && (
-                              <div className="whitespace-nowrap">🎨 {booking.events.theme}</div>
-                            )}
+                            <div className="whitespace-nowrap">
+                              {booking.events.theme ? `🎨 ${booking.events.theme} • ` : ''}🔞 {booking.events.rating || '18+'}
+                            </div>
                           </div>
                         </div>
                         

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { PublicProfile } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
@@ -26,6 +26,7 @@ type UpcomingEvent = {
 
 export default function PublicProfilePage() {
   const params = useParams()
+  const router = useRouter()
   const profileId = params.id as string
 
   const [profile, setProfile] = useState<PublicProfile | null>(null)
@@ -44,7 +45,7 @@ export default function PublicProfilePage() {
       // Load profile (public view - no email or credits)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, full_name, bio, website_link, instagram_link, youtube_link, twitter_link, created_at')
+        .select('id, full_name, avatar_url, bio, website_link, instagram_link, youtube_link, twitter_link, created_at')
         .eq('id', profileId)
         .single()
 
@@ -64,7 +65,8 @@ export default function PublicProfilePage() {
             id,
             title,
             date,
-            location
+            location,
+            status
           )
         `)
         .eq('user_id', profileId)
@@ -75,6 +77,7 @@ export default function PublicProfilePage() {
       
       // Filter to only future events
       const events = (bookingsData || [])
+        .filter((b: any) => b.events.status !== 'cancelled')
         .filter((b: any) => new Date(b.events.date) > new Date(now))
         .map((b: any) => ({
           id: b.events.id,
@@ -157,10 +160,19 @@ export default function PublicProfilePage() {
       {/* Header */}
       <div className="bg-background/80 backdrop-blur-sm border-b shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/" className="text-sm">
-              ← Back
-            </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-sm"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.history.length > 1) {
+                router.back()
+              } else {
+                router.push('/dashboard')
+              }
+            }}
+          >
+            ← Back
           </Button>
         </div>
       </div>
@@ -172,6 +184,7 @@ export default function PublicProfilePage() {
             <div className="flex flex-col sm:flex-row items-start gap-6">
               {/* Profile Picture */}
               <Avatar className="w-24 h-24 sm:w-28 sm:h-28 border-4 border-background shadow-lg">
+                <AvatarImage src={profile.avatar_url || undefined} alt={profile.full_name || 'Profile'} />
                 <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-3xl font-bold">
                   {getInitials(profile.full_name)}
                 </AvatarFallback>
@@ -311,23 +324,23 @@ export default function PublicProfilePage() {
                       <div className="flex-1 min-w-0 space-y-2">
                         <h3 className="font-bold text-base sm:text-lg group-hover:text-primary transition-colors">{event.title}</h3>
                         <div className="space-y-1.5">
-                          <p className="text-sm text-muted-foreground flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                          <div className="text-sm text-muted-foreground flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
                               <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
-                            </div>
+                            </span>
                             <span className="font-medium">{formatDateTime(event.date)}</span>
-                          </p>
-                          <p className="text-sm text-muted-foreground flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
+                          </div>
+                          <div className="text-sm text-muted-foreground flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
                               <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                               </svg>
-                            </div>
+                            </span>
                             <span className="font-medium">{event.location}</span>
-                          </p>
+                          </div>
                         </div>
                         {event.status === 'waitlist' && (
                           <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300 mt-2">

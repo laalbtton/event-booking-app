@@ -18,6 +18,8 @@ type EventDetails = {
   title: string
   description: string
   theme: string | null
+  rating: string | null
+  status?: string | null
   date: string
   location: string
   credits_required: number
@@ -47,6 +49,7 @@ export default function PublicEventPage() {
   const [confirmedBookings, setConfirmedBookings] = useState<AttendeeBooking[]>([])
   const [waitlistBookings, setWaitlistBookings] = useState<AttendeeBooking[]>([])
   const [loading, setLoading] = useState(true)
+  const [isUnavailable, setIsUnavailable] = useState(false)
   const [hostProfile, setHostProfile] = useState<{ full_name: string } | null>(null)
 
   useEffect(() => {
@@ -55,6 +58,7 @@ export default function PublicEventPage() {
 
   async function loadEventDetails() {
     setLoading(true)
+    setIsUnavailable(false)
 
     try {
       // Load event details (public - no auth required)
@@ -65,6 +69,13 @@ export default function PublicEventPage() {
         .single()
 
       if (eventError) throw eventError
+
+      if (eventData?.status === 'cancelled') {
+        setIsUnavailable(true)
+        setEvent(null)
+        return
+      }
+
       setEvent(eventData)
 
       // Load host profile if host is assigned
@@ -135,6 +146,26 @@ export default function PublicEventPage() {
     )
   }
 
+  if (isUnavailable) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-center">Event Cancelled</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-center text-muted-foreground">
+              This event has been cancelled and is no longer available.
+            </p>
+            <Button asChild className="w-full">
+              <Link href="/signup">Sign Up to Browse Events</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   if (!event) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -175,9 +206,14 @@ export default function PublicEventPage() {
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">{event.title}</CardTitle>
-              {isPastEvent && (
-                <Badge variant="secondary">Past Event</Badge>
-              )}
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs">
+                  Rating: {event.rating || '18+'}
+                </Badge>
+                {isPastEvent && (
+                  <Badge variant="secondary">Past Event</Badge>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">

@@ -7,13 +7,16 @@ import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { QrCode, Link as LinkIcon, Edit, Trash2, Users } from 'lucide-react'
+import { QrCode, Link as LinkIcon, Edit, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { createNotification } from '@/lib/notifications'
+import { sendEventCancelledEmail } from '@/lib/emailService'
 
 type Venue = {
   id: string
@@ -34,6 +37,7 @@ export default function AdminEventsPage() {
     title: '',
     description: '',
     theme: '',
+    rating: '18+',
     date: '',
     venue_id: '',
     credits_required: '5',
@@ -99,6 +103,7 @@ export default function AdminEventsPage() {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
+        rating: formData.rating || '18+',
         date: new Date(formData.date).toISOString(),
         venue_id: formData.venue_id || null,
         location: location,
@@ -159,6 +164,7 @@ export default function AdminEventsPage() {
       title: event.title,
       description: event.description || '',
       theme: event.theme || '',
+      rating: (event as any).rating || '18+',
       date: localDateTime,
       venue_id: venueId,
       credits_required: event.credits_required.toString(),
@@ -222,6 +228,7 @@ export default function AdminEventsPage() {
       title: '',
       description: '',
       theme: '',
+      rating: '18+',
       date: '',
       venue_id: '',
       credits_required: '5',
@@ -232,23 +239,99 @@ export default function AdminEventsPage() {
     })
   }
 
-  async function handleDeleteEvent(eventId: string, eventTitle: string) {
-    if (!confirm(`Are you sure you want to delete "${eventTitle}"?`)) {
+  async function handleCancelEvent(eventId: string, eventTitle: string) {
+    if (!confirm(`Cancel "${eventTitle}" and refund all attendees? This cannot be undone.`)) {
       return
     }
 
     try {
-      const { error } = await supabase
+      const { data: event, error: eventError } = await supabase
         .from('events')
-        .delete()
+        .select('status, date')
+        .eq('id', eventId)
+        .single()
+
+      if (eventError) throw eventError
+
+      if (event?.status === 'cancelled') {
+        alert('This event is already cancelled.')
+        return
+      }
+
+      const { error: updateError } = await supabase
+        .from('events')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
         .eq('id', eventId)
 
-      if (error) throw error
+      if (updateError) throw updateError
 
-      alert('Event deleted successfully!')
+      const { data: bookings, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('id, user_id, credits_used, status')
+        .eq('event_id', eventId)
+        .in('status', ['confirmed', 'waitlist'])
+
+      if (bookingsError) throw bookingsError
+
+      if (bookings && bookings.length > 0) {
+        for (const booking of bookings) {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('credits')
+            .eq('id', booking.user_id)
+            .single()
+
+          if (profileError) throw profileError
+
+          if (booking.credits_used > 0) {
+            const { error: creditError } = await supabase
+              .from('profiles')
+              .update({ credits: (profile?.credits || 0) + booking.credits_used })
+              .eq('id', booking.user_id)
+
+            if (creditError) throw creditError
+
+            await supabase.from('credit_transactions').insert({
+              user_id: booking.user_id,
+              amount: booking.credits_used,
+              transaction_type: 'refund',
+              reference_id: booking.id,
+              notes: `Refund for cancelled event: ${eventTitle}`
+            })
+          }
+
+          await supabase
+            .from('bookings')
+            .update({ status: 'cancelled', cancellation_date: new Date().toISOString() })
+            .eq('id', booking.id)
+
+          createNotification(
+            booking.user_id,
+            'general',
+            'Event cancelled',
+            `"${eventTitle}" was cancelled. A full refund has been issued.`,
+            booking.id,
+            eventId
+          ).catch(() => {
+            // Non-blocking notification failures
+          })
+
+          sendEventCancelledEmail(
+            booking.user_id,
+            eventTitle,
+            formatDateTime(event?.date || new Date().toISOString()),
+            booking.credits_used,
+            eventId
+          ).catch(() => {
+            // Non-blocking email failures
+          })
+        }
+      }
+
+      alert('Event cancelled and refunds processed.')
       loadEvents()
     } catch (error: any) {
-      console.error('Error deleting event:', error)
+      console.error('Error cancelling event:', error)
       alert('Error: ' + error.message)
     }
   }
@@ -280,7 +363,12 @@ export default function AdminEventsPage() {
         {events.map((event) => (
           <Card key={event.id}>
             <CardHeader>
-              <CardTitle className="text-lg">{event.title}</CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-lg">{event.title}</CardTitle>
+                {event.status === 'cancelled' && (
+                  <Badge variant="destructive">Cancelled</Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{event.description}</p>
@@ -289,6 +377,7 @@ export default function AdminEventsPage() {
                 <p>{formatDateTime(event.date)}</p>
                 <p>{event.location}</p>
                 {event.theme && <p>Theme: {event.theme}</p>}
+                <p>Rating: {event.rating || '18+'}</p>
                 <p>{event.credits_required} credits</p>
                 {event.max_attendees && <p>Max {event.max_attendees} attendees</p>}
                 <p>Cancel up to {event.cancellation_hours || 4} hours before</p>
@@ -300,17 +389,19 @@ export default function AdminEventsPage() {
                   variant="default"
                   size="sm"
                   className="flex-1"
+                  disabled={event.status === 'cancelled'}
                 >
                   <Edit className="w-4 h-4 mr-1" />
                   Edit
                 </Button>
                 
                 <Button
-                  onClick={() => handleDeleteEvent(event.id, event.title)}
+                  onClick={() => handleCancelEvent(event.id, event.title)}
                   variant="destructive"
                   size="sm"
+                  disabled={event.status === 'cancelled'}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  Cancel
                 </Button>
 
                 <Button
@@ -407,6 +498,21 @@ export default function AdminEventsPage() {
                 onChange={(e) => setFormData({ ...formData, theme: e.target.value })}
                 placeholder="e.g., Networking, Workshop, Social, etc."
               />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-rating">Rating</Label>
+              <select
+                id="edit-rating"
+                value={formData.rating}
+                onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="18+">18+</option>
+                <option value="All Ages">All Ages</option>
+                <option value="16+">16+</option>
+                <option value="13+">13+</option>
+              </select>
             </div>
 
             <div>
@@ -579,6 +685,21 @@ export default function AdminEventsPage() {
                 onChange={(e) => setFormData({ ...formData, theme: e.target.value })}
                 placeholder="e.g., Networking, Workshop, Social, etc."
               />
+            </div>
+
+            <div>
+              <Label htmlFor="create-rating">Rating</Label>
+              <select
+                id="create-rating"
+                value={formData.rating}
+                onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="18+">18+</option>
+                <option value="All Ages">All Ages</option>
+                <option value="16+">16+</option>
+                <option value="13+">13+</option>
+              </select>
             </div>
 
             <div>

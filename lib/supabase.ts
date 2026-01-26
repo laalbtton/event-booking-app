@@ -21,6 +21,7 @@ export type Profile = {
   id: string
   email: string
   full_name: string | null
+  avatar_url: string | null
   credits: number
   role: UserRole
   instagram_link: string | null
@@ -36,6 +37,7 @@ export type Profile = {
 export type PublicProfile = {
   id: string
   full_name: string | null
+  avatar_url: string | null
   bio: string | null
   instagram_link: string | null
   youtube_link: string | null
@@ -49,6 +51,8 @@ export type Event = {
   title: string
   description: string | null
   theme: string | null
+  rating: string | null
+  status?: string | null
   date: string
   location: string | null
   credits_required: number

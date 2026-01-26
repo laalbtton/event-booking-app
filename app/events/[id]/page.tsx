@@ -6,10 +6,12 @@ import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
+import { sendBookingConfirmationEmail } from '@/lib/emailService'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
 
@@ -19,12 +21,26 @@ type EventDetails = {
   title: string
   description: string
   theme: string | null
+  rating: string | null
+  status?: string | null
   date: string
   location: string
+  venue_id: string | null
   credits_required: number
   max_attendees: number | null
   cancellation_hours: number
+  registration_opens_at: string | null
   host_user_id: string | null
+  created_by: string | null
+}
+
+type VenueDetails = {
+  id: string
+  name: string
+  address: string
+  parking_options: string | null
+  accessibility: string | null
+  food_drinks_available: boolean
 }
 
 type AttendeeBooking = {
@@ -48,9 +64,17 @@ export default function EventDetailsPage() {
   const [waitlistBookings, setWaitlistBookings] = useState<AttendeeBooking[]>([])
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [userBooking, setUserBooking] = useState<any>(null)
+  const [bookingLoading, setBookingLoading] = useState(false)
+  const [settingAlert, setSettingAlert] = useState(false)
+  const [alertSet, setAlertSet] = useState(false)
+  const [error, setError] = useState('')
   const [hostProfile, setHostProfile] = useState<{ full_name: string } | null>(null)
   const [isHost, setIsHost] = useState(false)
   const [isEventCreator, setIsEventCreator] = useState(false)
+  const [venue, setVenue] = useState<VenueDetails | null>(null)
+  const [venueOpen, setVenueOpen] = useState(false)
 
 
   function copyPublicLink() {
@@ -71,6 +95,32 @@ export default function EventDetailsPage() {
       const { data: { user } } = await supabase.auth.getUser()
       setCurrentUser(user)
 
+      if (user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        if (profileData) setProfile(profileData)
+
+        const { data: userBookingData } = await supabase
+          .from('bookings')
+          .select('id, status')
+          .eq('event_id', eventId)
+          .eq('user_id', user.id)
+          .in('status', ['confirmed', 'waitlist'])
+          .maybeSingle()
+        setUserBooking(userBookingData || null)
+
+        const { data: alertsData } = await supabase
+          .from('registration_alerts')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('event_id', eventId)
+          .maybeSingle()
+        setAlertSet(!!alertsData)
+      }
+
       // Load event details
       const { data: eventData, error: eventError } = await supabase
         .from('events')
@@ -80,6 +130,19 @@ export default function EventDetailsPage() {
 
       if (eventError) throw eventError
       setEvent(eventData)
+
+      // Load venue details if present
+      if (eventData.venue_id) {
+        const { data: venueData, error: venueError } = await supabase
+          .from('venues')
+          .select('id, name, address, parking_options, accessibility, food_drinks_available')
+          .eq('id', eventData.venue_id)
+          .single()
+
+        if (!venueError && venueData) {
+          setVenue(venueData as VenueDetails)
+        }
+      }
 
       // Check if current user is the host
       if (user && eventData.host_user_id === user.id) {
@@ -144,6 +207,136 @@ export default function EventDetailsPage() {
     }
   }
 
+  async function handleSetAlert() {
+    if (!profile) return
+    setSettingAlert(true)
+    setError('')
+
+    try {
+      const response = await fetch('/api/set-registration-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to set alert')
+      }
+
+      setAlertSet(true)
+    } catch (error: any) {
+      setError(error.message)
+    } finally {
+      setSettingAlert(false)
+    }
+  }
+
+  async function handleBookEvent(eventData: EventDetails) {
+    if (!profile) return
+
+    setBookingLoading(true)
+    setError('')
+
+    try {
+      if (eventData.status === 'cancelled') {
+        throw new Error('This event has been cancelled')
+      }
+
+      if (eventData.registration_opens_at) {
+        const registrationOpensAt = new Date(eventData.registration_opens_at)
+        const now = new Date()
+        if (now < registrationOpensAt) {
+          throw new Error(`Registration opens on ${formatDateTime(registrationOpensAt)}`)
+        }
+      }
+
+      if (userBooking) {
+        throw new Error('You have already booked this event')
+      }
+
+      if (profile.credits < eventData.credits_required) {
+        throw new Error('Insufficient credits')
+      }
+
+      const { count: confirmedCount, error: countError } = await supabase
+        .from('bookings')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_id', eventData.id)
+        .eq('status', 'confirmed')
+
+      if (countError) throw countError
+
+      let bookingStatus: 'confirmed' | 'waitlist' = 'confirmed'
+      if (eventData.max_attendees !== null && confirmedCount !== null) {
+        if (confirmedCount >= eventData.max_attendees) {
+          bookingStatus = 'waitlist'
+        }
+      }
+
+      const { data: newBooking, error: bookingError } = await supabase
+        .from('bookings')
+        .insert({
+          user_id: profile.id,
+          event_id: eventData.id,
+          credits_used: eventData.credits_required,
+          status: bookingStatus
+        })
+        .select()
+        .single()
+
+      if (bookingError) throw bookingError
+
+      if (bookingStatus === 'waitlist') {
+        await supabase.rpc('update_waitlist_positions', { event_uuid: eventData.id })
+      }
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          credits: profile.credits - eventData.credits_required,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', profile.id)
+
+      if (updateError) {
+        await supabase.from('bookings').delete().eq('id', newBooking.id)
+        throw updateError
+      }
+
+      try {
+        await supabase.from('credit_transactions').insert({
+          user_id: profile.id,
+          amount: -eventData.credits_required,
+          transaction_type: 'booking',
+          notes: `${bookingStatus === 'waitlist' ? 'Waitlist: ' : ''}Booked event: ${eventData.title}`
+        })
+      } catch (transactionError: any) {
+        console.warn('Failed to log credit transaction:', transactionError)
+      }
+
+      if (bookingStatus === 'confirmed') {
+        sendBookingConfirmationEmail(profile.id, newBooking.id, eventData.id).catch(err => {
+          console.warn('Failed to send booking confirmation email:', err)
+        })
+      }
+
+      await loadEventDetails()
+      setUserBooking(newBooking)
+
+      if (bookingStatus === 'waitlist') {
+        alert('Event is full. You have been added to the waitlist.')
+      } else {
+        alert('Event booked successfully!')
+      }
+    } catch (error: any) {
+      setError(error.message)
+      alert(error.message)
+    } finally {
+      setBookingLoading(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -168,6 +361,10 @@ export default function EventDetailsPage() {
   const spotsAvailable = event.max_attendees 
     ? event.max_attendees - confirmedBookings.length 
     : null
+  const isRegistrationOpen = !event.registration_opens_at || new Date() >= new Date(event.registration_opens_at)
+  const isFull = event.max_attendees !== null && confirmedBookings.length >= event.max_attendees
+  const isAlreadyBooked = !!userBooking
+  const bookingLabel = isFull ? 'Join Waitlist' : 'Book Event'
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -189,6 +386,9 @@ export default function EventDetailsPage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-2xl md:text-3xl">{event.title}</CardTitle>
+            <Badge variant="outline" className="w-fit text-xs">
+              Rating: {event.rating || '18+'}
+            </Badge>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-base md:text-lg text-muted-foreground">{event.description}</p>
@@ -221,7 +421,17 @@ export default function EventDetailsPage() {
 
                 <div className="flex items-center text-sm md:text-base text-gray-900">
                   <span className="mr-2">📍</span>
-                  <span>{event.location}</span>
+                  {venue ? (
+                    <button
+                      type="button"
+                      onClick={() => setVenueOpen(true)}
+                      className="text-blue-700 hover:text-blue-900 underline underline-offset-2"
+                    >
+                      {venue.name}
+                    </button>
+                  ) : (
+                    <span>{event.location}</span>
+                  )}
                 </div>
 
                 <div className="flex items-center text-sm md:text-base text-gray-900">
@@ -256,25 +466,55 @@ export default function EventDetailsPage() {
                 </div>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <Button
-                onClick={copyPublicLink}
-                size="sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                </svg>
-                Share
-              </Button>
-              {(isHost || isEventCreator) && (
-                <Button asChild variant="default" className="bg-green-600 hover:bg-green-700">
-                  <Link href={`/events/${eventId}/attendance`}>
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
-                    Manage Attendees
-                  </Link>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={copyPublicLink}
+                  size="sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                  </svg>
+                  Share
                 </Button>
+                {(isHost || isEventCreator) && (
+                  <Button asChild variant="default" className="bg-green-600 hover:bg-green-700">
+                    <Link href={`/events/${eventId}/attendance`}>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      Manage Attendees
+                    </Link>
+                  </Button>
+                )}
+              </div>
+              {profile && (
+                event.status === 'cancelled' ? (
+                  <Badge variant="destructive">Cancelled</Badge>
+                ) : !isRegistrationOpen ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleSetAlert}
+                    disabled={settingAlert || alertSet}
+                    size="sm"
+                  >
+                    {alertSet ? 'Alert Set' : settingAlert ? 'Setting...' : 'Alert Me'}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => handleBookEvent(event)}
+                    disabled={bookingLoading || isAlreadyBooked}
+                    size="sm"
+                  >
+                    {bookingLoading
+                      ? 'Booking...'
+                      : isAlreadyBooked
+                        ? userBooking?.status === 'waitlist'
+                          ? 'On Waitlist'
+                          : 'Booked'
+                        : bookingLabel}
+                  </Button>
+                )
               )}
             </div>
 
@@ -303,8 +543,8 @@ export default function EventDetailsPage() {
                     href={`/profile/${booking.profiles.id}`}
                     className="flex items-center p-2 bg-green-50 rounded-lg border border-green-200 hover:border-green-400 hover:bg-green-100 transition-all cursor-pointer"
                   >
-                    <Avatar className="w-8 h-8 mr-2 bg-green-500">
-                      <AvatarFallback className="text-white text-xs font-bold">
+                    <Avatar className="w-8 h-8 mr-2 bg-green-600 ring-2 ring-green-300">
+                      <AvatarFallback className="text-white text-xs font-bold bg-green-700">
                         {index + 1}
                       </AvatarFallback>
                     </Avatar>
@@ -356,6 +596,39 @@ export default function EventDetailsPage() {
 
       {/* Bottom Navigation */}
       <NavigationTabs />
+
+      <Dialog open={venueOpen} onOpenChange={setVenueOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Venue Details</DialogTitle>
+            <DialogDescription>Additional information about this venue.</DialogDescription>
+          </DialogHeader>
+          {venue && (
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <div>
+                <p className="text-base font-semibold text-foreground">{venue.name}</p>
+                <p>{venue.address}</p>
+              </div>
+              {venue.parking_options && (
+                <div>
+                  <p className="font-medium text-foreground">Parking</p>
+                  <p>{venue.parking_options}</p>
+                </div>
+              )}
+              {venue.accessibility && (
+                <div>
+                  <p className="font-medium text-foreground">Accessibility</p>
+                  <p>{venue.accessibility}</p>
+                </div>
+              )}
+              <div>
+                <p className="font-medium text-foreground">Food & Drinks</p>
+                <p>{venue.food_drinks_available ? 'Available' : 'Not available'}</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

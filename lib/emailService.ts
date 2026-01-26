@@ -13,6 +13,7 @@ import {
   getBookingCancellationEmail,
   getWaitlistPositionEmail,
   getEventReminderEmail,
+  getEventCancelledEmail,
 } from './email'
 
 /**
@@ -178,6 +179,55 @@ export async function sendBookingCancellationEmail(
     return response.ok
   } catch (error) {
     console.error('Error sending cancellation email:', error)
+    return false
+  }
+}
+
+/**
+ * Send event cancellation email
+ */
+export async function sendEventCancelledEmail(
+  userId: string,
+  eventTitle: string,
+  eventDate: string,
+  creditsRefunded: number,
+  eventId: string
+): Promise<boolean> {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', userId)
+      .single()
+
+    if (!profile) {
+      console.error('Missing profile for event cancellation email')
+      return false
+    }
+
+    const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/event-public/${eventId}`
+
+    const html = getEventCancelledEmail({
+      userName: profile.full_name || 'there',
+      eventTitle,
+      eventDate,
+      creditsRefunded,
+      eventUrl,
+    })
+
+    const response = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: profile.email,
+        subject: `Event Cancelled: ${eventTitle}`,
+        html,
+      }),
+    })
+
+    return response.ok
+  } catch (error) {
+    console.error('Error sending event cancellation email:', error)
     return false
   }
 }
