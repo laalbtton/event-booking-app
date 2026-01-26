@@ -15,8 +15,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Skeleton } from '@/components/ui/skeleton'
 import { QrCode, Link as LinkIcon, Edit, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { createNotification } from '@/lib/notifications'
-import { sendEventCancelledEmail } from '@/lib/emailService'
 
 type Venue = {
   id: string
@@ -245,87 +243,27 @@ export default function AdminEventsPage() {
     }
 
     try {
-      const { data: event, error: eventError } = await supabase
-        .from('events')
-        .select('status, date')
-        .eq('id', eventId)
-        .single()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
 
-      if (eventError) throw eventError
+      const response = await fetch('/api/cancel-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ eventId }),
+      })
 
-      if (event?.status === 'cancelled') {
-        alert('This event is already cancelled.')
-        return
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to cancel event')
       }
 
-      const { error: updateError } = await supabase
-        .from('events')
-        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('id', eventId)
-
-      if (updateError) throw updateError
-
-      const { data: bookings, error: bookingsError } = await supabase
-        .from('bookings')
-        .select('id, user_id, credits_used, status')
-        .eq('event_id', eventId)
-        .in('status', ['confirmed', 'waitlist'])
-
-      if (bookingsError) throw bookingsError
-
-      if (bookings && bookings.length > 0) {
-        for (const booking of bookings) {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('credits')
-            .eq('id', booking.user_id)
-            .single()
-
-          if (profileError) throw profileError
-
-          if (booking.credits_used > 0) {
-            const { error: creditError } = await supabase
-              .from('profiles')
-              .update({ credits: (profile?.credits || 0) + booking.credits_used })
-              .eq('id', booking.user_id)
-
-            if (creditError) throw creditError
-
-            await supabase.from('credit_transactions').insert({
-              user_id: booking.user_id,
-              amount: booking.credits_used,
-              transaction_type: 'refund',
-              reference_id: booking.id,
-              notes: `Refund for cancelled event: ${eventTitle}`
-            })
-          }
-
-          await supabase
-            .from('bookings')
-            .update({ status: 'cancelled', cancellation_date: new Date().toISOString() })
-            .eq('id', booking.id)
-
-          createNotification(
-            booking.user_id,
-            'general',
-            'Event cancelled',
-            `"${eventTitle}" was cancelled. A full refund has been issued.`,
-            booking.id,
-            eventId
-          ).catch(() => {
-            // Non-blocking notification failures
-          })
-
-          sendEventCancelledEmail(
-            booking.user_id,
-            eventTitle,
-            formatDateTime(event?.date || new Date().toISOString()),
-            booking.credits_used,
-            eventId
-          ).catch(() => {
-            // Non-blocking email failures
-          })
-        }
+      const data = await response.json()
+      if (data.alreadyCancelled) {
+        alert('This event is already cancelled.')
+        return
       }
 
       alert('Event cancelled and refunds processed.')

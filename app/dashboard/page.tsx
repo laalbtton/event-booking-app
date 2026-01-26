@@ -795,7 +795,7 @@ export default function Dashboard() {
                 const now = currentTime
                 const hoursUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
                 const cancellationWindow = booking.events.cancellation_hours || 4
-                const canCancel = hoursUntilEvent >= 0
+                const canCancel = hoursUntilEvent >= 0 && booking.events.status !== 'cancelled'
                 const willGetRefund = hoursUntilEvent >= cancellationWindow
 
                 // Calculate time display (until event)
@@ -834,10 +834,25 @@ export default function Dashboard() {
                 }
 
                 const isWaitlist = booking.status === 'waitlist'
-                const borderColor = isWaitlist ? 'border-yellow-500' : 'border-green-500'
+                const isEventCancelled = booking.events.status === 'cancelled'
+                const borderColor = isEventCancelled
+                  ? 'border-red-500'
+                  : isWaitlist
+                    ? 'border-yellow-500'
+                    : 'border-green-500'
 
                 return (
-                  <Card key={booking.id} className={cn("border-l-4", isWaitlist ? "border-l-yellow-500" : "border-l-green-500")}>
+                  <Card
+                    key={booking.id}
+                    className={cn(
+                      "border-l-4",
+                      isEventCancelled
+                        ? "border-l-red-500"
+                        : isWaitlist
+                          ? "border-l-yellow-500"
+                          : "border-l-green-500"
+                    )}
+                  >
                     <CardHeader className="pb-3">
                       <div className="flex justify-between items-start">
                         <CardTitle className="text-base md:text-lg flex-1">
@@ -849,7 +864,11 @@ export default function Dashboard() {
                           </Link>
                         </CardTitle>
                         {!isPast && (
-                          isWaitlist ? (
+                          isEventCancelled ? (
+                            <Badge variant="destructive" className="ml-2">
+                              Cancelled
+                            </Badge>
+                          ) : isWaitlist ? (
                             <Badge variant="outline" className="text-yellow-600 border-yellow-600 ml-2">
                               ⏳ #{booking.waitlist_position}
                             </Badge>
