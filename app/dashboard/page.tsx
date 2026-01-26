@@ -798,7 +798,7 @@ export default function Dashboard() {
                 const canCancel = hoursUntilEvent >= 0
                 const willGetRefund = hoursUntilEvent >= cancellationWindow
 
-                // Calculate time display
+                // Calculate time display (until event)
                 const diffMs = eventDate.getTime() - now.getTime()
                 const isPast = diffMs < 0
                 
@@ -808,12 +808,29 @@ export default function Dashboard() {
                   const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
                   const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
 
-                  let parts = []
+                  const parts = []
                   if (days > 0) parts.push(`${days}d`)
                   if (hours > 0 || days > 0) parts.push(`${hours}h`)
                   if (days === 0) parts.push(`${minutes}m`)
                   
                   timeDisplay = parts.join(' ') || '0m'
+                }
+
+                // Time left until full-refund window closes
+                const refundDeadline = new Date(eventDate.getTime() - cancellationWindow * 60 * 60 * 1000)
+                const refundDiffMs = refundDeadline.getTime() - now.getTime()
+                let refundTimeDisplay = ''
+                if (refundDiffMs > 0) {
+                  const days = Math.floor(refundDiffMs / (1000 * 60 * 60 * 24))
+                  const hours = Math.floor((refundDiffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+                  const minutes = Math.floor((refundDiffMs % (1000 * 60 * 60)) / (1000 * 60))
+
+                  const parts = []
+                  if (days > 0) parts.push(`${days}d`)
+                  if (hours > 0 || days > 0) parts.push(`${hours}h`)
+                  if (days === 0) parts.push(`${minutes}m`)
+
+                  refundTimeDisplay = parts.join(' ') || '0m'
                 }
 
                 const isWaitlist = booking.status === 'waitlist'
@@ -904,9 +921,9 @@ export default function Dashboard() {
                           <p className="text-xs text-muted-foreground text-center">
                             {isWaitlist
                               ? `✓ Full refund if you leave waitlist`
-                              : willGetRefund 
-                                ? `✓ Full refund available (${timeDisplay} until event)`
-                                : `⚠️ No refund (within ${cancellationWindow}h window) (${timeDisplay} until event)`
+                            : willGetRefund 
+                                ? `✓ Full refund available (${refundTimeDisplay} left)`
+                                : `⚠️ No refund (within ${cancellationWindow}h window)`
                             }
                           </p>
                         </div>

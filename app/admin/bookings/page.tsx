@@ -68,31 +68,28 @@ export default function AdminBookingsPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-gray-900">Booking Management</h2>
-        <div className="flex gap-2">
-          <Button
-            variant={filter === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('all')}
-          >
-            All ({bookings.filter(b => b.status === 'confirmed' || b.status === 'waitlist').length})
-          </Button>
-          <Button
-            variant={filter === 'confirmed' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('confirmed')}
-          >
-            Confirmed ({bookings.filter(b => b.status === 'confirmed').length})
-          </Button>
-          <Button
-            variant={filter === 'waitlist' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('waitlist')}
-          >
-            Waitlist ({bookings.filter(b => b.status === 'waitlist').length})
-          </Button>
-        </div>
+      <div className="flex flex-wrap gap-2 mb-6">
+        <Button
+          variant={filter === 'all' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setFilter('all')}
+        >
+          All ({bookings.filter(b => b.status === 'confirmed' || b.status === 'waitlist').length})
+        </Button>
+        <Button
+          variant={filter === 'confirmed' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setFilter('confirmed')}
+        >
+          Confirmed ({bookings.filter(b => b.status === 'confirmed').length})
+        </Button>
+        <Button
+          variant={filter === 'waitlist' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setFilter('waitlist')}
+        >
+          Waitlist ({bookings.filter(b => b.status === 'waitlist').length})
+        </Button>
       </div>
 
       {/* Bookings Table */}
@@ -140,7 +137,6 @@ export default function AdminBookingsPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-900">{booking.events.title}</div>
-                        <div className="text-sm text-gray-500">{booking.events.location}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(booking.events.date)}

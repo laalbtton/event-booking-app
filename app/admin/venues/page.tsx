@@ -189,8 +189,7 @@ export default function AdminVenuesPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-gray-900">Venue Management</h2>
+      <div className="flex justify-end mb-6">
         <Button onClick={() => setShowCreateForm(true)}>
           + Add Venue
         </Button>

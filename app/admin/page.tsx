@@ -21,6 +21,7 @@ export default function AdminUsersPage() {
   const [creditAmount, setCreditAmount] = useState('')
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     loadUsers()
@@ -97,6 +98,11 @@ export default function AdminUsersPage() {
     }
   }
 
+  const filteredUsers = users.filter((user) => {
+    const name = (user.full_name || '').toLowerCase()
+    return name.includes(searchTerm.toLowerCase())
+  })
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -108,10 +114,18 @@ export default function AdminUsersPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-gray-900">User Management</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div className="text-sm text-muted-foreground">
           Total Users: {users.length}
+        </div>
+        <div className="w-full sm:w-72">
+          <Label htmlFor="user-search" className="sr-only">Search users by name</Label>
+          <Input
+            id="user-search"
+            placeholder="Search users by name"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
       </div>
 
@@ -143,7 +157,7 @@ export default function AdminUsersPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {users.map((user) => (
+                {filteredUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
