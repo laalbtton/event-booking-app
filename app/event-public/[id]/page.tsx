@@ -20,6 +20,7 @@ type EventDetails = {
   theme: string | null
   rating: string | null
   status?: string | null
+  registration_opens_at: string | null
   date: string
   location: string
   credits_required: number
