@@ -602,6 +602,22 @@ export default function EventManagementPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Rating
+                  </label>
+                  <select
+                    value={formData.rating}
+                    onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                    className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="18+">18+</option>
+                    <option value="All Ages">All Ages</option>
+                    <option value="16+">16+</option>
+                    <option value="13+">13+</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Date & Time *
                   </label>
                   <input
