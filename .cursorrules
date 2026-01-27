@@ -1,0 +1,855 @@
+# ============================================
+# LAAL BUTTON EVENT BOOKING APP - CURSOR AI RULES
+# ============================================
+# This file helps Cursor AI understand our codebase architecture
+# and make consistent changes across related files.
+
+## PROJECT OVERVIEW
+Laal Button is a credit-based event booking platform for comedy shows and events in Toronto.
+- Users buy credits ($1 = 1 credit)
+- Events cost credits (usually 5)
+- Features: booking, waitlist, cancellation with refunds, email notifications
+
+## TECH STACK
+- **Framework**: Next.js 15 (App Router, Server Components)
+- **Language**: TypeScript (strict mode)
+- **Database**: Supabase (PostgreSQL)
+- **Auth**: Supabase Auth (email/password + Google OAuth)
+- **Styling**: Tailwind CSS
+- **Email**: Resend
+- **Deployment**: Vercel
+
+## KEY DIRECTORIES
+
+### /app
+Next.js App Router pages and API routes
+- app/page.tsx - Homepage
+- app/login/page.tsx - Login page
+- app/signup/page.tsx - Signup page  
+- app/dashboard/page.tsx - User dashboard (events + bookings)
+- app/profile/page.tsx - User's own profile (editable)
+- app/profile/[id]/page.tsx - Public user profiles (read-only)
+- app/events/[id]/page.tsx - Event details page (auth required)
+- app/event-public/[id]/page.tsx - Public event page (no auth)
+- app/admin/ - Admin panel (events, users, bookings, attendance, venues)
+- app/api/ - API routes (cron jobs, webhooks)
+
+### /components
+Reusable React components
+- Avatar.tsx - User avatar with fallback to initials
+- VenueSelector.tsx - Venue dropdown for event creation
+- (Add new reusable components here)
+
+### /lib
+Utility libraries and configurations
+- lib/supabase.ts - Supabase client + TypeScript types (CRITICAL FILE)
+- lib/email.ts - Email notification functions (Resend)
+
+### /public
+Static assets (icons, manifest, service worker)
+
+## DATABASE SCHEMA (Supabase)
+
+### Tables
+1. **profiles**
+   - id (uuid, pk, references auth.users)
+   - email (text)
+   - full_name (text)
+   - avatar_url (text) - Profile picture URL
+   - credits (integer, default 25)
+   - bio (text)
+   - instagram_link, youtube_link, twitter_link, website_link (text)
+   - created_at, updated_at (timestamp)
+
+2. **events**
+   - id (uuid, pk)
+   - title, description, location (text)
+   - date (timestamp)
+   - credits_required (integer, default 5)
+   - max_attendees (integer, nullable)
+   - cancellation_hours (integer, default 4)
+   - venue_id (uuid, references venues)
+   - location_type ('venue' | 'custom')
+   - eventbrite_id, eventbrite_url (text)
+   - created_at, updated_at (timestamp)
+
+3. **bookings**
+   - id (uuid, pk)
+   - user_id (uuid, references profiles)
+   - event_id (uuid, references events)
+   - status ('confirmed' | 'cancelled' | 'waitlist' | 'attended' | 'no_show')
+   - credits_used (integer)
+   - waitlist_position (integer, nullable)
+   - created_at, cancelled_at (timestamp)
+
+4. **credit_transactions**
+   - id (uuid, pk)
+   - user_id (uuid, references profiles)
+   - amount (integer) - positive for adding, negative for spending
+   - type ('purchase' | 'booking' | 'refund' | 'admin_adjustment' | 'signup_bonus')
+   - description (text)
+   - created_at (timestamp)
+
+5. **venues**
+   - id (uuid, pk)
+   - name, address, city, province, country, postal_code (text)
+   - notes (text)
+   - is_active (boolean)
+   - created_at, updated_at (timestamp)
+
+6. **admin_users**
+   - user_id (uuid, pk, references auth.users)
+   - created_at (timestamp)
+
+### Database Functions & Triggers
+- handle_new_user() - Creates profile on signup (25 default credits)
+- log_credit_transaction() - Logs all credit changes
+- promote_from_waitlist() - Auto-promotes from waitlist on cancellation
+- assign_waitlist_position() - Assigns position when joining waitlist
+
+## TYPESCRIPT TYPES (lib/supabase.ts)
+
+CRITICAL: Always keep types in sync with database schema!
+
+Key types:
+- Profile - User profile data
+- Event - Event details
+- Booking - Booking with relations
+- UserBooking - Booking with event and profile data
+- CreditTransaction - Credit history
+- Venue - Venue location data
+
+When adding database columns, IMMEDIATELY update corresponding types!
+
+## FILE RELATIONSHIP MAPS
+
+### 🔴 CRITICAL: Profile Data Flow
+When you change profile-related data, update ALL these files:
+
+**Source of Truth:**
+- Database: profiles table
+- Types: lib/supabase.ts → Profile type
+
+**Display Locations (UPDATE ALL):**
+1. app/profile/page.tsx
+   - Shows: full_name, email, bio, social links, avatar, credits
+   - Editable: Yes
+   - User sees: Their own profile
+
+2. app/profile/[id]/page.tsx
+   - Shows: full_name, bio, social links, avatar, attended events
+   - Editable: No
+   - User sees: Someone else's public profile
+
+3. app/events/[id]/page.tsx
+   - Shows: avatar (small), full_name in attendee list
+   - Links to: Public profile
+   - Context: Event attendees section
+
+4. app/event-public/[id]/page.tsx
+   - Shows: avatar, full_name, social links (for performers)
+   - Links to: Public profile
+   - Context: Public event page, no auth required
+
+5. app/dashboard/page.tsx
+   - Shows: avatar (medium), full_name in header
+   - Links to: Own profile
+   - Context: Dashboard header greeting
+
+6. app/admin/users/page.tsx
+   - Shows: full_name, email, credits in user list
+   - Context: Admin user management
+
+**Pattern:** If adding a profile field (e.g., phone_number):
+1. Add to database: alter table profiles add column phone_number text
+2. Add to type: lib/supabase.ts → Profile type
+3. Add to edit form: app/profile/page.tsx
+4. Display in: app/profile/[id]/page.tsx (if public)
+5. Consider: Does admin need to see it? (app/admin/users/page.tsx)
+
+### 🔴 CRITICAL: Event Data Flow
+When you change event-related data, update ALL these files:
+
+**Source of Truth:**
+- Database: events table
+- Types: lib/supabase.ts → Event type
+
+**Display Locations (UPDATE ALL):**
+1. app/dashboard/page.tsx
+   - Shows: Event cards (title, date, location, credits, capacity)
+   - Action: Book button, "Already booked", "Full", "Waitlist"
+
+2. app/events/[id]/page.tsx
+   - Shows: Full event details, attendee list, booking status
+   - Action: Book, Cancel, Join Waitlist
+   - Auth: Required
+
+3. app/event-public/[id]/page.tsx
+   - Shows: Event details, confirmed attendees, waitlist
+   - Action: Login/Signup prompts
+   - Auth: Not required (public)
+
+4. app/admin/events/page.tsx
+   - Shows: All events in table, create/edit/delete forms
+   - Action: CRUD operations
+   - Context: Admin management
+
+5. app/admin/events/[id]/attendance/page.tsx
+   - Shows: Event details, attendee list with status
+   - Action: Mark attended/no-show
+   - Context: Post-event attendance tracking
+
+**Pattern:** If adding an event field (e.g., performer_name):
+1. Add to database: alter table events add column performer_name text
+2. Add to type: lib/supabase.ts → Event type
+3. Add to create form: app/admin/events/page.tsx
+4. Display in: All 5 display locations above
+
+### 🔴 CRITICAL: Booking Flow
+When you change booking logic, consider ALL these:
+
+**Create Booking:**
+- app/dashboard/page.tsx → handleBookEvent()
+- Checks: Credits sufficient, not already booked, event not full
+- Actions: Create booking, deduct credits, log transaction
+- Triggers: promote_from_waitlist(), assign_waitlist_position()
+- Email: Send booking confirmation (lib/email.ts)
+
+**Cancel Booking:**
+- app/dashboard/page.tsx → handleCancelBooking()
+- Checks: Cancellation window (4 hours before event)
+- Actions: Update status, refund credits (if eligible), log transaction
+- Triggers: promote_from_waitlist()
+- Email: Send cancellation confirmation
+
+**Waitlist:**
+- Auto-join if event full
+- Auto-promote on cancellation (database trigger)
+- Email: Send waitlist promotion notification
+
+**Pattern:** If changing booking logic:
+1. Update: app/dashboard/page.tsx (user actions)
+2. Consider: Database triggers (promote_from_waitlist)
+3. Update: Email notifications (lib/email.ts)
+4. Test: Cancellation window, refunds, waitlist promotion
+
+### 🔴 CRITICAL: Credit System
+When you change credit logic, update ALL these:
+
+**Credit Display:**
+- app/dashboard/page.tsx - Header (credits remaining)
+- app/profile/page.tsx - Profile stats
+- app/admin/users/page.tsx - Admin user list
+
+**Credit Transactions:**
+- Database: credit_transactions table (log_credit_transaction trigger)
+- All credit changes MUST be logged
+- Types: amount (integer), type (enum), description (text)
+
+**Credit Operations:**
+- Signup: +25 credits (handle_new_user trigger)
+- Booking: -5 credits (or event.credits_required)
+- Cancellation: +5 credits (if within refund window)
+- Admin adjustment: +/- any amount
+- Purchase: +amount (Stripe integration, planned)
+
+**Pattern:** If processing credit change:
+1. Update profiles.credits
+2. Insert into credit_transactions (automatic via trigger)
+3. Update UI to show new balance
+4. Send email if significant change
+
+### 🔵 Email Notifications (lib/email.ts)
+When to send emails:
+
+**Already Implemented:**
+1. sendBookingConfirmation() - After successful booking
+2. sendEventReminder() - 24h before event (cron job)
+3. sendCancellationConfirmation() - After cancellation
+4. sendWaitlistPromotion() - When promoted from waitlist
+5. sendWelcomeEmail() - New user signup
+
+**Template Pattern:**
+- HTML email with inline CSS
+- Include event details (title, date, location, credits)
+- Include user name
+- Include call-to-action button
+- Include footer (contact info)
+
+**Sending Pattern:**
+```typescript
+await sendBookingConfirmation({
+  to: user.email,
+  userName: user.full_name || 'there',
+  eventTitle: event.title,
+  eventDate: event.date,
+  eventLocation: event.location,
+  creditsUsed: event.credits_required,
+  cancellationHours: event.cancellation_hours,
+  eventId: event.id
+})
+```
+
+**Cron Jobs:**
+- app/api/cron/send-reminders/route.ts - Event reminders (every 6 hours)
+- app/api/cron/process-email-queue/route.ts - Waitlist notifications (every 5 mins)
+
+### 🔵 Admin vs User Routes
+**Admin routes** (require admin_users entry):
+- app/admin/* - All admin pages
+- Check: const { data: adminData } = await supabase.from('admin_users').select('*').eq('user_id', user.id).single()
+- Redirect: Non-admins to /dashboard
+
+**User routes** (require authentication):
+- app/dashboard/page.tsx
+- app/profile/page.tsx
+- app/events/[id]/page.tsx
+- Check: const { data: { user } } = await supabase.auth.getUser()
+- Redirect: Unauthenticated to /login
+
+**Public routes** (no auth required):
+- app/page.tsx (homepage)
+- app/login/page.tsx
+- app/signup/page.tsx
+- app/event-public/[id]/page.tsx
+
+**Auth Flow:**
+- Signup → Create profile (handle_new_user) → Send welcome email → Redirect to /dashboard
+- Login → Check if admin → Redirect to /admin or /dashboard
+- Google OAuth → Auto-create profile with Google avatar
+
+## STYLING GUIDELINES (Tailwind CSS)
+
+### Color Palette
+- **Primary Blue**: bg-blue-600, hover:bg-blue-700, text-blue-600
+- **Success Green**: bg-green-600, text-green-600
+- **Warning Yellow**: bg-yellow-50, border-yellow-200, text-yellow-800
+- **Danger Red**: bg-red-600, text-red-600
+- **Neutral Gray**: bg-gray-100 (backgrounds), text-gray-900 (dark text), text-gray-600 (medium text)
+
+### Text Contrast (IMPORTANT for mobile)
+- **Headings**: text-gray-900 (very dark)
+- **Body text**: text-gray-700 or text-gray-800
+- **Labels**: font-semibold text-gray-900
+- **Muted text**: text-gray-600 or text-gray-500
+- **Links**: text-blue-600 hover:text-blue-800 font-semibold underline
+
+### Component Patterns
+
+**Buttons:**
+```tsx
+// Primary
+className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold"
+
+// Secondary
+className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-semibold"
+
+// Danger
+className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-semibold"
+
+// Disabled
+className="bg-gray-400 text-white px-4 py-2 rounded-lg cursor-not-allowed"
+```
+
+**Input Fields:**
+```tsx
+className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
+```
+
+**Cards:**
+```tsx
+className="bg-white rounded-lg shadow-lg p-6 border-2 border-gray-200"
+```
+
+**Alert Boxes:**
+```tsx
+// Error
+className="bg-red-100 border border-red-400 text-red-800 px-4 py-3 rounded"
+
+// Success
+className="bg-green-100 border border-green-400 text-green-800 px-4 py-3 rounded"
+
+// Warning
+className="bg-yellow-50 border-2 border-yellow-200 text-yellow-800 px-4 py-3 rounded"
+
+// Info
+className="bg-blue-50 border-2 border-blue-200 text-blue-800 px-4 py-3 rounded"
+```
+
+### Responsive Design
+- **Mobile-first**: Start with mobile layout, add md: and lg: prefixes
+- **Breakpoints**: sm: (640px), md: (768px), lg: (1024px), xl: (1280px)
+- **Common pattern**: `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3`
+- **Text sizing**: `text-sm md:text-base lg:text-lg`
+- **Padding**: `px-4 py-8 md:px-6 lg:px-8`
+
+### Layout Pattern
+```tsx
+<div className="min-h-screen bg-gray-100">
+  {/* Header */}
+  <div className="bg-white shadow">
+    <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+      {/* Header content */}
+    </div>
+  </div>
+  
+  {/* Main content */}
+  <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+    {/* Page content */}
+  </div>
+</div>
+```
+
+## SUPABASE BEST PRACTICES
+
+### Row Level Security (RLS)
+- **Always enable RLS**: `alter table [table] enable row level security`
+- **Public read**: For events, venues (anyone can view)
+- **User-specific**: Profiles, bookings (users can only see/edit their own)
+- **Admin-only**: Admin tables, sensitive operations
+
+**Common Policies:**
+```sql
+-- Users can view their own data
+create policy "users_view_own_data" on profiles
+  for select using (auth.uid() = id);
+
+-- Users can update their own data
+create policy "users_update_own_data" on profiles
+  for update using (auth.uid() = id) with check (auth.uid() = id);
+
+-- Anyone can view public data
+create policy "anyone_can_view" on events
+  for select to authenticated, anon using (true);
+
+-- Only admins can manage
+create policy "admins_only" on events
+  for all using (
+    exists (select 1 from admin_users where user_id = auth.uid())
+  );
+```
+
+### Database Queries
+**Pattern for fetching with relations:**
+```typescript
+const { data, error } = await supabase
+  .from('bookings')
+  .select(`
+    *,
+    events (*),
+    profiles (full_name, email, avatar_url)
+  `)
+  .eq('user_id', userId)
+  .order('created_at', { ascending: false })
+```
+
+**Always include error handling:**
+```typescript
+if (error) {
+  console.error('Error:', error)
+  throw error // or handle gracefully
+}
+```
+
+**Use service role only on server:**
+```typescript
+// For client-side (app/)
+import { supabase } from '@/lib/supabase'
+
+// For server-side (app/api/)
+import { createClient } from '@supabase/supabase-js'
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // Has admin access
+)
+```
+
+### Real-time Subscriptions (Future Feature)
+```typescript
+// Listen for new bookings
+const channel = supabase
+  .channel('bookings')
+  .on('postgres_changes', 
+    { event: 'INSERT', schema: 'public', table: 'bookings' },
+    (payload) => {
+      console.log('New booking:', payload.new)
+    }
+  )
+  .subscribe()
+```
+
+## API ROUTES (app/api/)
+
+### Pattern for API Routes:
+```typescript
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+// Use service role for server-side operations
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+export async function GET(request: Request) {
+  try {
+    // Your logic here
+    
+    return NextResponse.json({ success: true, data })
+  } catch (error: any) {
+    console.error('API error:', error)
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    )
+  }
+}
+```
+
+### Cron Job Routes:
+- Secure with CRON_SECRET
+- Use service role (not user auth)
+- Log all operations
+- Return summary JSON
+
+**Pattern:**
+```typescript
+// Verify cron secret
+const authHeader = request.headers.get('authorization')
+if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+}
+```
+
+## COMPONENT CREATION GUIDELINES
+
+### When to Create a Component
+- Used in 2+ places
+- Complex logic that clutters page
+- Reusable UI pattern (Avatar, VenueSelector)
+
+### Component Pattern:
+```typescript
+// components/ComponentName.tsx
+type ComponentNameProps = {
+  prop1: string
+  prop2?: number
+  onAction?: () => void
+}
+
+export default function ComponentName({ prop1, prop2, onAction }: ComponentNameProps) {
+  return (
+    <div>
+      {/* Component JSX */}
+    </div>
+  )
+}
+```
+
+### Existing Reusable Components:
+1. **Avatar** - User profile pictures with initials fallback
+```tsx
+   <Avatar src={user.avatar_url} name={user.full_name} size="md" />
+```
+
+2. **VenueSelector** - Venue dropdown for event creation
+```tsx
+   <VenueSelector
+     value={locationData}
+     onChange={(data) => setLocationData(data)}
+     required
+   />
+```
+
+## COMMON WORKFLOWS
+
+### Adding a New Database Field
+
+**Example: Adding "phone_number" to profiles**
+
+1. **Database:**
+```sql
+alter table profiles add column phone_number text;
+comment on column profiles.phone_number is 'User contact number';
+```
+
+2. **Types (lib/supabase.ts):**
+```typescript
+export type Profile = {
+  // ... existing fields
+  phone_number: string | null // NEW
+}
+```
+
+3. **Update ALL profile displays:**
+   - app/profile/page.tsx (edit form + display)
+   - app/profile/[id]/page.tsx (public display, if public)
+   - Consider: app/admin/users/page.tsx (admin view)
+
+4. **Update queries** that fetch profiles (if needed)
+
+5. **Test:**
+   - Can edit in profile page
+   - Saves to database
+   - Shows correctly in all locations
+
+### Adding a New Feature
+
+**Example: Adding event categories**
+
+1. **Plan the feature:**
+   - What database tables/columns needed?
+   - Where will it display?
+   - What user actions?
+
+2. **Database changes:**
+   - Create tables/columns
+   - Add RLS policies
+   - Create triggers if needed
+
+3. **Update types:**
+   - lib/supabase.ts
+
+4. **Create components** (if reusable):
+   - components/CategorySelector.tsx
+
+5. **Update pages:**
+   - Admin: Add to create/edit form
+   - User: Display in event lists, filter by category
+
+6. **Test end-to-end**
+
+7. **Deploy and monitor**
+
+### Debugging Common Issues
+
+**"Not showing on page X"**
+→ Check if that page's query includes the new field
+→ Check if component is using the new field
+→ Check browser console for errors
+
+**"TypeScript error"**
+→ Update types in lib/supabase.ts
+→ Restart TypeScript server (Cmd+Shift+P → Restart TS Server)
+
+**"Database error"**
+→ Check RLS policies (user may not have permission)
+→ Check if column exists in database
+→ Check Supabase logs
+
+**"Not updating"**
+→ Check if mutation is called
+→ Check if error is caught and logged
+→ Check if page refetches data after mutation
+
+## ENVIRONMENT VARIABLES
+
+### Required:
+```bash
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://[project].supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ... # Server-side only
+
+# Email (Resend)
+RESEND_API_KEY=re_...
+
+# Cron Security
+CRON_SECRET=random_secret_key
+
+# Google OAuth (via Supabase)
+# Configured in Supabase dashboard, no .env needed
+
+# Future: Stripe
+STRIPE_SECRET_KEY=sk_...
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_...
+```
+
+### Local (.env.local) vs Production (Vercel):
+- Development: Use .env.local
+- Production: Set in Vercel dashboard (Settings → Environment Variables)
+- Never commit .env.local to git
+
+## TESTING CHECKLIST
+
+### Before Deploying:
+- [ ] TypeScript compiles with no errors (`npm run build`)
+- [ ] All imports resolve correctly
+- [ ] Database migrations applied
+- [ ] Environment variables set in Vercel
+- [ ] Test on mobile (responsive)
+- [ ] Test authentication flow
+- [ ] Test booking flow (book, cancel, waitlist)
+- [ ] Test admin panel (if changed)
+- [ ] Check email notifications (if changed)
+
+### After Deploying:
+- [ ] Check Vercel deployment logs
+- [ ] Test production site
+- [ ] Check Supabase logs for errors
+- [ ] Monitor Resend dashboard for email deliverability
+
+## ERROR HANDLING PATTERNS
+
+### Client-Side (Pages):
+```typescript
+try {
+  const { data, error } = await supabase.from('table').select('*')
+  if (error) throw error
+  
+  // Success
+  setData(data)
+} catch (error: any) {
+  console.error('Error:', error)
+  setError(error.message) // Show to user
+}
+```
+
+### Server-Side (API Routes):
+```typescript
+try {
+  // Logic
+  return NextResponse.json({ success: true, data })
+} catch (error: any) {
+  console.error('API error:', error)
+  return NextResponse.json(
+    { error: error.message },
+    { status: 500 }
+  )
+}
+```
+
+### Email Sending:
+```typescript
+const result = await sendBookingConfirmation({...})
+if (!result.success) {
+  console.error('Email failed:', result.error)
+  // Don't fail the operation, just log
+}
+```
+
+## CODE QUALITY GUIDELINES
+
+### TypeScript:
+- Use strict mode
+- Always type function parameters and returns
+- Use proper Supabase types from lib/supabase.ts
+- Avoid `any` (use `unknown` if needed)
+
+### React:
+- Use functional components
+- Use hooks (useState, useEffect, etc.)
+- Client components: 'use client' at top
+- Server components: default (no 'use client')
+
+### Naming:
+- **Components**: PascalCase (UserProfile.tsx)
+- **Functions**: camelCase (handleBookEvent)
+- **Constants**: UPPER_SNAKE_CASE (CACHE_NAME)
+- **Types**: PascalCase (Profile, Event)
+
+### Comments:
+- Explain WHY, not WHAT
+- Document complex logic
+- Add TODO comments for future work
+- Use // for single-line, /* */ for multi-line
+
+## DEPLOYMENT (Vercel)
+
+### Git Workflow:
+```bash
+git add .
+git commit -m "feat: add profile pictures"
+git push
+```
+
+Vercel auto-deploys on push to main branch.
+
+### Vercel Configuration:
+- **Build Command**: `npm run build`
+- **Output Directory**: `.next`
+- **Install Command**: `npm install`
+- **Framework Preset**: Next.js
+
+### Cron Jobs (vercel.json):
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/send-reminders",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}
+```
+
+## PLANNED FEATURES (Not Yet Implemented)
+
+Reference these when building:
+1. **Stripe Payments** - Buy credits with credit card
+2. **QR Code Check-in** - Scan QR at event entrance
+3. **PWA** - Progressive Web App (installable, push notifications)
+4. **Event Reviews** - Rate and review events after attending
+5. **Referral Program** - Earn credits for inviting friends
+6. **Membership Tiers** - Subscription-based unlimited events
+7. **Google Maps Integration** - Location autocomplete
+8. **SMS Notifications** - Text message reminders
+9. **Event Photos** - Upload photos to event gallery
+10. **Analytics Dashboard** - Admin insights and reports
+
+## WHEN IN DOUBT
+
+1. **Check existing similar code** - Look at how it's done elsewhere
+2. **Read lib/supabase.ts** - Understand the types
+3. **Check database schema** - Verify column names and types
+4. **Test incrementally** - Don't change too much at once
+5. **Ask for clarification** - Better to ask than assume
+
+## REMEMBER
+
+- **Always update related files together** (use file relationship maps above)
+- **Keep types in sync with database** (lib/supabase.ts is critical)
+- **Test on mobile** (50% of users are mobile)
+- **Email notifications matter** (users expect confirmation)
+- **Credits are the core** (all transactions must be logged)
+- **RLS is security** (never skip row level security)
+- **Admins are special** (check admin_users table)
+
+## QUICK REFERENCE
+
+**Most frequently edited files:**
+1. lib/supabase.ts - Types (edit when database changes)
+2. app/dashboard/page.tsx - Main user interface
+3. app/profile/page.tsx - User profile editing
+4. app/admin/events/page.tsx - Admin event management
+5. lib/email.ts - Email notifications
+
+**Most common tasks:**
+1. Adding database field → Update 3+ files (schema, types, displays)
+2. Adding new page → Create page.tsx, add navigation link
+3. Email notification → Add function to lib/email.ts, call from action
+4. Admin feature → Create in app/admin/, check admin_users table
+5. API endpoint → Create in app/api/, use service role
+
+---
+
+## CURSOR AI SPECIFIC INSTRUCTIONS
+
+When I ask you to make a change:
+
+1. **Read this .cursorrules file first** to understand architecture
+2. **Check the file relationship maps** to find ALL related files
+3. **Update ALL related files together** in one response
+4. **Maintain TypeScript type safety** - check lib/supabase.ts
+5. **Follow existing patterns** - look at similar code
+6. **Test considerations** - mention what needs testing
+7. **Mobile responsive** - ensure changes work on mobile
+8. **Be explicit** - tell me exactly what you changed and where
+
+If you're unsure about related files, ask me before making changes.
+
+Remember: Consistency across the codebase is more important than perfection in one file!
+
+# ============================================
+# END OF CURSOR RULES
+# ============================================
