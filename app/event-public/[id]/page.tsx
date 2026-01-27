@@ -255,6 +255,16 @@ export default function PublicEventPage() {
                 <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
               </div>
 
+              {event.registration_opens_at && new Date() < new Date(event.registration_opens_at) && (
+                <div className="flex items-center gap-2 text-sm md:text-base text-orange-700">
+                  <span className="mr-2">⏰</span>
+                  <span>Registration opens {formatDateTime(event.registration_opens_at)}</span>
+                  <Badge variant="outline" className="text-orange-600 border-orange-600">
+                    Not Open
+                  </Badge>
+                </div>
+              )}
+
               {event.max_attendees ? (
                 <div className="flex items-center text-sm md:text-base">
                   <span className="mr-2">👥</span>
@@ -299,15 +309,15 @@ export default function PublicEventPage() {
             {confirmedBookings.length === 0 ? (
               <p className="text-muted-foreground text-center py-6 text-sm">No confirmed attendees yet</p>
             ) : (
-              <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
                 {confirmedBookings.map((booking, index) => (
                   <Link
                     key={booking.id}
                     href={`/profile/${booking.profiles.id}`}
-                    className="flex items-center p-2 bg-green-50 rounded-lg border border-green-200 hover:border-green-400 hover:bg-green-100 transition-all cursor-pointer"
+                    className="flex items-center p-2 bg-muted/40 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/60 transition-all cursor-pointer"
                   >
-                    <Avatar className="w-8 h-8 mr-2 bg-green-600">
-                      <AvatarFallback className="text-white text-xs font-bold">
+                    <Avatar className="w-8 h-8 mr-2 bg-foreground ring-2 ring-muted-foreground/40">
+                      <AvatarFallback className="text-background text-xs font-bold bg-foreground">
                         {index + 1}
                       </AvatarFallback>
                     </Avatar>
@@ -332,15 +342,15 @@ export default function PublicEventPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
                 {waitlistBookings.map((booking) => (
                   <Link
                     key={booking.id}
                     href={`/profile/${booking.profiles.id}`}
-                    className="flex items-center p-2 bg-yellow-50 rounded-lg border border-yellow-200 hover:border-yellow-400 hover:bg-yellow-100 transition-all cursor-pointer"
+                    className="flex items-center p-2 bg-muted/20 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/50 transition-all cursor-pointer"
                   >
-                    <Avatar className="w-8 h-8 mr-2 bg-yellow-500">
-                      <AvatarFallback className="text-white text-xs font-bold">
+                    <Avatar className="w-8 h-8 mr-2 bg-muted-foreground ring-2 ring-muted-foreground/40">
+                      <AvatarFallback className="text-background text-xs font-bold bg-muted-foreground">
                         {booking.waitlist_position}
                       </AvatarFallback>
                     </Avatar>

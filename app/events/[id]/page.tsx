@@ -447,6 +447,13 @@ export default function EventDetailsPage() {
                   <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
                 </div>
 
+                {!isRegistrationOpen && event.registration_opens_at && (
+                  <div className="flex items-center text-sm md:text-base text-orange-700">
+                    <span className="mr-2">⏰</span>
+                    <span>Registration opens {formatDateTime(event.registration_opens_at)}</span>
+                  </div>
+                )}
+
                 {event.max_attendees ? (
                   <div className="flex items-center text-sm md:text-base text-gray-900">
                     <span className="mr-2">👥</span>
@@ -500,14 +507,19 @@ export default function EventDetailsPage() {
                 event.status === 'cancelled' ? (
                   <Badge variant="destructive">Cancelled</Badge>
                 ) : !isRegistrationOpen ? (
-                  <Button
-                    variant="outline"
-                    onClick={handleSetAlert}
-                    disabled={settingAlert || alertSet}
-                    size="sm"
-                  >
-                    {alertSet ? 'Alert Set' : settingAlert ? 'Setting...' : 'Alert Me'}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-orange-600 border-orange-600">
+                      Not Open
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      onClick={handleSetAlert}
+                      disabled={settingAlert || alertSet}
+                      size="sm"
+                    >
+                      {alertSet ? 'Alert Set' : settingAlert ? 'Setting...' : 'Alert Me'}
+                    </Button>
+                  </div>
                 ) : (
                   <Button
                     onClick={() => handleBookEvent(event)}
@@ -549,10 +561,10 @@ export default function EventDetailsPage() {
                   <Link
                     key={booking.id}
                     href={`/profile/${booking.profiles.id}`}
-                    className="flex items-center p-2 bg-green-50 rounded-lg border border-green-200 hover:border-green-400 hover:bg-green-100 transition-all cursor-pointer"
+                    className="flex items-center p-2 bg-muted/40 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/60 transition-all cursor-pointer"
                   >
-                    <Avatar className="w-8 h-8 mr-2 bg-green-600 ring-2 ring-green-300">
-                      <AvatarFallback className="text-white text-xs font-bold bg-green-700">
+                    <Avatar className="w-8 h-8 mr-2 bg-foreground ring-2 ring-muted-foreground/40">
+                      <AvatarFallback className="text-background text-xs font-bold bg-foreground">
                         {index + 1}
                       </AvatarFallback>
                     </Avatar>
@@ -582,10 +594,10 @@ export default function EventDetailsPage() {
                   <Link
                     key={booking.id}
                     href={`/profile/${booking.profiles.id}`}
-                    className="flex items-center p-2 bg-yellow-50 rounded-lg border border-yellow-200 hover:border-yellow-400 hover:bg-yellow-100 transition-all cursor-pointer"
+                    className="flex items-center p-2 bg-muted/20 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/50 transition-all cursor-pointer"
                   >
-                    <Avatar className="w-8 h-8 mr-2 bg-yellow-500">
-                      <AvatarFallback className="text-white text-xs font-bold">
+                    <Avatar className="w-8 h-8 mr-2 bg-muted-foreground">
+                      <AvatarFallback className="text-background text-xs font-bold">
                         {booking.waitlist_position}
                       </AvatarFallback>
                     </Avatar>
