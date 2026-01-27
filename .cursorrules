@@ -31,6 +31,13 @@ Next.js App Router pages and API routes
 - app/profile/[id]/page.tsx - Public user profiles (read-only)
 - app/events/[id]/page.tsx - Event details page (auth required)
 - app/event-public/[id]/page.tsx - Public event page (no auth)
+- app/events/manage/page.tsx - Event creator management
+- app/admin/page.tsx - Admin users
+- app/admin/events/page.tsx - Admin events
+- app/admin/bookings/page.tsx - Admin bookings
+- app/admin/requests/page.tsx - Admin role requests
+- app/admin/venues/page.tsx - Admin venues
+- app/events/[id]/attendance/page.tsx - Attendance management
 - app/admin/ - Admin panel (events, users, bookings, attendance, venues)
 - app/api/ - API routes (cron jobs, webhooks)
 
@@ -64,11 +71,16 @@ Static assets (icons, manifest, service worker)
 2. **events**
    - id (uuid, pk)
    - title, description, location (text)
+   - rating (text, default '18+')
+   - status (text, default 'active')
    - date (timestamp)
    - credits_required (integer, default 5)
    - max_attendees (integer, nullable)
    - cancellation_hours (integer, default 4)
+   - registration_opens_at (timestamp, nullable)
    - venue_id (uuid, references venues)
+   - host_user_id (uuid, references profiles)
+   - created_by (uuid, references profiles)
    - location_type ('venue' | 'custom')
    - eventbrite_id, eventbrite_url (text)
    - created_at, updated_at (timestamp)
@@ -77,28 +89,49 @@ Static assets (icons, manifest, service worker)
    - id (uuid, pk)
    - user_id (uuid, references profiles)
    - event_id (uuid, references events)
-   - status ('confirmed' | 'cancelled' | 'waitlist' | 'attended' | 'no_show')
+   - status ('confirmed' | 'cancelled' | 'waitlist')
+   - attendance_status ('attended' | 'no_show', nullable)
    - credits_used (integer)
    - waitlist_position (integer, nullable)
-   - created_at, cancelled_at (timestamp)
+   - booked_at (timestamp)
+   - cancellation_date (timestamp, nullable)
 
 4. **credit_transactions**
    - id (uuid, pk)
    - user_id (uuid, references profiles)
    - amount (integer) - positive for adding, negative for spending
-   - type ('purchase' | 'booking' | 'refund' | 'admin_adjustment' | 'signup_bonus')
-   - description (text)
+   - transaction_type (text)
+   - reference_id (uuid, nullable)
+   - notes (text)
+   - created_by (uuid, nullable)
    - created_at (timestamp)
 
 5. **venues**
    - id (uuid, pk)
-   - name, address, city, province, country, postal_code (text)
-   - notes (text)
-   - is_active (boolean)
+   - name, address (text)
+   - parking_options (text, nullable)
+   - accessibility (text, nullable)
+   - food_drinks_available (boolean)
    - created_at, updated_at (timestamp)
 
 6. **admin_users**
    - user_id (uuid, pk, references auth.users)
+   - created_at (timestamp)
+
+7. **notifications**
+   - id (uuid, pk)
+   - user_id (uuid, references profiles)
+   - type (text)
+   - title, message (text)
+   - read (boolean)
+   - related_booking_id, related_event_id (uuid, nullable)
+   - created_at (timestamp)
+
+8. **registration_alerts**
+   - id (uuid, pk)
+   - user_id (uuid, references profiles)
+   - event_id (uuid, references events)
+   - notified (boolean)
    - created_at (timestamp)
 
 ### Database Functions & Triggers
@@ -156,7 +189,7 @@ When you change profile-related data, update ALL these files:
    - Links to: Own profile
    - Context: Dashboard header greeting
 
-6. app/admin/users/page.tsx
+6. app/admin/page.tsx
    - Shows: full_name, email, credits in user list
    - Context: Admin user management
 
@@ -268,6 +301,8 @@ When to send emails:
 3. sendCancellationConfirmation() - After cancellation
 4. sendWaitlistPromotion() - When promoted from waitlist
 5. sendWelcomeEmail() - New user signup
+6. sendEventCancelledEmail() - Event cancelled by organizer
+7. sendRegistrationOpeningEmail() - Registration opens
 
 **Template Pattern:**
 - HTML email with inline CSS
@@ -291,8 +326,8 @@ await sendBookingConfirmation({
 ```
 
 **Cron Jobs:**
-- app/api/cron/send-reminders/route.ts - Event reminders (every 6 hours)
-- app/api/cron/process-email-queue/route.ts - Waitlist notifications (every 5 mins)
+- app/api/send-reminders/route.ts - Event reminders (daily)
+- app/api/check-registration-opens/route.ts - Registration opens alerts (daily)
 
 ### 🔵 Admin vs User Routes
 **Admin routes** (require admin_users entry):
@@ -304,6 +339,8 @@ await sendBookingConfirmation({
 - app/dashboard/page.tsx
 - app/profile/page.tsx
 - app/events/[id]/page.tsx
+- app/events/manage/page.tsx
+- app/events/[id]/attendance/page.tsx
 - Check: const { data: { user } } = await supabase.auth.getUser()
 - Redirect: Unauthenticated to /login
 
@@ -776,8 +813,12 @@ Vercel auto-deploys on push to main branch.
 {
   "crons": [
     {
-      "path": "/api/cron/send-reminders",
-      "schedule": "0 */6 * * *"
+      "path": "/api/send-reminders",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/check-registration-opens",
+      "schedule": "0 8 * * *"
     }
   ]
 }
