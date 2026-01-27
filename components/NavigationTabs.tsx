@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -25,6 +25,7 @@ export default function NavigationTabs() {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const warnedRealtimeRef = useRef(false)
   const [feedbackForm, setFeedbackForm] = useState({
     email: '',
     rating: '',
@@ -104,14 +105,19 @@ export default function NavigationTabs() {
               if (status === 'SUBSCRIBED') {
                 console.log('Successfully subscribed to notifications')
               } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                // Silently handle subscription errors - fallback to periodic refresh
-                // This can happen if real-time replication is not enabled or network issues occur
-                console.warn('Notifications subscription unavailable, using periodic refresh')
+                // Fallback to periodic refresh; avoid spamming console
+                if (!warnedRealtimeRef.current) {
+                  console.debug('Notifications subscription unavailable, using periodic refresh')
+                  warnedRealtimeRef.current = true
+                }
               }
             })
         } catch (subscriptionError) {
           // If subscription fails, we'll rely on periodic refresh
-          console.warn('Failed to set up notifications subscription, using periodic refresh:', subscriptionError)
+          if (!warnedRealtimeRef.current) {
+            console.debug('Failed to set up notifications subscription, using periodic refresh')
+            warnedRealtimeRef.current = true
+          }
         }
 
         // Fallback: Periodic refresh every 30 seconds to ensure count stays updated
@@ -121,7 +127,10 @@ export default function NavigationTabs() {
         }, 30000) // 30 seconds
       } catch (error) {
         // If setup fails completely, still try to load count periodically
-        console.warn('Error setting up notifications, using periodic refresh only:', error)
+        if (!warnedRealtimeRef.current) {
+          console.debug('Error setting up notifications, using periodic refresh only')
+          warnedRealtimeRef.current = true
+        }
         refreshInterval = setInterval(() => {
           loadUnreadCount()
         }, 30000)

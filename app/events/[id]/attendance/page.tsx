@@ -194,17 +194,59 @@ export default function AttendancePage() {
     }
   }
 
+  function recalcStats(updatedBookings: BookingWithProfile[]) {
+    const total = updatedBookings.length
+    const attended = updatedBookings.filter((b) => b.attendance_status === 'attended').length
+    const noShow = total - attended
+    const confirmed = updatedBookings.filter((b) => !b.attendance_status || b.attendance_status === 'confirmed').length
+    const pending = updatedBookings.filter((b) => !b.attendance_status).length
+
+    setStats({
+      total,
+      confirmed,
+      attended,
+      noShow,
+      pending
+    })
+  }
+
   async function updateAttendance(bookingId: string, status: 'attended' | null) {
     setUpdating(bookingId)
     try {
-      const { error } = await supabase
-        .from('bookings')
-        .update({ attendance_status: status })
-        .eq('id', bookingId)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
 
-      if (error) throw error
+      const response = await fetch('/api/update-attendance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ bookingId, status }),
+      })
 
-      await loadData((await supabase.auth.getUser()).data.user!.id)
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to update attendance')
+      }
+
+      setBookings((prev) => {
+        const updated = prev.map((booking) =>
+          booking.id === bookingId
+            ? { ...booking, attendance_status: status }
+            : booking
+        )
+        recalcStats(updated)
+        return updated
+      })
+
+      // Lightweight background refresh to keep data in sync
+      setTimeout(async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          loadData(user.id)
+        }
+      }, 1200)
     } catch (error: any) {
       console.error('Error updating attendance:', error)
       alert('Error updating attendance: ' + error.message)

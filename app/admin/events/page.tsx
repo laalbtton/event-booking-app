@@ -181,12 +181,28 @@ export default function AdminEventsPage() {
     setSubmitting(true)
 
     try {
+      // Get venue address for selected venue
+      let locationValue = ''
+      if (formData.venue_id) {
+        const selectedVenue = venues.find(v => v.id === formData.venue_id)
+        if (selectedVenue) {
+          locationValue = `${selectedVenue.name}, ${selectedVenue.address}`
+        }
+      }
+
+      if (!formData.venue_id) {
+        alert('Please select a venue')
+        setSubmitting(false)
+        return
+      }
+
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
+        rating: formData.rating || '18+',
         date: new Date(formData.date).toISOString(),
-        location: location,
+        location: locationValue,
         credits_required: parseInt(formData.credits_required),
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
         cancellation_hours: parseInt(formData.cancellation_hours),

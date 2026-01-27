@@ -112,13 +112,21 @@ export default function EventDetailsPage() {
           .maybeSingle()
         setUserBooking(userBookingData || null)
 
-        const { data: alertsData } = await supabase
+        const { data: alertsData, error: alertsError } = await supabase
           .from('registration_alerts')
           .select('id')
           .eq('user_id', user.id)
           .eq('event_id', eventId)
           .maybeSingle()
-        setAlertSet(!!alertsData)
+        if (alertsError) {
+          const missingTable = alertsError.code === '42P01' || alertsError.message?.includes('registration_alerts')
+          if (!missingTable) {
+            console.warn('Error loading registration alert:', alertsError)
+          }
+          setAlertSet(false)
+        } else {
+          setAlertSet(!!alertsData)
+        }
       }
 
       // Load event details

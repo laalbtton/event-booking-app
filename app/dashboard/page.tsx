@@ -32,6 +32,27 @@ export default function Dashboard() {
   const [alertSet, setAlertSet] = useState<Set<string>>(new Set())
   const router = useRouter()
 
+  function formatLocationValue(value: unknown): string {
+    if (!value) return 'TBD'
+    if (typeof value === 'string') return value
+    if (typeof value === 'object' && value !== null) {
+      const maybeVenue = value as { name?: string; address?: string; pathname?: string }
+      if (maybeVenue.name && maybeVenue.address) {
+        return `${maybeVenue.name}, ${maybeVenue.address}`
+      }
+      if (maybeVenue.pathname) {
+        return maybeVenue.pathname
+      }
+    }
+    return 'TBD'
+  }
+
+  function formatVenueName(value: unknown): string {
+    const location = formatLocationValue(value)
+    const [name] = location.split(',')
+    return name.trim() || location
+  }
+
   useEffect(() => {
     checkAuth()
   }, [])
@@ -362,7 +383,13 @@ export default function Dashboard() {
         .select('event_id')
         .eq('user_id', userId)
 
-      if (!alertsError && alertsData) {
+      if (alertsError) {
+        const missingTable = alertsError.code === '42P01' || alertsError.message?.includes('registration_alerts')
+        if (!missingTable) {
+          console.warn('Error loading registration alerts:', alertsError)
+        }
+        setAlertSet(new Set())
+      } else if (alertsData) {
         setAlertSet(new Set(alertsData.map(a => a.event_id)))
       }
 
@@ -882,7 +909,9 @@ export default function Dashboard() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <p className="text-sm text-muted-foreground line-clamp-2">{booking.events.description}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-1 break-words whitespace-normal">
+                        {booking.events.description}
+                      </p>
                       
                       <div className="text-xs text-muted-foreground">
                         <div className="flex items-center justify-between gap-2 mb-1">
@@ -894,13 +923,21 @@ export default function Dashboard() {
                             <div className="whitespace-nowrap">👥 Max {booking.events.max_attendees}</div>
                           )}
                         </div>
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="flex items-center gap-1">
                             <span>📍</span>
-                            <span>{booking.events.location}</span>
+                            <span>{formatVenueName(booking.events.location)}</span>
                           </div>
                           <div className="whitespace-nowrap">
-                            {booking.events.theme ? `🎨 ${booking.events.theme} • ` : ''}🔞 {booking.events.rating || '18+'}
+                            {booking.events.theme ? `🎨 ${booking.events.theme}` : ''}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1">
+                            <span className="sr-only">Rating</span>
+                          </div>
+                          <div className="whitespace-nowrap">
+                            🔞 {booking.events.rating || '18+'}
                           </div>
                         </div>
                       </div>
@@ -1000,7 +1037,9 @@ export default function Dashboard() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <p className="text-sm text-muted-foreground line-clamp-2">{event.description}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-1 break-words whitespace-normal">
+                        {event.description}
+                      </p>
                       
                       <div className="text-xs text-muted-foreground">
                         <div className="flex items-center justify-between gap-2 mb-1">
@@ -1015,10 +1054,18 @@ export default function Dashboard() {
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="flex items-center gap-1">
                             <span>📍</span>
-                            <span>{event.location}</span>
+                            <span>{formatVenueName(event.location)}</span>
                           </div>
                           <div className="whitespace-nowrap">
-                            {event.theme ? `🎨 ${event.theme} • ` : ''}🔞 {event.rating || '18+'}
+                            {event.theme ? `🎨 ${event.theme}` : ''}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1">
+                            <span className="sr-only">Rating</span>
+                          </div>
+                          <div className="whitespace-nowrap">
+                            🔞 {event.rating || '18+'}
                           </div>
                         </div>
                         {!isRegistrationOpen && registrationOpensAt && (
