@@ -877,11 +877,11 @@ export default function Dashboard() {
                   <Link
                     key={booking.id}
                     href={`/events/${booking.event_id}`}
-                    className="block"
+                    className="block active:opacity-90"
                   >
                     <Card
                       className={cn(
-                        "border-l-4 hover:border-primary/60 hover:shadow-sm transition-all",
+                        "border-l-4 hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40",
                         isEventCancelled
                           ? "border-l-red-500"
                           : isWaitlist
@@ -911,22 +911,24 @@ export default function Dashboard() {
                         )}
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-2">
                       <p className="text-xs text-muted-foreground line-clamp-1 break-words whitespace-normal">
                         {booking.events.description}
                       </p>
                       
                       <div className="text-xs text-muted-foreground">
-                        <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-1">
                             <span>📅</span>
                             <span>{formatDateTime(booking.events.date)}</span>
                           </div>
-                          {booking.events.max_attendees && (
-                            <div className="whitespace-nowrap">👥 Max {booking.events.max_attendees}</div>
+                          {booking.events.max_attendees && spotsLeft !== null && (
+                            <div className="whitespace-nowrap">
+                              👥 {spotsLeft} / {booking.events.max_attendees} spots left
+                            </div>
                           )}
                         </div>
-                        <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-1">
                             <span>📍</span>
                             <span>{formatVenueName(booking.events.location)}</span>
@@ -935,17 +937,6 @@ export default function Dashboard() {
                             {booking.events.theme ? `🎨 ${booking.events.theme}` : ''}
                           </div>
                         </div>
-                        {booking.events.max_attendees && spotsLeft !== null && (
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <div className="flex items-center gap-1">
-                              <span>👥</span>
-                              <span>{spotsLeft} / {booking.events.max_attendees} spots left</span>
-                            </div>
-                            <div className="whitespace-nowrap">
-                              {/* keep right side empty for alignment */}
-                            </div>
-                          </div>
-                        )}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1">
                             <span className="sr-only">Rating</span>
@@ -1042,8 +1033,12 @@ export default function Dashboard() {
                   : null
 
                 return (
-                  <Link key={event.id} href={`/events/${event.id}`} className="block">
-                    <Card className="hover:border-primary/60 hover:shadow-sm transition-all">
+                  <Link
+                    key={event.id}
+                    href={`/events/${event.id}`}
+                    className="block active:opacity-90"
+                  >
+                    <Card className="hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40">
                     <CardHeader className="pb-3">
                       <div className="flex justify-between items-start gap-2">
                         <CardTitle className="text-base md:text-lg flex-1">
@@ -1054,22 +1049,24 @@ export default function Dashboard() {
                         </Badge>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-2">
                       <p className="text-xs text-muted-foreground line-clamp-1 break-words whitespace-normal">
                         {event.description}
                       </p>
                       
                       <div className="text-xs text-muted-foreground">
-                        <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-1">
                             <span>📅</span>
                             <span>{formatDateTime(event.date)}</span>
                           </div>
-                          {event.max_attendees && (
-                            <div className="whitespace-nowrap">👥 Max {event.max_attendees}</div>
+                          {event.max_attendees && spotsLeft !== null && (
+                            <div className="whitespace-nowrap">
+                              👥 {spotsLeft} / {event.max_attendees} spots left
+                            </div>
                           )}
                         </div>
-                        <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-1">
                             <span>📍</span>
                             <span>{formatVenueName(event.location)}</span>
@@ -1078,17 +1075,6 @@ export default function Dashboard() {
                             {event.theme ? `🎨 ${event.theme}` : ''}
                           </div>
                         </div>
-                        {event.max_attendees && spotsLeft !== null && (
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <div className="flex items-center gap-1">
-                              <span>👥</span>
-                              <span>{spotsLeft} / {event.max_attendees} spots left</span>
-                            </div>
-                            <div className="whitespace-nowrap">
-                              {/* keep right side empty for alignment */}
-                            </div>
-                          </div>
-                        )}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1">
                             <span className="sr-only">Rating</span>

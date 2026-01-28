@@ -239,14 +239,6 @@ export default function AttendancePage() {
         recalcStats(updated)
         return updated
       })
-
-      // Lightweight background refresh to keep data in sync
-      setTimeout(async () => {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          loadData(user.id)
-        }
-      }, 1200)
     } catch (error: any) {
       console.error('Error updating attendance:', error)
       alert('Error updating attendance: ' + error.message)
