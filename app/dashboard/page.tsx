@@ -863,6 +863,10 @@ export default function Dashboard() {
 
                 const isWaitlist = booking.status === 'waitlist'
                 const isEventCancelled = booking.events.status === 'cancelled'
+                const confirmedCount = eventConfirmedCounts[booking.event_id] || 0
+                const spotsLeft = booking.events.max_attendees !== null
+                  ? booking.events.max_attendees - confirmedCount
+                  : null
                 const borderColor = isEventCancelled
                   ? 'border-red-500'
                   : isWaitlist
@@ -870,26 +874,25 @@ export default function Dashboard() {
                     : 'border-green-500'
 
                 return (
-                  <Card
+                  <Link
                     key={booking.id}
-                    className={cn(
-                      "border-l-4",
-                      isEventCancelled
-                        ? "border-l-red-500"
-                        : isWaitlist
-                          ? "border-l-yellow-500"
-                          : "border-l-green-500"
-                    )}
+                    href={`/events/${booking.event_id}`}
+                    className="block"
                   >
+                    <Card
+                      className={cn(
+                        "border-l-4 hover:border-primary/60 hover:shadow-sm transition-all",
+                        isEventCancelled
+                          ? "border-l-red-500"
+                          : isWaitlist
+                            ? "border-l-yellow-500"
+                            : "border-l-green-500"
+                      )}
+                    >
                     <CardHeader className="pb-3">
                       <div className="flex justify-between items-start">
                         <CardTitle className="text-base md:text-lg flex-1">
-                          <Link 
-                            href={`/events/${booking.event_id}`}
-                            className="text-primary hover:underline"
-                          >
-                            {booking.events.title}
-                          </Link>
+                          {booking.events.title}
                         </CardTitle>
                         {!isPast && (
                           isEventCancelled ? (
@@ -932,6 +935,17 @@ export default function Dashboard() {
                             {booking.events.theme ? `🎨 ${booking.events.theme}` : ''}
                           </div>
                         </div>
+                        {booking.events.max_attendees && spotsLeft !== null && (
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <div className="flex items-center gap-1">
+                              <span>👥</span>
+                              <span>{spotsLeft} / {booking.events.max_attendees} spots left</span>
+                            </div>
+                            <div className="whitespace-nowrap">
+                              {/* keep right side empty for alignment */}
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1">
                             <span className="sr-only">Rating</span>
@@ -961,7 +975,11 @@ export default function Dashboard() {
                       {canCancel && (
                         <div className="space-y-2 pt-2 border-t">
                           <Button
-                            onClick={() => handleCancelBooking(booking)}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleCancelBooking(booking)
+                            }}
                             disabled={cancellingBooking === booking.id}
                             variant="destructive"
                             size="sm"
@@ -987,6 +1005,7 @@ export default function Dashboard() {
                       )}
                     </CardContent>
                   </Card>
+                </Link>
                 )
               })}
             </div>
@@ -1018,18 +1037,17 @@ export default function Dashboard() {
                 // Check if event is full
                 const confirmedCount = eventConfirmedCounts[event.id] || 0
                 const isFull = event.max_attendees !== null && confirmedCount >= event.max_attendees
+                const spotsLeft = event.max_attendees !== null
+                  ? event.max_attendees - confirmedCount
+                  : null
 
                 return (
-                  <Card key={event.id}>
+                  <Link key={event.id} href={`/events/${event.id}`} className="block">
+                    <Card className="hover:border-primary/60 hover:shadow-sm transition-all">
                     <CardHeader className="pb-3">
                       <div className="flex justify-between items-start gap-2">
                         <CardTitle className="text-base md:text-lg flex-1">
-                          <Link 
-                            href={`/events/${event.id}`}
-                            className="text-primary hover:underline"
-                          >
-                            {event.title}
-                          </Link>
+                          {event.title}
                         </CardTitle>
                         <Badge variant="secondary" className="whitespace-nowrap">
                           {event.credits_required} {event.credits_required === 1 ? 'credit' : 'credits'}
@@ -1060,6 +1078,17 @@ export default function Dashboard() {
                             {event.theme ? `🎨 ${event.theme}` : ''}
                           </div>
                         </div>
+                        {event.max_attendees && spotsLeft !== null && (
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <div className="flex items-center gap-1">
+                              <span>👥</span>
+                              <span>{spotsLeft} / {event.max_attendees} spots left</span>
+                            </div>
+                            <div className="whitespace-nowrap">
+                              {/* keep right side empty for alignment */}
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1">
                             <span className="sr-only">Rating</span>
@@ -1101,7 +1130,11 @@ export default function Dashboard() {
                             </Badge>
                             {!alertSet.has(event.id) && (
                               <Button
-                                onClick={() => handleSetAlert(event.id)}
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  handleSetAlert(event.id)
+                                }}
                                 disabled={settingAlert === event.id}
                                 size="sm"
                                 variant="outline"
@@ -1118,7 +1151,11 @@ export default function Dashboard() {
                           </div>
                         ) : (
                           <Button
-                            onClick={() => handleBookEvent(event)}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleBookEvent(event)
+                            }}
                             disabled={!canAfford || isBooking}
                             size="sm"
                             className="text-xs"
@@ -1135,6 +1172,7 @@ export default function Dashboard() {
                       </div>
                     </CardContent>
                   </Card>
+                </Link>
                 )
               })}
             </div>
