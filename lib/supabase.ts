@@ -54,6 +54,7 @@ export type Event = {
   rating: string | null
   status?: string | null
   date: string
+  end_time: string | null
   location: string | null
   credits_required: number
   max_attendees: number | null

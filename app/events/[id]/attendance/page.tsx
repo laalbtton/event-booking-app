@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
@@ -8,9 +8,9 @@ import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { GripVertical, User, CheckCircle2, XCircle } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { GripVertical, User, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type BookingWithProfile = {
@@ -19,6 +19,7 @@ type BookingWithProfile = {
   status: string
   attendance_status: string | null
   booked_at: string
+  waitlist_position?: number | null
   profiles: {
     id: string
     full_name: string
@@ -50,6 +51,7 @@ export default function AttendancePage() {
 
   const [event, setEvent] = useState<EventDetails | null>(null)
   const [bookings, setBookings] = useState<BookingWithProfile[]>([])
+  const [waitlistBookings, setWaitlistBookings] = useState<BookingWithProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
@@ -65,6 +67,13 @@ export default function AttendancePage() {
   const [draggedItem, setDraggedItem] = useState<string | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [isDraggingOverHost, setIsDraggingOverHost] = useState(false)
+  const [isDraggingOverWaitlist, setIsDraggingOverWaitlist] = useState(false)
+  const [isDraggingOverConfirmed, setIsDraggingOverConfirmed] = useState(false)
+  const [swipingId, setSwipingId] = useState<string | null>(null)
+  const [swipeOffset, setSwipeOffset] = useState<Record<string, number>>({})
+  const [swipeDirection, setSwipeDirection] = useState<Record<string, 'left' | 'right'>>({})
+  const touchStartX = useRef<Record<string, number>>({})
+  const touchStartY = useRef<Record<string, number>>({})
 
   useEffect(() => {
     checkAuth()
@@ -158,6 +167,7 @@ export default function AttendancePage() {
           status,
           attendance_status,
           booked_at,
+          waitlist_position,
           profiles (
             id,
             full_name,
@@ -170,6 +180,29 @@ export default function AttendancePage() {
 
       if (bookingsError) throw bookingsError
       setBookings(bookingsData as any)
+
+      const { data: waitlistData, error: waitlistError } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          user_id,
+          status,
+          attendance_status,
+          booked_at,
+          waitlist_position,
+          profiles (
+            id,
+            full_name,
+            email
+          )
+        `)
+        .eq('event_id', eventId)
+        .eq('status', 'waitlist')
+        .order('waitlist_position', { ascending: true })
+        .order('booked_at', { ascending: true })
+
+      if (waitlistError) throw waitlistError
+      setWaitlistBookings(waitlistData as any)
 
       // Calculate stats
       const total = bookingsData?.length || 0
@@ -247,6 +280,88 @@ export default function AttendancePage() {
     }
   }
 
+  async function updateBookingStatus(bookingId: string, nextStatus: 'confirmed' | 'waitlist') {
+    setUpdating(bookingId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/update-booking-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ bookingId, status: nextStatus }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to update booking')
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await loadData(user.id)
+      }
+    } catch (error: any) {
+      console.error('Error updating booking:', error)
+      alert('Error updating booking: ' + error.message)
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  async function removeAttendee(bookingId: string) {
+    setUpdating(bookingId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/remove-attendee', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ bookingId }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to remove attendee')
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await loadData(user.id)
+      }
+    } catch (error: any) {
+      console.error('Error removing attendee:', error)
+      alert('Error removing attendee: ' + error.message)
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  function copyAttendanceList() {
+    const attended = bookings.filter((booking) => booking.attendance_status === 'attended')
+    const noShow = bookings.filter((booking) => booking.attendance_status !== 'attended')
+
+    const attendedLines = attended.map((booking, index) =>
+      `${index + 1}. ${booking.profiles.full_name || 'No name'}`
+    )
+    const noShowLines = noShow.map((booking, index) =>
+      `${index + 1}. ${booking.profiles.full_name || 'No name'}`
+    )
+
+    let text = `Attending (${attendedLines.length})\n${attendedLines.join('\n') || 'None'}`
+    text += `\n\nNo Show (${noShowLines.length})\n${noShowLines.join('\n') || 'None'}`
+
+    navigator.clipboard.writeText(text)
+    alert('Attendance list copied!')
+  }
+
   async function setHost(userId: string | null) {
     setUpdating('host')
     try {
@@ -288,6 +403,8 @@ export default function AttendancePage() {
   function handleDragLeave() {
     setDragOverIndex(null)
     setIsDraggingOverHost(false)
+    setIsDraggingOverWaitlist(false)
+    setIsDraggingOverConfirmed(false)
   }
 
   function handleDrop(e: React.DragEvent, targetIndex?: number) {
@@ -319,12 +436,85 @@ export default function AttendancePage() {
 
     setDragOverIndex(null)
     setDraggedItem(null)
+    setIsDraggingOverWaitlist(false)
+    setIsDraggingOverConfirmed(false)
   }
 
   function handleHostDragOver(e: React.DragEvent) {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setIsDraggingOverHost(true)
+  }
+
+  function handleWaitlistDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setIsDraggingOverWaitlist(true)
+  }
+
+  function handleConfirmedDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setIsDraggingOverConfirmed(true)
+  }
+
+  function handleDropToStatus(status: 'confirmed' | 'waitlist') {
+    if (!draggedItem) return
+    const isAlreadyConfirmed = bookings.some((booking) => booking.id === draggedItem)
+    const isAlreadyWaitlist = waitlistBookings.some((booking) => booking.id === draggedItem)
+    if (status === 'confirmed' && isAlreadyConfirmed) return
+    if (status === 'waitlist' && isAlreadyWaitlist) return
+    updateBookingStatus(draggedItem, status)
+    setDraggedItem(null)
+    setIsDraggingOverWaitlist(false)
+    setIsDraggingOverConfirmed(false)
+  }
+
+  function handleTouchStart(e: React.TouchEvent, bookingId: string) {
+    touchStartX.current[bookingId] = e.touches[0].clientX
+    touchStartY.current[bookingId] = e.touches[0].clientY
+    setSwipingId(bookingId)
+  }
+
+  function handleTouchMove(e: React.TouchEvent, bookingId: string) {
+    if (swipingId !== bookingId) return
+
+    const currentX = e.touches[0].clientX
+    const currentY = e.touches[0].clientY
+    const startX = touchStartX.current[bookingId]
+    const startY = touchStartY.current[bookingId]
+
+    const deltaX = currentX - startX
+    const deltaY = Math.abs(currentY - startY)
+
+    if (deltaY < 50 && deltaX < 0) {
+      const offset = Math.max(deltaX, -100)
+      setSwipeOffset(prev => ({ ...prev, [bookingId]: offset }))
+      setSwipeDirection(prev => ({ ...prev, [bookingId]: 'left' }))
+    }
+  }
+
+  function handleTouchEnd(bookingId: string) {
+    const offset = swipeOffset[bookingId] || 0
+    const direction = swipeDirection[bookingId]
+
+    if (direction === 'left' && offset < -50) {
+      removeAttendee(bookingId)
+    }
+
+    setSwipeOffset(prev => {
+      const next = { ...prev }
+      delete next[bookingId]
+      return next
+    })
+    setSwipeDirection(prev => {
+      const next = { ...prev }
+      delete next[bookingId]
+      return next
+    })
+    setSwipingId(null)
+    touchStartX.current[bookingId] = 0
+    touchStartY.current[bookingId] = 0
   }
 
   if (loading) {
@@ -424,10 +614,20 @@ export default function AttendancePage() {
 
         {/* Bookings List */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle>Confirmed Bookings ({bookings.length})</CardTitle>
+            <Button variant="outline" size="icon" onClick={copyAttendanceList} aria-label="Copy attendance list">
+              <Copy className="h-4 w-4" />
+            </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent
+            onDragOver={handleConfirmedDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={() => handleDropToStatus('confirmed')}
+            className={cn(
+              isDraggingOverConfirmed && "rounded-lg bg-blue-50 border border-blue-200"
+            )}
+          >
             {bookings.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">No confirmed bookings for this event</p>
             ) : (
@@ -446,6 +646,10 @@ export default function AttendancePage() {
                       onDragOver={(e) => handleDragOver(e, index)}
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
+                      onTouchStart={(e) => handleTouchStart(e, booking.id)}
+                      onTouchMove={(e) => handleTouchMove(e, booking.id)}
+                      onTouchEnd={() => handleTouchEnd(booking.id)}
+                      style={{ transform: `translateX(${swipeOffset[booking.id] || 0}px)` }}
                       className={cn(
                         "flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all cursor-move",
                         isDragged && "opacity-50",
@@ -454,12 +658,6 @@ export default function AttendancePage() {
                       )}
                     >
                       <GripVertical className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                      
-                      <Avatar className="flex-shrink-0">
-                        <AvatarFallback>
-                          {getInitials(booking.profiles.full_name || 'N/A')}
-                        </AvatarFallback>
-                      </Avatar>
 
                       <div className="flex-1 min-w-0">
                         <Link
@@ -475,45 +673,60 @@ export default function AttendancePage() {
                       </div>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {attendanceStatus === 'attended' ? (
-                          <Badge variant="default" className="bg-green-100 text-green-700 border-green-200">
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                            <span className="hidden sm:inline">Attended</span>
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive">
-                            <XCircle className="w-3 h-3 mr-1" />
-                            <span className="hidden sm:inline">No Show</span>
-                          </Badge>
-                        )}
-                        
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={() => updateAttendance(booking.id, attendanceStatus === 'attended' ? null : 'attended')}
-                            disabled={isUpdating}
-                            variant={attendanceStatus === 'attended' ? 'secondary' : 'default'}
-                            size="sm"
-                            className={attendanceStatus === 'attended' ? 'bg-green-600 hover:bg-green-700' : ''}
-                          >
-                            {isUpdating ? '...' : attendanceStatus === 'attended' ? '✓' : '✓'}
-                          </Button>
-                          {attendanceStatus && (
-                            <Button
-                              onClick={() => updateAttendance(booking.id, null)}
-                              disabled={isUpdating}
-                              variant="outline"
-                              size="sm"
-                            >
-                              Reset
-                            </Button>
-                          )}
-                        </div>
+                        <Switch
+                          checked={attendanceStatus === 'attended'}
+                          disabled={isUpdating}
+                          onCheckedChange={(checked) => updateAttendance(booking.id, checked ? 'attended' : null)}
+                          aria-label="Mark attended"
+                        />
                       </div>
                     </div>
                   )
                 })}
               </div>
             )}
+            <div
+              className={cn("mt-6 rounded-lg", isDraggingOverWaitlist && "bg-blue-50 border border-blue-200")}
+              onDragOver={handleWaitlistDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={() => handleDropToStatus('waitlist')}
+            >
+              <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+                Waitlist ({waitlistBookings.length})
+              </h3>
+              {waitlistBookings.length === 0 ? (
+                <p className="text-muted-foreground text-center py-6 text-sm">No waitlisted attendees</p>
+              ) : (
+                <div className="space-y-2">
+                  {waitlistBookings.map((booking) => {
+                    const isUpdating = updating === booking.id
+                    return (
+                      <div
+                        key={booking.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, booking.id)}
+                        className="flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all hover:bg-gray-50"
+                      >
+                        <span className="text-xs font-semibold text-muted-foreground w-6 text-center">
+                          {booking.waitlist_position ?? '-'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <Link
+                            href={`/profile/${booking.profiles.id}`}
+                            className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
+                          >
+                            {booking.profiles.full_name || 'No name'}
+                          </Link>
+                        </div>
+                        {isUpdating && (
+                          <span className="text-xs text-muted-foreground">Updating...</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 

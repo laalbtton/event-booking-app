@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { Copy } from 'lucide-react'
 
 
 
@@ -78,10 +79,27 @@ export default function EventDetailsPage() {
 
 
   function copyPublicLink() {
-  const publicUrl = `${window.location.origin}/event-public/${eventId}`
-  navigator.clipboard.writeText(publicUrl)
-  alert('Public link copied to clipboard!')
-}
+    const publicUrl = `${window.location.origin}/event-public/${eventId}`
+    navigator.clipboard.writeText(publicUrl)
+    alert('Public link copied to clipboard!')
+  }
+
+  function copyAttendeeList() {
+    const confirmed = confirmedBookings.map((booking, index) =>
+      `${index + 1}. ${booking.profiles.full_name || 'No name'}`
+    )
+    const waitlist = waitlistBookings.map((booking, index) =>
+      `${index + 1}. ${booking.profiles.full_name || 'No name'}`
+    )
+
+    let text = `Confirmed Attendees (${confirmed.length})\n${confirmed.join('\n') || 'None'}`
+    if (waitlist.length > 0) {
+      text += `\n\nWaitlist (${waitlist.length})\n${waitlist.join('\n')}`
+    }
+
+    navigator.clipboard.writeText(text)
+    alert('Attendee list copied!')
+  }
 
   useEffect(() => {
     loadEventDetails()
@@ -546,10 +564,13 @@ export default function EventDetailsPage() {
 
         {/* Confirmed Attendees */}
         <Card className="mb-6">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="text-lg md:text-xl">
               Confirmed Attendees ({confirmedBookings.length})
             </CardTitle>
+            <Button variant="outline" size="icon" onClick={copyAttendeeList} aria-label="Copy attendee list">
+              <Copy className="h-4 w-4" />
+            </Button>
           </CardHeader>
           <CardContent>
 
@@ -594,10 +615,10 @@ export default function EventDetailsPage() {
                   <Link
                     key={booking.id}
                     href={`/profile/${booking.profiles.id}`}
-                    className="flex items-center p-2 bg-muted/20 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/50 transition-all cursor-pointer"
+                    className="flex items-center p-2 bg-muted/40 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/60 transition-all cursor-pointer"
                   >
-                    <Avatar className="w-8 h-8 mr-2 bg-muted-foreground">
-                      <AvatarFallback className="text-background text-xs font-bold">
+                    <Avatar className="w-8 h-8 mr-2 bg-foreground ring-2 ring-muted-foreground/40">
+                      <AvatarFallback className="text-background text-xs font-bold bg-foreground">
                         {booking.waitlist_position}
                       </AvatarFallback>
                     </Avatar>

@@ -348,10 +348,10 @@ export default function PublicEventPage() {
                   <Link
                     key={booking.id}
                     href={`/profile/${booking.profiles.id}`}
-                    className="flex items-center p-2 bg-muted/20 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/50 transition-all cursor-pointer"
+                    className="flex items-center p-2 bg-muted/40 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/60 transition-all cursor-pointer"
                   >
-                    <Avatar className="w-8 h-8 mr-2 bg-muted-foreground ring-2 ring-muted-foreground/40">
-                      <AvatarFallback className="text-background text-xs font-bold bg-muted-foreground">
+                    <Avatar className="w-8 h-8 mr-2 bg-foreground ring-2 ring-muted-foreground/40">
+                      <AvatarFallback className="text-background text-xs font-bold bg-foreground">
                         {booking.waitlist_position}
                       </AvatarFallback>
                     </Avatar>

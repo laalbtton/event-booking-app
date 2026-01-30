@@ -37,6 +37,8 @@ export default function AdminEventsPage() {
     theme: '',
     rating: '18+',
     date: '',
+    end_time: '',
+    duration_hours: '2',
     venue_id: '',
     credits_required: '5',
     max_attendees: '',
@@ -44,6 +46,39 @@ export default function AdminEventsPage() {
     open_registration_now: true,
     registration_opens_at: ''
   })
+
+  function toLocalDateTimeString(date: Date): string {
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16)
+  }
+
+  function computeEndTime(startValue: string, durationMinutes: number): string {
+    if (!startValue) return ''
+    const start = new Date(startValue)
+    if (Number.isNaN(start.getTime())) return ''
+    return toLocalDateTimeString(new Date(start.getTime() + durationMinutes * 60000))
+  }
+
+  function computeDurationMinutes(startValue: string, endValue: string): number | null {
+    if (!startValue || !endValue) return null
+    const start = new Date(startValue)
+    const end = new Date(endValue)
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null
+    const diffMinutes = Math.round((end.getTime() - start.getTime()) / 60000)
+    if (diffMinutes <= 0) return null
+    return Math.round(diffMinutes / 30) * 30
+  }
+
+  function minutesToHoursString(minutes: number): string {
+    return (minutes / 60).toString()
+  }
+
+  function hoursToMinutes(hoursValue: string): number {
+    const hours = parseFloat(hoursValue)
+    if (Number.isNaN(hours) || hours <= 0) return 120
+    return Math.round(hours * 60)
+  }
 
   useEffect(() => {
     loadEvents()
@@ -97,12 +132,17 @@ export default function AdminEventsPage() {
         return
       }
 
+      const durationMinutes = hoursToMinutes(formData.duration_hours)
+      const endTimeValue = formData.end_time || computeEndTime(formData.date, durationMinutes)
+      const endTimeIso = endTimeValue ? new Date(endTimeValue).toISOString() : null
+
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
         rating: formData.rating || '18+',
         date: new Date(formData.date).toISOString(),
+        end_time: endTimeIso,
         venue_id: formData.venue_id || null,
         location: location,
         credits_required: parseInt(formData.credits_required),
@@ -142,15 +182,16 @@ export default function AdminEventsPage() {
     setEditingEvent(event)
     // Convert ISO date to datetime-local format
     const eventDate = new Date(event.date)
-    const localDateTime = new Date(eventDate.getTime() - eventDate.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 16)
+    const localDateTime = toLocalDateTimeString(eventDate)
     
     const regOpensAt = event.registration_opens_at
-      ? new Date(new Date(event.registration_opens_at).getTime() - new Date(event.registration_opens_at).getTimezoneOffset() * 60000)
-          .toISOString()
-          .slice(0, 16)
+      ? toLocalDateTimeString(new Date(event.registration_opens_at))
       : ''
+
+    const endTimeValue = (event as any).end_time
+      ? toLocalDateTimeString(new Date((event as any).end_time))
+      : computeEndTime(localDateTime, 120)
+    const durationMinutes = computeDurationMinutes(localDateTime, endTimeValue) || 120
 
     // Load venue_id if it exists
     let venueId = ''
@@ -164,6 +205,8 @@ export default function AdminEventsPage() {
       theme: event.theme || '',
       rating: (event as any).rating || '18+',
       date: localDateTime,
+      end_time: endTimeValue,
+      duration_hours: minutesToHoursString(durationMinutes),
       venue_id: venueId,
       credits_required: event.credits_required.toString(),
       max_attendees: event.max_attendees ? event.max_attendees.toString() : '',
@@ -196,15 +239,23 @@ export default function AdminEventsPage() {
         return
       }
 
+      const previousMax = editingEvent.max_attendees ?? null
+      const nextMax = formData.max_attendees ? parseInt(formData.max_attendees) : null
+
+      const durationMinutes = hoursToMinutes(formData.duration_hours)
+      const endTimeValue = formData.end_time || computeEndTime(formData.date, durationMinutes)
+      const endTimeIso = endTimeValue ? new Date(endTimeValue).toISOString() : null
+
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
         rating: formData.rating || '18+',
         date: new Date(formData.date).toISOString(),
+        end_time: endTimeIso,
         location: locationValue,
         credits_required: parseInt(formData.credits_required),
-        max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
+        max_attendees: nextMax,
         cancellation_hours: parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
           ? null 
@@ -222,6 +273,18 @@ export default function AdminEventsPage() {
       if (error) {
         console.error('Error updating event:', error)
         throw error
+      }
+
+      if (previousMax !== null && nextMax !== null && nextMax > previousMax) {
+        const promotionsNeeded = nextMax - previousMax
+        for (let i = 0; i < promotionsNeeded; i += 1) {
+          const { data: promoteResult } = await supabase.rpc('promote_waitlist_and_update_positions', {
+            event_uuid: editingEvent.id
+          })
+          if (!promoteResult || !promoteResult.promoted) {
+            break
+          }
+        }
       }
 
       alert('Event updated successfully!')
@@ -244,6 +307,8 @@ export default function AdminEventsPage() {
       theme: '',
       rating: '18+',
       date: '',
+      end_time: '',
+      duration_hours: '2',
       venue_id: '',
       credits_required: '5',
       max_attendees: '',
@@ -475,9 +540,50 @@ export default function AdminEventsPage() {
                 id="edit-date"
                 type="datetime-local"
                 value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                onChange={(e) => {
+                  const nextDate = e.target.value
+                  const durationMinutes = hoursToMinutes(formData.duration_hours)
+                  const nextEndTime = computeEndTime(nextDate, durationMinutes)
+                  setFormData({ ...formData, date: nextDate, end_time: nextEndTime })
+                }}
                 required
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Duration (hours)</Label>
+                <select
+                  value={formData.duration_hours}
+                  onChange={(e) => {
+                    const nextDuration = e.target.value
+                    const durationMinutes = hoursToMinutes(nextDuration)
+                    const nextEndTime = computeEndTime(formData.date, durationMinutes)
+                    setFormData({ ...formData, duration_hours: nextDuration, end_time: nextEndTime })
+                  }}
+                  className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6].map((hours) => (
+                    <option key={hours} value={hours.toString()}>{hours} hr</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label>End Time</Label>
+                <Input
+                  type="datetime-local"
+                  value={formData.end_time}
+                  onChange={(e) => {
+                    const nextEnd = e.target.value
+                    const nextDuration = computeDurationMinutes(formData.date, nextEnd)
+                    setFormData({
+                      ...formData,
+                      end_time: nextEnd,
+                      duration_hours: nextDuration ? minutesToHoursString(nextDuration) : formData.duration_hours,
+                    })
+                  }}
+                />
+              </div>
             </div>
 
             <div>
@@ -662,9 +768,50 @@ export default function AdminEventsPage() {
                 id="create-date"
                 type="datetime-local"
                 value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                onChange={(e) => {
+                  const nextDate = e.target.value
+                  const durationMinutes = hoursToMinutes(formData.duration_hours)
+                  const nextEndTime = computeEndTime(nextDate, durationMinutes)
+                  setFormData({ ...formData, date: nextDate, end_time: nextEndTime })
+                }}
                 required
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Duration (hours)</Label>
+                <select
+                  value={formData.duration_hours}
+                  onChange={(e) => {
+                    const nextDuration = e.target.value
+                    const durationMinutes = hoursToMinutes(nextDuration)
+                    const nextEndTime = computeEndTime(formData.date, durationMinutes)
+                    setFormData({ ...formData, duration_hours: nextDuration, end_time: nextEndTime })
+                  }}
+                  className="w-full px-4 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6].map((hours) => (
+                    <option key={hours} value={hours.toString()}>{hours} hr</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label>End Time</Label>
+                <Input
+                  type="datetime-local"
+                  value={formData.end_time}
+                  onChange={(e) => {
+                    const nextEnd = e.target.value
+                    const nextDuration = computeDurationMinutes(formData.date, nextEnd)
+                    setFormData({
+                      ...formData,
+                      end_time: nextEnd,
+                      duration_hours: nextDuration ? minutesToHoursString(nextDuration) : formData.duration_hours,
+                    })
+                  }}
+                />
+              </div>
             </div>
 
             <div>
