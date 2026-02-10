@@ -90,17 +90,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to update credits.' }, { status: 500 })
   }
 
-  const { error: insertError } = await serviceClient.from('credit_transactions').insert({
+  const transactionPayload = {
     user_id: userId,
     amount: credits,
     transaction_type: 'purchase',
     reference_id: session.id,
     notes: `Stripe checkout ${session.id}`,
     stripe_payment_id: paymentIntentId,
-  })
+  }
+
+  const { error: insertError } = await serviceClient
+    .from('credit_transactions')
+    .insert(transactionPayload)
 
   if (insertError) {
+    // Fallback if stripe_payment_id column is missing in prod schema.
     console.error('Failed to log credit transaction:', insertError)
+    await serviceClient
+      .from('credit_transactions')
+      .insert({
+        user_id: userId,
+        amount: credits,
+        transaction_type: 'purchase',
+        reference_id: session.id,
+        notes: `Stripe checkout ${session.id}`,
+      })
   }
 
   if (profile.email) {
