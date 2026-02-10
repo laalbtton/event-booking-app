@@ -26,6 +26,7 @@ type EventDetails = {
   external_ticket_url: string | null
   registration_opens_at: string | null
   date: string
+  end_time: string | null
   location: string
   credits_required: number
   max_attendees: number | null
