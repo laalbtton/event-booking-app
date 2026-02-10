@@ -29,6 +29,7 @@ type EventDetails = {
   external_event: boolean
   external_ticket_url: string | null
   date: string
+  end_time: string | null
   location: string
   venue_id: string | null
   credits_required: number
