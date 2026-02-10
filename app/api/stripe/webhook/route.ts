@@ -41,14 +41,25 @@ export async function POST(request: Request) {
   const serviceClient = createClient(supabaseUrl, serviceRoleKey)
   const paymentIntentId = session.payment_intent || null
 
+  const { data: existingBySession } = await serviceClient
+    .from('credit_transactions')
+    .select('id')
+    .eq('reference_id', session.id)
+    .eq('transaction_type', 'purchase')
+    .maybeSingle()
+
+  if (existingBySession) {
+    return NextResponse.json({ received: true })
+  }
+
   if (paymentIntentId) {
-    const { data: existing } = await serviceClient
+    const { data: existingByPayment } = await serviceClient
       .from('credit_transactions')
       .select('id')
       .eq('stripe_payment_id', paymentIntentId)
       .maybeSingle()
 
-    if (existing) {
+    if (existingByPayment) {
       return NextResponse.json({ received: true })
     }
   }
