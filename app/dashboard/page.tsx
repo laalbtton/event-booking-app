@@ -14,9 +14,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import CreditPurchaseOptions from '@/components/CreditPurchaseOptions'
-import { createCheckoutSession } from '@/lib/stripe-client'
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -36,9 +33,6 @@ export default function Dashboard() {
   const previousBookingsRef = useRef<any[]>([])
   const [settingAlert, setSettingAlert] = useState<string | null>(null)
   const [alertSet, setAlertSet] = useState<Set<string>>(new Set())
-  const [showCheckoutDialog, setShowCheckoutDialog] = useState(false)
-  const [checkoutLoading, setCheckoutLoading] = useState(false)
-  const [checkoutError, setCheckoutError] = useState<string | null>(null)
   const router = useRouter()
 
   function formatLocationValue(value: unknown): string {
@@ -56,18 +50,6 @@ export default function Dashboard() {
     return 'TBD'
   }
 
-  async function handleCheckout(payload: { type: 'pack'; priceId: string } | { type: 'custom'; credits: number }) {
-    try {
-      setCheckoutLoading(true)
-      setCheckoutError(null)
-      const { url } = await createCheckoutSession(payload)
-      window.location.href = url
-    } catch (err: any) {
-      setCheckoutError(err.message || 'Unable to start checkout.')
-    } finally {
-      setCheckoutLoading(false)
-    }
-  }
 
   function formatVenueName(value: unknown): string {
     const location = formatLocationValue(value)
@@ -846,14 +828,11 @@ export default function Dashboard() {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
+                asChild
                 type="button"
                 className="bg-white text-blue-700 hover:bg-white/90"
-                onClick={() => setShowCheckoutDialog(true)}
               >
-                Buy Credits
-              </Button>
-              <Button asChild variant="secondary" className="bg-white/10 text-white hover:bg-white/20">
-                <Link href="/buy-credits">View Options</Link>
+                <Link href="/buy-credits">Buy Credits</Link>
               </Button>
               <Button asChild variant="secondary" className="bg-white/10 text-white hover:bg-white/20">
                 <Link href="/credits">Credits History</Link>
@@ -862,21 +841,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Dialog open={showCheckoutDialog} onOpenChange={setShowCheckoutDialog}>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Buy credits</DialogTitle>
-              <DialogDescription>Choose a pack or enter a custom amount.</DialogDescription>
-            </DialogHeader>
-            <CreditPurchaseOptions onCheckout={handleCheckout} loading={checkoutLoading} showHeader={false} />
-            {checkoutError && (
-              <p className="text-sm text-red-600">{checkoutError}</p>
-            )}
-            <Button asChild variant="link" className="px-0">
-              <Link href="/buy-credits">See all purchase options</Link>
-            </Button>
-          </DialogContent>
-        </Dialog>
 
         {error && (
           <Card className="border-destructive bg-destructive/15 mb-6 shadow-sm">
