@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, max_attendees, created_by, host_user_id')
+      .select('id, max_attendees, created_by, host_user_id, event_type')
       .eq('id', booking.event_id)
       .single()
 
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    if (status === 'confirmed' && event.max_attendees !== null) {
+    if (status === 'confirmed' && event.max_attendees !== null && event.event_type !== 'booked_show') {
       const { count, error: countError } = await supabase
         .from('bookings')
         .select('id', { count: 'exact', head: true })
@@ -114,6 +114,21 @@ export async function POST(request: NextRequest) {
     }
 
     await supabase.rpc('update_waitlist_positions', { event_uuid: booking.event_id })
+
+    if (event.event_type === 'booked_show') {
+      const { count: confirmedCount } = await supabase
+        .from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', booking.event_id)
+        .eq('status', 'confirmed')
+
+      if (event.max_attendees !== null) {
+        await supabase
+          .from('events')
+          .update({ max_attendees: confirmedCount ?? 0 })
+          .eq('id', booking.event_id)
+      }
+    }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

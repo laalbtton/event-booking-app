@@ -223,6 +223,51 @@ export function getBookingCancellationEmail(data: {
   `
 }
 
+export function getCreditPurchaseEmail(data: {
+  userName: string
+  creditsAdded: number
+  newBalance: number
+  amountPaid: number
+}): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0;">Credits Added</h1>
+        </div>
+        
+        <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">
+          <p style="font-size: 16px; margin-bottom: 20px;">Hi ${data.userName},</p>
+          
+          <p style="font-size: 16px; margin-bottom: 20px;">
+            Your purchase was successful. We added <strong>${data.creditsAdded}</strong> credits to your account.
+          </p>
+          
+          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2563eb;">
+            <h2 style="margin-top: 0; color: #111827;">Purchase Summary</h2>
+            <p style="margin: 10px 0;"><strong>Amount paid:</strong> $${data.amountPaid.toFixed(2)} CAD</p>
+            <p style="margin: 10px 0;"><strong>Credits added:</strong> ${data.creditsAdded}</p>
+            <p style="margin: 10px 0;"><strong>New balance:</strong> ${data.newBalance} credits</p>
+          </div>
+          
+          <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">
+            Thanks for supporting Laal Button. See you at the next show!
+          </p>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
+          <p>© 2025 Laal Button. All rights reserved.</p>
+        </div>
+      </body>
+    </html>
+  `
+}
+
 /**
  * Email template for event cancellation
  */

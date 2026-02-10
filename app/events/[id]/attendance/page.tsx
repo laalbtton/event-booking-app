@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { GripVertical, User, Copy } from 'lucide-react'
+import { GripVertical, User, Copy, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type BookingWithProfile = {
@@ -27,12 +27,33 @@ type BookingWithProfile = {
   }
 }
 
+type InviteWithProfile = {
+  id: string
+  invited_user_id: string
+  status: 'pending' | 'accepted' | 'declined'
+  profiles: {
+    id: string
+    full_name: string
+    email: string
+  }
+}
+
+type InviteLink = {
+  id: string
+  token: string
+  max_uses: number
+  uses: number
+  expires_at: string
+}
+
 type EventDetails = {
   id: string
   title: string
   date: string
   host_user_id: string | null
   created_by: string | null
+  event_type: 'open_mic' | 'booked_show'
+  max_attendees: number | null
 }
 
 function getInitials(name: string): string {
@@ -52,6 +73,19 @@ export default function AttendancePage() {
   const [event, setEvent] = useState<EventDetails | null>(null)
   const [bookings, setBookings] = useState<BookingWithProfile[]>([])
   const [waitlistBookings, setWaitlistBookings] = useState<BookingWithProfile[]>([])
+  const [invites, setInvites] = useState<InviteWithProfile[]>([])
+  const [inviteSearch, setInviteSearch] = useState('')
+  const [inviteResults, setInviteResults] = useState<InviteWithProfile[]>([])
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteLink, setInviteLink] = useState<InviteLink | null>(null)
+  const [inviteMaxUses, setInviteMaxUses] = useState('12')
+  const [inviteExpiresAt, setInviteExpiresAt] = useState(() => {
+    const date = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16)
+  })
+  const [showInviteAdvanced, setShowInviteAdvanced] = useState(false)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
@@ -120,7 +154,7 @@ export default function AttendancePage() {
       // Load event
       const { data: eventData, error: eventError } = await supabase
         .from('events')
-        .select('id, title, date, host_user_id, created_by')
+        .select('id, title, date, host_user_id, created_by, event_type, max_attendees')
         .eq('id', eventId)
         .single()
 
@@ -203,6 +237,42 @@ export default function AttendancePage() {
 
       if (waitlistError) throw waitlistError
       setWaitlistBookings(waitlistData as any)
+
+      const { data: invitesData, error: invitesError } = await supabase
+        .from('event_invites')
+        .select(`
+          id,
+          invited_user_id,
+          status,
+          profiles:invited_user_id (
+            id,
+            full_name,
+            email
+          )
+        `)
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: false })
+
+      if (!invitesError) {
+        setInvites(invitesData as any)
+      }
+
+      const { data: inviteLinkData, error: inviteLinkError } = await supabase
+        .from('event_invite_links')
+        .select('id, token, max_uses, uses, expires_at')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (!inviteLinkError && inviteLinkData) {
+        setInviteLink(inviteLinkData as any)
+        setInviteMaxUses(inviteLinkData.max_uses.toString())
+        const expiresLocal = new Date(new Date(inviteLinkData.expires_at).getTime() - new Date(inviteLinkData.expires_at).getTimezoneOffset() * 60000)
+          .toISOString()
+          .slice(0, 16)
+        setInviteExpiresAt(expiresLocal)
+      }
 
       // Calculate stats
       const total = bookingsData?.length || 0
@@ -310,6 +380,107 @@ export default function AttendancePage() {
     } finally {
       setUpdating(null)
     }
+  }
+
+  async function searchInvitees(query: string) {
+    setInviteSearch(query)
+    if (!query || query.trim().length < 2) {
+      setInviteResults([])
+      return
+    }
+
+    setInviteLoading(true)
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .ilike('full_name', `%${query}%`)
+      .limit(8)
+
+    if (!error && data) {
+      const mapped = data.map((profile) => ({
+        id: profile.id,
+        invited_user_id: profile.id,
+        status: 'pending' as const,
+        profiles: profile,
+      }))
+      setInviteResults(mapped as any)
+    }
+    setInviteLoading(false)
+  }
+
+  async function sendInvite(invitedUserId: string) {
+    setUpdating(invitedUserId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/invites/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ eventId, invitedUserId }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to send invite')
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await loadData(user.id)
+      }
+      setInviteSearch('')
+      setInviteResults([])
+    } catch (error: any) {
+      console.error('Error sending invite:', error)
+      alert('Error sending invite: ' + error.message)
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  async function createInviteLink() {
+    setInviteLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/invite-links/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          eventId,
+          maxUses: parseInt(inviteMaxUses, 10) || 12,
+          expiresAt: inviteExpiresAt ? new Date(inviteExpiresAt).toISOString() : undefined,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to create invite link')
+      }
+
+      const data = await response.json()
+      setInviteLink(data.link)
+    } catch (error: any) {
+      console.error('Error creating invite link:', error)
+      alert('Error creating invite link: ' + error.message)
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
+  function copyInviteLink() {
+    if (!inviteLink) return
+    const url = `${window.location.origin}/invite/${inviteLink.token}`
+    navigator.clipboard.writeText(url)
+    alert('Invite link copied!')
   }
 
   async function removeAttendee(bookingId: string) {
@@ -729,6 +900,146 @@ export default function AttendancePage() {
             </div>
           </CardContent>
         </Card>
+
+        {event.event_type === 'booked_show' && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-lg">Send Invites</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm text-muted-foreground">
+                  Invite link {inviteLink ? `(${inviteLink.uses}/${inviteLink.max_uses} used)` : ''}
+                </div>
+                <div className="flex items-center gap-2">
+                  {inviteLink && (
+                    <Button variant="outline" size="sm" onClick={copyInviteLink}>
+                      Copy link
+                    </Button>
+                  )}
+                  {!inviteLink && (
+                    <Button size="sm" onClick={createInviteLink} disabled={inviteLoading}>
+                      Create link
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowInviteAdvanced(!showInviteAdvanced)}
+                    aria-label={showInviteAdvanced ? 'Hide invite options' : 'Show invite options'}
+                  >
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", showInviteAdvanced && "rotate-180")} />
+                  </Button>
+                </div>
+              </div>
+
+              {showInviteAdvanced && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Max uses</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={inviteMaxUses}
+                      onChange={(e) => setInviteMaxUses(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Expiry</label>
+                    <input
+                      type="datetime-local"
+                      value={inviteExpiresAt}
+                      onChange={(e) => setInviteExpiresAt(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Search users</label>
+                <input
+                  type="text"
+                  value={inviteSearch}
+                  onChange={(e) => searchInvitees(e.target.value)}
+                  placeholder="Search users by name"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {inviteLoading && (
+                <p className="text-sm text-muted-foreground">Searching...</p>
+              )}
+              {inviteResults.length > 0 && (
+                <div className="space-y-2">
+                  {inviteResults.map((profile) => {
+                    const alreadyConfirmed = bookings.some((b) => b.user_id === profile.invited_user_id)
+                    const alreadyWaitlist = waitlistBookings.some((b) => b.user_id === profile.invited_user_id)
+                    const existingInvite = invites.find((invite) => invite.invited_user_id === profile.invited_user_id)
+                    const statusLabel = alreadyConfirmed
+                      ? 'Confirmed'
+                      : alreadyWaitlist
+                        ? 'Waitlist'
+                        : existingInvite?.status === 'pending'
+                          ? 'Pending'
+                          : existingInvite?.status === 'accepted'
+                            ? 'Accepted'
+                            : existingInvite?.status === 'declined'
+                              ? 'Declined'
+                              : ''
+
+                    return (
+                      <div
+                        key={profile.invited_user_id}
+                        className="flex items-center justify-between gap-3 p-2 border rounded-lg"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{profile.profiles.full_name || 'No name'}</p>
+                          <p className="text-xs text-muted-foreground truncate">{profile.profiles.email}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {statusLabel && (
+                            <span className="text-xs text-muted-foreground">{statusLabel}</span>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={alreadyConfirmed || alreadyWaitlist || existingInvite?.status === 'pending'}
+                            onClick={() => sendInvite(profile.invited_user_id)}
+                          >
+                            Invite
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {inviteSearch.length >= 2 && inviteResults.length === 0 && !inviteLoading && (
+                <p className="text-sm text-muted-foreground">No users found.</p>
+              )}
+
+              <div className="pt-2 border-t">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Invite History</p>
+                <div className="space-y-2">
+                  {invites.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No invites sent yet.</p>
+                  )}
+                  {invites.map((invite) => (
+                    <div key={invite.id} className="flex items-center justify-between gap-3 p-2 border rounded-lg">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{invite.profiles.full_name || 'No name'}</p>
+                        <p className="text-xs text-muted-foreground truncate">{invite.profiles.email}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground capitalize">{invite.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Stats - Moved to bottom */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mt-6">

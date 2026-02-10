@@ -20,6 +20,10 @@ type EventDetails = {
   theme: string | null
   rating: string | null
   status?: string | null
+  event_type: 'open_mic' | 'booked_show'
+  tickets_enabled: boolean
+  external_event: boolean
+  external_ticket_url: string | null
   registration_opens_at: string | null
   date: string
   location: string
@@ -190,7 +194,12 @@ export default function PublicEventPage() {
     : null
 
   const eventDate = new Date(event.date)
-  const isPastEvent = eventDate < new Date()
+  const now = new Date()
+  const endTime = event.end_time
+    ? new Date(event.end_time)
+    : new Date(new Date(event.date).getTime() + 2 * 60 * 60 * 1000)
+  const isPastEvent = eventDate < now
+  const isInProgress = eventDate <= now && now < endTime
 
   return (
     <div className="min-h-screen bg-background">
@@ -211,6 +220,11 @@ export default function PublicEventPage() {
                 <Badge variant="outline" className="text-xs">
                   Rating: {event.rating || '18+'}
                 </Badge>
+                {isInProgress && (
+                  <Badge variant="outline" className="text-blue-600 border-blue-600">
+                    In Progress
+                  </Badge>
+                )}
                 {isPastEvent && (
                   <Badge variant="secondary">Past Event</Badge>
                 )}
@@ -253,7 +267,13 @@ export default function PublicEventPage() {
 
               <div className="flex items-center text-sm md:text-base">
                 <span className="mr-2">💳</span>
-                <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
+                {event.event_type === 'booked_show' ? (
+                  <span><strong className="font-semibold">Type:</strong> Invite only</span>
+                ) : event.tickets_enabled ? (
+                  <span><strong className="font-semibold">Tickets:</strong> {event.external_event ? 'External' : 'Available'}</span>
+                ) : (
+                  <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
+                )}
               </div>
 
               {event.registration_opens_at && new Date() < new Date(event.registration_opens_at) && (
@@ -370,6 +390,18 @@ export default function PublicEventPage() {
         {/* Call to Action */}
         <Card className="bg-gradient-to-r from-blue-600 to-purple-700 border-0 text-white shadow-lg">
           <CardContent className="p-8 text-center">
+            {event.event_type === 'booked_show' && (
+              <p className="text-sm font-semibold text-white/90 mb-2">Invite only</p>
+            )}
+            {event.tickets_enabled && event.external_event && event.external_ticket_url && (
+              <div className="mb-3">
+                <Button asChild size="lg" variant="secondary" className="bg-white text-blue-700 hover:bg-gray-100">
+                  <a href={event.external_ticket_url} target="_blank" rel="noreferrer">
+                    Buy Tickets
+                  </a>
+                </Button>
+              </div>
+            )}
             <h3 className="text-xl sm:text-2xl font-bold mb-3">Want to Join?</h3>
             <p className="text-base sm:text-lg mb-6 text-white/90">Sign up to book events and manage your registrations</p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">

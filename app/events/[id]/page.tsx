@@ -24,6 +24,10 @@ type EventDetails = {
   theme: string | null
   rating: string | null
   status?: string | null
+  event_type: 'open_mic' | 'booked_show'
+  tickets_enabled: boolean
+  external_event: boolean
+  external_ticket_url: string | null
   date: string
   location: string
   venue_id: string | null
@@ -265,6 +269,12 @@ export default function EventDetailsPage() {
     setError('')
 
     try {
+      if (eventData.tickets_enabled) {
+        throw new Error('This event uses external tickets')
+      }
+      if (eventData.event_type === 'booked_show') {
+        throw new Error('This show is invite-only')
+      }
       if (eventData.status === 'cancelled') {
         throw new Error('This event has been cancelled')
       }
@@ -391,6 +401,12 @@ export default function EventDetailsPage() {
   const isFull = event.max_attendees !== null && confirmedBookings.length >= event.max_attendees
   const isAlreadyBooked = !!userBooking
   const bookingLabel = isFull ? 'Join Waitlist' : 'Book Event'
+  const now = new Date()
+  const startTime = new Date(event.date)
+  const endTime = event.end_time
+    ? new Date(event.end_time)
+    : new Date(new Date(event.date).getTime() + 2 * 60 * 60 * 1000)
+  const isInProgress = startTime <= now && now < endTime
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -423,6 +439,11 @@ export default function EventDetailsPage() {
               {event.theme && (
                 <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-100">
                   🎨 Theme: {event.theme}
+                </Badge>
+              )}
+              {isInProgress && (
+                <Badge variant="outline" className="text-blue-600 border-blue-600">
+                  In Progress
                 </Badge>
               )}
 
@@ -462,7 +483,13 @@ export default function EventDetailsPage() {
 
                 <div className="flex items-center text-sm md:text-base text-gray-900">
                   <span className="mr-2">💳</span>
-                  <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
+                  {event.event_type === 'booked_show' ? (
+                    <span><strong className="font-semibold">Type:</strong> Invite only</span>
+                  ) : event.tickets_enabled ? (
+                    <span><strong className="font-semibold">Tickets:</strong> {event.external_event ? 'External' : 'Available'}</span>
+                  ) : (
+                    <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
+                  )}
                 </div>
 
                 {!isRegistrationOpen && event.registration_opens_at && (
@@ -493,10 +520,12 @@ export default function EventDetailsPage() {
                   </div>
                 )}
 
-                <div className="flex items-center text-sm md:text-base text-gray-900">
-                  <span className="mr-2">⏱️</span>
-                  <span>Cancel up to {event.cancellation_hours}h before for full refund</span>
-                </div>
+                {event.event_type !== 'booked_show' && !event.tickets_enabled && (
+                  <div className="flex items-center text-sm md:text-base text-gray-900">
+                    <span className="mr-2">⏱️</span>
+                    <span>Cancel up to {event.cancellation_hours}h before for full refund</span>
+                  </div>
+                )}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -524,6 +553,12 @@ export default function EventDetailsPage() {
               {profile && (
                 event.status === 'cancelled' ? (
                   <Badge variant="destructive">Cancelled</Badge>
+                ) : event.tickets_enabled && event.external_event && event.external_ticket_url ? (
+                  <a href={event.external_ticket_url} target="_blank" rel="noreferrer">
+                    <Button size="sm" variant="outline">Buy Tickets</Button>
+                  </a>
+                ) : event.event_type === 'booked_show' ? (
+                  <Badge variant="outline">Invite only</Badge>
                 ) : !isRegistrationOpen ? (
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-orange-600 border-orange-600">

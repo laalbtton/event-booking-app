@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -33,9 +34,23 @@ type EventBooking = {
   event_status?: string | null
 }
 
+type InviteItem = {
+  id: string
+  status: 'pending' | 'accepted' | 'declined'
+  created_at: string
+  events: {
+    id: string
+    title: string
+    date: string
+    location: string | null
+  }
+}
+
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [eventBookings, setEventBookings] = useState<EventBooking[]>([])
+  const [invites, setInvites] = useState<InviteItem[]>([])
+  const [respondingInvite, setRespondingInvite] = useState<string | null>(null)
   const [attendedCount, setAttendedCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -179,6 +194,27 @@ export default function ProfilePage() {
       const attended = events.filter(e => e.attendance_status === 'attended').length
       setAttendedCount(attended)
 
+      const { data: invitesData, error: invitesError } = await supabase
+        .from('event_invites')
+        .select(`
+          id,
+          status,
+          created_at,
+          events (
+            id,
+            title,
+            date,
+            location
+          )
+        `)
+        .eq('invited_user_id', userId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+
+      if (!invitesError) {
+        setInvites(invitesData as any)
+      }
+
     } catch (error: any) {
       console.error('Error loading profile:', error)
       alert('Error loading profile: ' + error.message)
@@ -216,6 +252,37 @@ export default function ProfilePage() {
       alert('Error updating profile: ' + error.message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function respondToInvite(inviteId: string, action: 'accept' | 'decline') {
+    setRespondingInvite(inviteId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/invites/respond', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ inviteId, action }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to respond to invite')
+      }
+
+      if (profile) {
+        await loadProfile(profile.id)
+      }
+    } catch (error: any) {
+      console.error('Error responding to invite:', error)
+      alert('Error responding to invite: ' + error.message)
+    } finally {
+      setRespondingInvite(null)
     }
   }
 
@@ -558,129 +625,172 @@ export default function ProfilePage() {
         </Card>
 
         {/* Event Bookings */}
-        {eventBookings.length > 0 && (
+        {(eventBookings.length > 0 || invites.length > 0) ? (
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Event Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              {(() => {
-                const rows = eventBookings.map((booking) => {
-                  const isEventCancelled = booking.status === 'cancelled' && booking.event_status === 'cancelled'
-                  const activity = isEventCancelled
-                    ? 'Event cancelled'
-                    : booking.status === 'cancelled'
-                      ? 'Cancelled'
-                      : 'Booked'
-                  const activityDate =
-                    booking.booked_at
-                  const balanceDelta =
-                    activity === 'Booked' ? -booking.credits_used : booking.credits_used
-                  const displayAmount =
-                    activity === 'Booked' ? -booking.credits_used : booking.credits_used
+              <Tabs defaultValue="activity" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="activity">Activity</TabsTrigger>
+                  <TabsTrigger value="invites">Invites</TabsTrigger>
+                </TabsList>
+                <TabsContent value="activity" className="pt-4">
+                  {eventBookings.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">No recent activity.</p>
+                  ) : (
+                    (() => {
+                      const rows = eventBookings.map((booking) => {
+                        const isEventCancelled = booking.status === 'cancelled' && booking.event_status === 'cancelled'
+                        const activity = isEventCancelled
+                          ? 'Event cancelled'
+                          : booking.status === 'cancelled'
+                            ? 'Cancelled'
+                            : 'Booked'
+                        const activityDate =
+                          booking.booked_at
+                        const balanceDelta =
+                          activity === 'Booked' ? -booking.credits_used : booking.credits_used
+                        const displayAmount =
+                          activity === 'Booked' ? -booking.credits_used : booking.credits_used
 
-                  return {
-                    ...booking,
-                    activity,
-                    activityDate,
-                    balanceDelta,
-                    displayAmount,
-                  }
-                })
+                        return {
+                          ...booking,
+                          activity,
+                          activityDate,
+                          balanceDelta,
+                          displayAmount,
+                        }
+                      })
 
-                rows.sort((a, b) => new Date(b.activityDate).getTime() - new Date(a.activityDate).getTime())
+                      rows.sort((a, b) => new Date(b.activityDate).getTime() - new Date(a.activityDate).getTime())
 
-                let runningBalance = profile?.credits ?? 0
-                const rowsWithBalance = rows.map((row) => {
-                  const balance = runningBalance
-                  runningBalance = balance - row.balanceDelta
-                  return { ...row, balance }
-                })
+                      let runningBalance = profile?.credits ?? 0
+                      const rowsWithBalance = rows.map((row) => {
+                        const balance = runningBalance
+                        runningBalance = balance - row.balanceDelta
+                        return { ...row, balance }
+                      })
 
-                return (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-border text-sm">
-                      <tbody className="divide-y divide-border">
-                        {(() => {
-                          const formatActivityDate = (value: string) =>
-                            new Date(value).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })
-
-                          const grouped = rowsWithBalance.reduce((acc: Record<string, typeof rowsWithBalance>, row) => {
-                            const key = formatActivityDate(row.activityDate)
-                            if (!acc[key]) acc[key] = []
-                            acc[key].push(row)
-                            return acc
-                          }, {})
-
-                          const orderedDates: string[] = []
-                          rowsWithBalance.forEach((row) => {
-                            const key = formatActivityDate(row.activityDate)
-                            if (!orderedDates.includes(key)) {
-                              orderedDates.push(key)
-                            }
-                          })
-
-                          return orderedDates.flatMap((groupDate) => [
-                            (
-                              <tr key={`${groupDate}-header`}>
-                                <td colSpan={3} className="px-4 py-2 text-xs font-semibold text-muted-foreground bg-muted/30">
-                                  {groupDate}
-                                </td>
-                              </tr>
-                            ),
-                            ...(grouped[groupDate] || []).map((row) => (
-                              <tr
-                                key={row.id}
-                                className="hover:bg-muted/30"
-                                style={{ transform: `translateX(${swipeOffset[row.id] || 0}px)` }}
-                                onTouchStart={(e) => handleTouchStart(e, row.id)}
-                                onTouchMove={(e) => handleTouchMove(e, row.id)}
-                                onTouchEnd={() => handleTouchEnd(row.id)}
-                              >
-                                <td className="px-4 py-3">
-                                  <div className="font-medium text-foreground truncate max-w-[220px] sm:max-w-[320px]">
-                                    <Link href={`/events/${row.event_id}`} className="hover:underline">
-                                      {row.title}
-                                    </Link>
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">{row.activity}</div>
-                                </td>
-                                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                                  {new Date(row.date).toLocaleDateString('en-US', {
+                      return (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-border text-sm">
+                            <tbody className="divide-y divide-border">
+                              {(() => {
+                                const formatActivityDate = (value: string) =>
+                                  new Date(value).toLocaleDateString('en-US', {
                                     month: 'short',
                                     day: 'numeric',
-                                    year: 'numeric'
-                                  })}
-                                </td>
-                                <td className="px-4 py-3 text-right text-muted-foreground">
-                                  <div className="text-sm">
-                                    {row.displayAmount > 0 ? '+' : ''}{row.displayAmount}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">Bal {row.balance}</div>
-                                  {swipeDirection[row.id] === 'right' && (swipeOffset[row.id] || 0) > 50 && (
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                      {formatTime(row.activityDate)}
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                            ))
-                          ])
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              })()}
+                                    year: 'numeric',
+                                  })
+
+                                const grouped = rowsWithBalance.reduce((acc: Record<string, typeof rowsWithBalance>, row) => {
+                                  const key = formatActivityDate(row.activityDate)
+                                  if (!acc[key]) acc[key] = []
+                                  acc[key].push(row)
+                                  return acc
+                                }, {})
+
+                                const orderedDates: string[] = []
+                                rowsWithBalance.forEach((row) => {
+                                  const key = formatActivityDate(row.activityDate)
+                                  if (!orderedDates.includes(key)) {
+                                    orderedDates.push(key)
+                                  }
+                                })
+
+                                return orderedDates.flatMap((groupDate) => [
+                                  (
+                                    <tr key={`${groupDate}-header`}>
+                                      <td colSpan={3} className="px-4 py-2 text-xs font-semibold text-muted-foreground bg-muted/30">
+                                        {groupDate}
+                                      </td>
+                                    </tr>
+                                  ),
+                                  ...(grouped[groupDate] || []).map((row) => (
+                                    <tr
+                                      key={row.id}
+                                      className="hover:bg-muted/30"
+                                      style={{ transform: `translateX(${swipeOffset[row.id] || 0}px)` }}
+                                      onTouchStart={(e) => handleTouchStart(e, row.id)}
+                                      onTouchMove={(e) => handleTouchMove(e, row.id)}
+                                      onTouchEnd={() => handleTouchEnd(row.id)}
+                                    >
+                                      <td className="px-4 py-3">
+                                        <div className="font-medium text-foreground truncate max-w-[220px] sm:max-w-[320px]">
+                                          <Link href={`/events/${row.event_id}`} className="hover:underline">
+                                            {row.title}
+                                          </Link>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">{row.activity}</div>
+                                      </td>
+                                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                                        {new Date(row.date).toLocaleDateString('en-US', {
+                                          month: 'short',
+                                          day: 'numeric',
+                                          year: 'numeric'
+                                        })}
+                                      </td>
+                                      <td className="px-4 py-3 text-right text-muted-foreground">
+                                        <div className="text-sm">
+                                          {row.displayAmount > 0 ? '+' : ''}{row.displayAmount}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">Bal {row.balance}</div>
+                                        {swipeDirection[row.id] === 'right' && (swipeOffset[row.id] || 0) > 50 && (
+                                          <div className="text-xs text-muted-foreground mt-1">
+                                            {formatTime(row.activityDate)}
+                                          </div>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))
+                                ])
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
+                      )
+                    })()
+                  )}
+                </TabsContent>
+                <TabsContent value="invites" className="pt-4">
+                  {invites.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">No invites right now.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {invites.map((invite) => (
+                        <div key={invite.id} className="flex items-center justify-between gap-3 p-3 border rounded-lg">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{invite.events.title}</p>
+                            <p className="text-xs text-muted-foreground truncate">{formatDate(invite.events.date)}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => respondToInvite(invite.id, 'accept')}
+                              disabled={respondingInvite === invite.id}
+                            >
+                              Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => respondToInvite(invite.id, 'decline')}
+                              disabled={respondingInvite === invite.id}
+                            >
+                              Decline
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
-        )}
-
-        {eventBookings.length === 0 && (
+        ) : (
           <Card className="shadow-sm">
             <CardContent className="p-8 text-center">
               <p className="text-lg font-medium text-muted-foreground mb-3">No event bookings yet</p>

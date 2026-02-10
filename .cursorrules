@@ -64,6 +64,7 @@ Static assets (icons, manifest, service worker)
    - full_name (text)
    - avatar_url (text) - Profile picture URL
    - credits (integer, default 25)
+   - stripe_customer_id (text)
    - bio (text)
    - instagram_link, youtube_link, twitter_link, website_link (text)
    - created_at, updated_at (timestamp)
@@ -71,6 +72,10 @@ Static assets (icons, manifest, service worker)
 2. **events**
    - id (uuid, pk)
    - title, description, location (text)
+   - event_type ('open_mic' | 'booked_show', default 'open_mic')
+   - tickets_enabled (boolean, default false)
+   - external_event (boolean, default false)
+   - external_ticket_url (text, nullable)
    - rating (text, default '18+')
    - status (text, default 'active')
    - date (timestamp)
@@ -105,6 +110,7 @@ Static assets (icons, manifest, service worker)
    - reference_id (uuid, nullable)
    - notes (text)
    - created_by (uuid, nullable)
+   - stripe_payment_id (text, nullable)
    - created_at (timestamp)
 
 5. **venues**
@@ -133,6 +139,33 @@ Static assets (icons, manifest, service worker)
    - user_id (uuid, references profiles)
    - event_id (uuid, references events)
    - notified (boolean)
+   - created_at (timestamp)
+
+9. **event_invites**
+   - id (uuid, pk)
+   - event_id (uuid, references events)
+   - invited_user_id (uuid, references profiles)
+   - invited_by (uuid, references profiles)
+   - status ('pending' | 'accepted' | 'declined')
+   - created_at (timestamp)
+
+10. **event_invite_links**
+   - id (uuid, pk)
+   - event_id (uuid, references events)
+   - token (text, unique)
+   - max_uses (integer, default 12)
+   - uses (integer, default 0)
+   - expires_at (timestamp, default now + 7 days)
+   - created_by (uuid, references profiles)
+   - created_at (timestamp)
+
+11. **event_tickets**
+   - id (uuid, pk)
+   - event_id (uuid, references events)
+   - name (text)
+   - price_cents (integer)
+   - quantity (integer)
+   - sold (integer, default 0)
    - created_at (timestamp)
 
 ### Database Functions & Triggers
@@ -260,6 +293,11 @@ When you change booking logic, consider ALL these:
 - Auto-join if event full
 - Auto-promote on cancellation (database trigger)
 - Email: Send waitlist promotion notification
+
+**Booked Show (event_type = 'booked_show'):**
+- Invite-only (no self-booking)
+- Credits not used (credits_required = 0, credits_used = 0)
+- Cancellation policy does not apply
 
 **Pattern:** If changing booking logic:
 1. Update: app/dashboard/page.tsx (user actions)
@@ -688,6 +726,12 @@ export type Profile = {
 NEXT_PUBLIC_SUPABASE_URL=https://[project].supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ... # Server-side only
+
+# Stripe
+NEXT_PUBLIC_STRIPE_MODE=test # test or live
+STRIPE_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 
 # Email (Resend)
 RESEND_API_KEY=re_...

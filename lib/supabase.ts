@@ -24,6 +24,7 @@ export type Profile = {
   avatar_url: string | null
   credits: number
   role: UserRole
+  stripe_customer_id?: string | null
   instagram_link: string | null
   youtube_link: string | null
   twitter_link: string | null
@@ -53,6 +54,10 @@ export type Event = {
   theme: string | null
   rating: string | null
   status?: string | null
+  event_type: 'open_mic' | 'booked_show'
+  tickets_enabled: boolean
+  external_event: boolean
+  external_ticket_url: string | null
   date: string
   end_time: string | null
   location: string | null
@@ -77,6 +82,36 @@ export type Booking = {
   attendance_status: string | null // 'attended', 'no_show', or null (confirmed)
 }
 
+export type EventInvite = {
+  id: string
+  event_id: string
+  invited_user_id: string
+  invited_by: string
+  status: 'pending' | 'accepted' | 'declined'
+  created_at: string
+}
+
+export type EventInviteLink = {
+  id: string
+  event_id: string
+  token: string
+  max_uses: number
+  uses: number
+  expires_at: string
+  created_by: string
+  created_at: string
+}
+
+export type EventTicket = {
+  id: string
+  event_id: string
+  name: string
+  price_cents: number
+  quantity: number
+  sold: number
+  created_at: string
+}
+
 export type CreditTransaction = {
   id: string
   user_id: string
@@ -85,5 +120,6 @@ export type CreditTransaction = {
   reference_id: string | null
   notes: string | null
   created_by: string | null
+  stripe_payment_id?: string | null
   created_at: string
 }

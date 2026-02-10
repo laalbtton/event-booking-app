@@ -12,7 +12,11 @@ import { sendBookingConfirmationEmail, sendWaitlistPromotionEmail, sendBookingCa
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import CreditPurchaseOptions from '@/components/CreditPurchaseOptions'
+import { createCheckoutSession } from '@/lib/stripe-client'
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -27,9 +31,14 @@ export default function Dashboard() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [roleRequestStatus, setRoleRequestStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null)
   const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
+  const [eventTab, setEventTab] = useState<'perform' | 'attend'>('perform')
+  const [invitedEventIds, setInvitedEventIds] = useState<Set<string>>(new Set())
   const previousBookingsRef = useRef<any[]>([])
   const [settingAlert, setSettingAlert] = useState<string | null>(null)
   const [alertSet, setAlertSet] = useState<Set<string>>(new Set())
+  const [showCheckoutDialog, setShowCheckoutDialog] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [checkoutError, setCheckoutError] = useState<string | null>(null)
   const router = useRouter()
 
   function formatLocationValue(value: unknown): string {
@@ -45,6 +54,19 @@ export default function Dashboard() {
       }
     }
     return 'TBD'
+  }
+
+  async function handleCheckout(payload: { type: 'pack'; priceId: string } | { type: 'custom'; credits: number }) {
+    try {
+      setCheckoutLoading(true)
+      setCheckoutError(null)
+      const { url } = await createCheckoutSession(payload)
+      window.location.href = url
+    } catch (err: any) {
+      setCheckoutError(err.message || 'Unable to start checkout.')
+    } finally {
+      setCheckoutLoading(false)
+    }
   }
 
   function formatVenueName(value: unknown): string {
@@ -335,12 +357,13 @@ export default function Dashboard() {
       if (profileError) throw profileError
       setProfile(profileData)
 
-      // Load upcoming events
+      // Load upcoming and in-progress events
+      const nowIso = new Date().toISOString()
       const { data: eventsData, error: eventsError } = await supabase
         .from('events')
         .select('*')
         .neq('status', 'cancelled')
-        .gte('date', new Date().toISOString())
+        .or(`date.gte.${nowIso},end_time.gte.${nowIso}`)
         .order('date', { ascending: true })
 
       if (eventsError) throw eventsError
@@ -376,6 +399,16 @@ export default function Dashboard() {
 
       if (bookingsError) throw bookingsError
       setMyBookings(bookingsData || [])
+
+      const { data: inviteData, error: inviteError } = await supabase
+        .from('event_invites')
+        .select('event_id, status')
+        .eq('invited_user_id', userId)
+        .in('status', ['pending', 'accepted'])
+
+      if (!inviteError && inviteData) {
+        setInvitedEventIds(new Set(inviteData.map((invite: any) => invite.event_id)))
+      }
 
       // Load existing registration alerts
       const { data: alertsData, error: alertsError } = await supabase
@@ -433,6 +466,12 @@ export default function Dashboard() {
     setError('')
 
     try {
+      if (event.tickets_enabled) {
+        throw new Error('This event uses external tickets')
+      }
+      if (event.event_type === 'booked_show') {
+        throw new Error('This show is invite-only')
+      }
       if (event.status === 'cancelled') {
         throw new Error('This event has been cancelled')
       }
@@ -568,18 +607,23 @@ export default function Dashboard() {
     const eventDate = new Date(event.date)
     const now = currentTime
     const hoursUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
-    const cancellationWindow = event.cancellation_hours || 4
+    const isBookedShow = event.event_type === 'booked_show'
+    const cancellationWindow = isBookedShow ? 0 : (event.cancellation_hours || 4)
     
-    const willGetRefund = hoursUntilEvent >= cancellationWindow
+    const willGetRefund = !isBookedShow && hoursUntilEvent >= cancellationWindow
 
     // Different messages for confirmed vs waitlist
     let confirmMessage = ''
     if (booking.status === 'waitlist') {
-      confirmMessage = `Remove yourself from the waitlist for "${event.title}"?\n\nYou will receive a full refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
+      confirmMessage = isBookedShow
+        ? `Remove yourself from the waitlist for "${event.title}"?`
+        : `Remove yourself from the waitlist for "${event.title}"?\n\nYou will receive a full refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
     } else {
-      confirmMessage = willGetRefund
-        ? `Cancel registration for "${event.title}"?\n\nYou will receive a refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
-        : `Cancel registration for "${event.title}"?\n\n⚠️ You will NOT receive a refund because cancellation is within ${cancellationWindow} hours of the event.\n\nAre you sure you want to cancel?`
+      confirmMessage = isBookedShow
+        ? `Cancel participation for "${event.title}"?`
+        : willGetRefund
+          ? `Cancel registration for "${event.title}"?\n\nYou will receive a refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
+          : `Cancel registration for "${event.title}"?\n\n⚠️ You will NOT receive a refund because cancellation is within ${cancellationWindow} hours of the event.\n\nAre you sure you want to cancel?`
     }
 
     if (!confirm(confirmMessage)) {
@@ -800,8 +844,39 @@ export default function Dashboard() {
               <span className="text-4xl sm:text-5xl lg:text-6xl font-bold drop-shadow-md tracking-tight">{profile?.credits || 0}</span>
               <span className="text-lg sm:text-xl ml-1 drop-shadow text-white/90">credits available</span>
             </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                className="bg-white text-blue-700 hover:bg-white/90"
+                onClick={() => setShowCheckoutDialog(true)}
+              >
+                Buy Credits
+              </Button>
+              <Button asChild variant="secondary" className="bg-white/10 text-white hover:bg-white/20">
+                <Link href="/buy-credits">View Options</Link>
+              </Button>
+              <Button asChild variant="secondary" className="bg-white/10 text-white hover:bg-white/20">
+                <Link href="/credits">Credits History</Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
+
+        <Dialog open={showCheckoutDialog} onOpenChange={setShowCheckoutDialog}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Buy credits</DialogTitle>
+              <DialogDescription>Choose a pack or enter a custom amount.</DialogDescription>
+            </DialogHeader>
+            <CreditPurchaseOptions onCheckout={handleCheckout} loading={checkoutLoading} showHeader={false} />
+            {checkoutError && (
+              <p className="text-sm text-red-600">{checkoutError}</p>
+            )}
+            <Button asChild variant="link" className="px-0">
+              <Link href="/buy-credits">See all purchase options</Link>
+            </Button>
+          </DialogContent>
+        </Dialog>
 
         {error && (
           <Card className="border-destructive bg-destructive/15 mb-6 shadow-sm">
@@ -822,9 +897,10 @@ export default function Dashboard() {
                 const eventDate = new Date(booking.events.date)
                 const now = currentTime
                 const hoursUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
-                const cancellationWindow = booking.events.cancellation_hours || 4
+                const isBookedShow = booking.events.event_type === 'booked_show'
+                const cancellationWindow = isBookedShow ? 0 : (booking.events.cancellation_hours || 4)
                 const canCancel = hoursUntilEvent >= 0 && booking.events.status !== 'cancelled'
-                const willGetRefund = hoursUntilEvent >= cancellationWindow
+                const willGetRefund = !isBookedShow && hoursUntilEvent >= cancellationWindow
 
                 // Calculate time display (until event)
                 const diffMs = eventDate.getTime() - now.getTime()
@@ -950,7 +1026,11 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1 text-muted-foreground">
                           <span>💳</span>
-                          <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
+                          {isBookedShow ? (
+                            <span>Invite only</span>
+                          ) : (
+                            <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
+                          )}
                         </div>
                         {!isPast ? (
                           <Badge variant="secondary" className="text-xs">
@@ -984,14 +1064,16 @@ export default function Dashboard() {
                             }
                           </Button>
 
-                          <p className="text-xs text-muted-foreground text-center">
-                            {isWaitlist
-                              ? `✓ Full refund if you leave waitlist`
-                            : willGetRefund 
-                                ? `✓ Full refund available (${refundTimeDisplay} left)`
-                                : `⚠️ No refund (within ${cancellationWindow}h window)`
-                            }
-                          </p>
+                          {!isBookedShow && (
+                            <p className="text-xs text-muted-foreground text-center">
+                              {isWaitlist
+                                ? `✓ Full refund if you leave waitlist`
+                              : willGetRefund 
+                                  ? `✓ Full refund available (${refundTimeDisplay} left)`
+                                  : `⚠️ No refund (within ${cancellationWindow}h window)`
+                              }
+                            </p>
+                          )}
                         </div>
                       )}
                     </CardContent>
@@ -1006,163 +1088,225 @@ export default function Dashboard() {
         {/* Available Events Section */}
         <div>
           <h2 className="text-xl sm:text-2xl font-bold mb-5 sm:mb-6 tracking-tight">Available Events</h2>
-          
-          {events.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center text-muted-foreground">
-                No upcoming events available
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {events.map((event) => {
-                const booking = myBookings.find(b => b.event_id === event.id)
-                const isBooked = !!booking
-                const canAfford = (profile?.credits || 0) >= event.credits_required
-                const isBooking = bookingLoading === event.id
-                
-                // Check if registration is open
-                const isRegistrationOpen = !event.registration_opens_at || new Date() >= new Date(event.registration_opens_at)
-                const registrationOpensAt = event.registration_opens_at ? new Date(event.registration_opens_at) : null
-                
-                // Check if event is full
-                const confirmedCount = eventConfirmedCounts[event.id] || 0
-                const isFull = event.max_attendees !== null && confirmedCount >= event.max_attendees
-                const spotsLeft = event.max_attendees !== null
-                  ? event.max_attendees - confirmedCount
-                  : null
 
-                return (
-                  <Link
-                    key={event.id}
-                    href={`/events/${event.id}`}
-                    className="block active:opacity-90"
-                  >
-                    <Card className="hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40">
-                    <CardHeader className="pb-3">
-                      <div className="flex justify-between items-start gap-2">
-                        <CardTitle className="text-base md:text-lg flex-1">
-                          {event.title}
-                        </CardTitle>
-                        <Badge variant="secondary" className="whitespace-nowrap">
-                          {event.credits_required} {event.credits_required === 1 ? 'credit' : 'credits'}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <p className="text-xs text-muted-foreground line-clamp-1 break-words whitespace-normal">
-                        {event.description}
-                      </p>
-                      
-                      <div className="text-xs text-muted-foreground">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-1">
-                            <span>📅</span>
-                            <span>{formatDateTime(event.date)}</span>
+          <Tabs value={eventTab} onValueChange={(value) => setEventTab(value as 'perform' | 'attend')} className="mb-6">
+            <TabsList className="grid w-full max-w-xs grid-cols-2">
+              <TabsTrigger value="perform">Perform</TabsTrigger>
+              <TabsTrigger value="attend">Attend</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {(() => {
+            const filteredEvents = events.filter((event) =>
+              eventTab === 'perform'
+                ? event.event_type !== 'booked_show' && !event.tickets_enabled
+                : event.event_type === 'booked_show'
+                  ? !invitedEventIds.has(event.id)
+                  : event.tickets_enabled
+            )
+
+            if (filteredEvents.length === 0) {
+              return (
+                <Card>
+                  <CardContent className="p-8 text-center text-muted-foreground">
+                    {eventTab === 'perform'
+                      ? 'No upcoming events available to perform'
+                      : 'No upcoming shows available to attend'}
+                  </CardContent>
+                </Card>
+              )
+            }
+
+            return (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredEvents.map((event) => {
+                  const booking = myBookings.find(b => b.event_id === event.id)
+                  const isBooked = !!booking
+                  const canAfford = (profile?.credits || 0) >= event.credits_required
+                  const isBooking = bookingLoading === event.id
+                  const now = new Date()
+                  const startTime = new Date(event.date)
+                  const endTime = event.end_time
+                    ? new Date(event.end_time)
+                    : new Date(new Date(event.date).getTime() + 2 * 60 * 60 * 1000)
+                  const isInProgress = startTime <= now && now < endTime
+                  
+                  // Check if registration is open
+                  const isRegistrationOpen = !event.registration_opens_at || new Date() >= new Date(event.registration_opens_at)
+                  const registrationOpensAt = event.registration_opens_at ? new Date(event.registration_opens_at) : null
+                  
+                  // Check if event is full
+                  const confirmedCount = eventConfirmedCounts[event.id] || 0
+                  const isFull = event.max_attendees !== null && confirmedCount >= event.max_attendees
+                  const spotsLeft = event.max_attendees !== null
+                    ? event.max_attendees - confirmedCount
+                    : null
+
+                  return (
+                    <Link
+                      key={event.id}
+                      href={`/events/${event.id}`}
+                      className="block active:opacity-90"
+                    >
+                      <Card className="hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40">
+                        <CardHeader className="pb-3">
+                          <div className="flex justify-between items-start gap-2">
+                            <CardTitle className="text-base md:text-lg flex-1">
+                              {event.title}
+                            </CardTitle>
+                            <div className="flex items-center gap-2">
+                              {isInProgress && (
+                                <Badge variant="outline" className="text-blue-600 border-blue-600 whitespace-nowrap">
+                                  In Progress
+                                </Badge>
+                              )}
+                              {event.event_type !== 'booked_show' && (
+                                <Badge variant="secondary" className="whitespace-nowrap">
+                                  {event.credits_required} {event.credits_required === 1 ? 'credit' : 'credits'}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
-                          {event.max_attendees && spotsLeft !== null && (
-                            <div className="whitespace-nowrap">
-                              👥 {spotsLeft} / {event.max_attendees} spots left
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <p className="text-xs text-muted-foreground line-clamp-1 break-words whitespace-normal">
+                            {event.description}
+                          </p>
+                          
+                          <div className="text-xs text-muted-foreground">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-1">
+                                <span>📅</span>
+                                <span>{formatDateTime(event.date)}</span>
+                              </div>
+                              {event.max_attendees && spotsLeft !== null && (
+                                <div className="whitespace-nowrap">
+                                  👥 {spotsLeft} / {event.max_attendees} spots left
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-1">
+                                <span>📍</span>
+                                <span>{formatVenueName(event.location)}</span>
+                              </div>
+                              <div className="whitespace-nowrap">
+                                {event.theme ? `🎨 ${event.theme}` : ''}
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1">
+                                <span className="sr-only">Rating</span>
+                              </div>
+                              <div className="whitespace-nowrap">
+                                🔞 {event.rating || '18+'}
+                              </div>
+                            </div>
+                            {!isRegistrationOpen && registrationOpensAt && (
+                              <div className="flex items-center justify-between gap-2 pt-1 border-t">
+                                <Badge variant="outline" className="text-orange-600 border-orange-600 whitespace-nowrap">
+                                  ⏰ Opens: {formatDateTime(registrationOpensAt)}
+                                </Badge>
+                              </div>
+                            )}
+                          </div>
+
+                          {event.event_type !== 'booked_show' && !event.tickets_enabled && (
+                            <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                              <p className="text-xs text-muted-foreground">
+                                ⏱️ Cancel {event.cancellation_hours || 4}h before
+                              </p>
+                              
+                              {isBooked ? (
+                                booking.status === 'waitlist' ? (
+                                  <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                                    ⏳ Waitlisted
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-green-600 border-green-600">
+                                    ✓ Booked
+                                  </Badge>
+                                )
+                              ) : event.status === 'cancelled' ? (
+                                <Badge variant="destructive">Cancelled</Badge>
+                              ) : !isRegistrationOpen ? (
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                    Not Open
+                                  </Badge>
+                                  {!alertSet.has(event.id) && (
+                                    <Button
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        handleSetAlert(event.id)
+                                      }}
+                                      disabled={settingAlert === event.id}
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-xs"
+                                    >
+                                      {settingAlert === event.id ? 'Setting...' : 'Alert Me'}
+                                    </Button>
+                                  )}
+                                  {alertSet.has(event.id) && (
+                                    <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
+                                      ✓ Alert Set
+                                    </Badge>
+                                  )}
+                                </div>
+                              ) : (
+                                <Button
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    handleBookEvent(event)
+                                  }}
+                                  disabled={!canAfford || isBooking}
+                                  size="sm"
+                                  className="text-xs"
+                                >
+                                  {isBooking 
+                                    ? 'Booking...' 
+                                    : !canAfford 
+                                      ? 'Not enough credits' 
+                                      : isFull 
+                                        ? 'Join Waitlist' 
+                                        : 'Book Event'}
+                                </Button>
+                              )}
                             </div>
                           )}
-                        </div>
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-1">
-                            <span>📍</span>
-                            <span>{formatVenueName(event.location)}</span>
-                          </div>
-                          <div className="whitespace-nowrap">
-                            {event.theme ? `🎨 ${event.theme}` : ''}
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1">
-                            <span className="sr-only">Rating</span>
-                          </div>
-                          <div className="whitespace-nowrap">
-                            🔞 {event.rating || '18+'}
-                          </div>
-                        </div>
-                        {!isRegistrationOpen && registrationOpensAt && (
-                          <div className="flex items-center justify-between gap-2 pt-1 border-t">
-                            <Badge variant="outline" className="text-orange-600 border-orange-600 whitespace-nowrap">
-                              ⏰ Opens: {formatDateTime(registrationOpensAt)}
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
 
-                      <div className="flex items-center justify-between gap-2 pt-2 border-t">
-                        <p className="text-xs text-muted-foreground">
-                          ⏱️ Cancel {event.cancellation_hours || 4}h before
-                        </p>
-                        
-                        {isBooked ? (
-                          booking.status === 'waitlist' ? (
-                            <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-                              ⏳ Waitlisted
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-green-600 border-green-600">
-                              ✓ Booked
-                            </Badge>
-                          )
-                        ) : event.status === 'cancelled' ? (
-                          <Badge variant="destructive">Cancelled</Badge>
-                        ) : !isRegistrationOpen ? (
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-orange-600 border-orange-600">
-                              Not Open
-                            </Badge>
-                            {!alertSet.has(event.id) && (
-                              <Button
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  handleSetAlert(event.id)
-                                }}
-                                disabled={settingAlert === event.id}
-                                size="sm"
-                                variant="outline"
-                                className="text-xs"
-                              >
-                                {settingAlert === event.id ? 'Setting...' : 'Alert Me'}
-                              </Button>
-                            )}
-                            {alertSet.has(event.id) && (
-                              <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
-                                ✓ Alert Set
-                              </Badge>
-                            )}
-                          </div>
-                        ) : (
-                          <Button
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              handleBookEvent(event)
-                            }}
-                            disabled={!canAfford || isBooking}
-                            size="sm"
-                            className="text-xs"
-                          >
-                            {isBooking 
-                              ? 'Booking...' 
-                              : !canAfford 
-                                ? 'Not enough credits' 
-                                : isFull 
-                                  ? 'Join Waitlist' 
-                                  : 'Book Event'}
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-                )
-              })}
-            </div>
-          )}
+                          {(event.event_type === 'booked_show' || event.tickets_enabled) && (
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t">
+                              {event.tickets_enabled && event.external_event && event.external_ticket_url ? (
+                                <a
+                                  href={event.external_ticket_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Button size="sm" variant="outline" className="text-xs">
+                                    Buy Tickets
+                                  </Button>
+                                </a>
+                              ) : event.tickets_enabled ? (
+                                <Badge variant="outline">Tickets available</Badge>
+                              ) : (
+                                <Badge variant="outline">Invite only</Badge>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
 
       </div>

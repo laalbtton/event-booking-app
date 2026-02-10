@@ -30,12 +30,19 @@ export default function AdminEventsPage() {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [venues, setVenues] = useState<Venue[]>([])
+  const [createStep, setCreateStep] = useState<'details' | 'tickets'>('details')
   
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     theme: '',
     rating: '18+',
+    event_type: 'open_mic',
+    tickets_enabled: false,
+    external_event: false,
+    external_ticket_url: '',
+    ticket_price: '',
+    ticket_quantity: '',
     date: '',
     end_time: '',
     duration_hours: '2',
@@ -132,22 +139,56 @@ export default function AdminEventsPage() {
         return
       }
 
+      if (formData.tickets_enabled && formData.external_event && !formData.external_ticket_url) {
+        alert('Please provide an external ticket link')
+        setSubmitting(false)
+        return
+      }
+
+      if (formData.tickets_enabled && !formData.external_event) {
+        const priceValue = parseFloat(formData.ticket_price)
+        const quantityValue = parseInt(formData.ticket_quantity)
+        if (!Number.isFinite(priceValue) || priceValue <= 0 || !Number.isFinite(quantityValue) || quantityValue <= 0) {
+          alert('Please provide a valid ticket price and quantity')
+          setSubmitting(false)
+          return
+        }
+      }
+
+      if (formData.tickets_enabled && !formData.external_event) {
+        const priceValue = parseFloat(formData.ticket_price)
+        const quantityValue = parseInt(formData.ticket_quantity)
+        if (!Number.isFinite(priceValue) || priceValue <= 0 || !Number.isFinite(quantityValue) || quantityValue <= 0) {
+          alert('Please provide a valid ticket price and quantity')
+          setSubmitting(false)
+          return
+        }
+      }
+
       const durationMinutes = hoursToMinutes(formData.duration_hours)
       const endTimeValue = formData.end_time || computeEndTime(formData.date, durationMinutes)
       const endTimeIso = endTimeValue ? new Date(endTimeValue).toISOString() : null
 
+      const isBookedShow = formData.event_type === 'booked_show'
+      const isTicketed = formData.tickets_enabled
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
         rating: formData.rating || '18+',
+        event_type: formData.event_type || 'open_mic',
+        tickets_enabled: !!formData.tickets_enabled,
+        external_event: !!formData.external_event,
+        external_ticket_url: formData.tickets_enabled && formData.external_event
+          ? formData.external_ticket_url || null
+          : null,
         date: new Date(formData.date).toISOString(),
         end_time: endTimeIso,
         venue_id: formData.venue_id || null,
         location: location,
-        credits_required: parseInt(formData.credits_required),
+        credits_required: isBookedShow || isTicketed ? 0 : parseInt(formData.credits_required),
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
-        cancellation_hours: parseInt(formData.cancellation_hours),
+        cancellation_hours: isBookedShow || isTicketed ? 0 : parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
           ? null 
           : formData.registration_opens_at 
@@ -166,8 +207,21 @@ export default function AdminEventsPage() {
         throw error
       }
 
+      if (formData.tickets_enabled && !formData.external_event) {
+        const ticketPrice = Math.round(parseFloat(formData.ticket_price) * 100)
+        const ticketQuantity = parseInt(formData.ticket_quantity)
+        await supabase.from('event_tickets').insert({
+          event_id: data.id,
+          name: 'General Admission',
+          price_cents: ticketPrice,
+          quantity: ticketQuantity,
+          sold: 0,
+        })
+      }
+
       alert('Event created successfully!')
       setShowCreateForm(false)
+      setCreateStep('details')
       resetFormData()
       loadEvents()
     } catch (error: any) {
@@ -178,7 +232,7 @@ export default function AdminEventsPage() {
     }
   }
 
-  function handleEditEvent(event: Event) {
+  async function handleEditEvent(event: Event) {
     setEditingEvent(event)
     // Convert ISO date to datetime-local format
     const eventDate = new Date(event.date)
@@ -199,11 +253,23 @@ export default function AdminEventsPage() {
       venueId = (event as any).venue_id
     }
 
+    const { data: ticketData } = await supabase
+      .from('event_tickets')
+      .select('price_cents, quantity')
+      .eq('event_id', event.id)
+      .maybeSingle()
+
     setFormData({
       title: event.title,
       description: event.description || '',
       theme: event.theme || '',
       rating: (event as any).rating || '18+',
+      event_type: (event as any).event_type || 'open_mic',
+      tickets_enabled: !!(event as any).tickets_enabled,
+      external_event: !!(event as any).external_event,
+      external_ticket_url: (event as any).external_ticket_url || '',
+      ticket_price: ticketData ? (ticketData.price_cents / 100).toFixed(2) : '',
+      ticket_quantity: ticketData ? ticketData.quantity.toString() : '',
       date: localDateTime,
       end_time: endTimeValue,
       duration_hours: minutesToHoursString(durationMinutes),
@@ -246,17 +312,25 @@ export default function AdminEventsPage() {
       const endTimeValue = formData.end_time || computeEndTime(formData.date, durationMinutes)
       const endTimeIso = endTimeValue ? new Date(endTimeValue).toISOString() : null
 
+      const isBookedShow = formData.event_type === 'booked_show'
+      const isTicketed = formData.tickets_enabled
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
         rating: formData.rating || '18+',
+        event_type: formData.event_type || 'open_mic',
+        tickets_enabled: !!formData.tickets_enabled,
+        external_event: !!formData.external_event,
+        external_ticket_url: formData.tickets_enabled && formData.external_event
+          ? formData.external_ticket_url || null
+          : null,
         date: new Date(formData.date).toISOString(),
         end_time: endTimeIso,
         location: locationValue,
-        credits_required: parseInt(formData.credits_required),
+        credits_required: isBookedShow || isTicketed ? 0 : parseInt(formData.credits_required),
         max_attendees: nextMax,
-        cancellation_hours: parseInt(formData.cancellation_hours),
+        cancellation_hours: isBookedShow || isTicketed ? 0 : parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
           ? null 
           : formData.registration_opens_at 
@@ -273,6 +347,17 @@ export default function AdminEventsPage() {
       if (error) {
         console.error('Error updating event:', error)
         throw error
+      }
+
+      if (formData.tickets_enabled && !formData.external_event) {
+        const ticketPrice = Math.round(parseFloat(formData.ticket_price) * 100)
+        const ticketQuantity = parseInt(formData.ticket_quantity)
+        await supabase.from('event_tickets').upsert({
+          event_id: editingEvent.id,
+          name: 'General Admission',
+          price_cents: ticketPrice,
+          quantity: ticketQuantity,
+        })
       }
 
       if (previousMax !== null && nextMax !== null && nextMax > previousMax) {
@@ -306,6 +391,12 @@ export default function AdminEventsPage() {
       description: '',
       theme: '',
       rating: '18+',
+      event_type: 'open_mic',
+      tickets_enabled: false,
+      external_event: false,
+      external_ticket_url: '',
+      ticket_price: '',
+      ticket_quantity: '',
       date: '',
       end_time: '',
       duration_hours: '2',
@@ -372,7 +463,10 @@ export default function AdminEventsPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold text-gray-900">Event Management</h2>
-        <Button onClick={() => setShowCreateForm(true)}>
+        <Button onClick={() => {
+          setCreateStep('details')
+          setShowCreateForm(true)
+        }}>
           + Create Event
         </Button>
       </div>
@@ -397,9 +491,15 @@ export default function AdminEventsPage() {
                 <p>{event.location}</p>
                 {event.theme && <p>Theme: {event.theme}</p>}
                 <p>Rating: {event.rating || '18+'}</p>
-                <p>{event.credits_required} credits</p>
+                {event.event_type === 'booked_show' ? (
+                  <p>Invite only</p>
+                ) : (
+                  <p>{event.credits_required} credits</p>
+                )}
                 {event.max_attendees && <p>Max {event.max_attendees} attendees</p>}
-                <p>Cancel up to {event.cancellation_hours || 4} hours before</p>
+                {event.event_type !== 'booked_show' && (
+                  <p>Cancel up to {event.cancellation_hours || 4} hours before</p>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -535,6 +635,36 @@ export default function AdminEventsPage() {
             </div>
 
             <div>
+              <Label>Event Type</Label>
+              <div className="flex items-center gap-4">
+                {[
+                  { value: 'open_mic', label: 'Open Mic' },
+                  { value: 'booked_show', label: 'Booked Show' },
+                ].map((option) => (
+                  <label key={option.value} className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="radio"
+                      name="edit-event-type"
+                      value={option.value}
+                      checked={formData.event_type === option.value}
+                        onChange={(e) => {
+                          const nextType = e.target.value
+                          setFormData({
+                            ...formData,
+                            event_type: nextType,
+                            credits_required: nextType === 'booked_show' ? '0' : formData.credits_required || '5',
+                            cancellation_hours: nextType === 'booked_show' ? '0' : formData.cancellation_hours || '4',
+                          })
+                        }}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
               <Label htmlFor="edit-date">Date & Time *</Label>
               <Input
                 id="edit-date"
@@ -612,7 +742,8 @@ export default function AdminEventsPage() {
                   type="number"
                   value={formData.credits_required}
                   onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
-                  min="1"
+                  min="0"
+                disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
                   required
                 />
               </div>
@@ -637,41 +768,194 @@ export default function AdminEventsPage() {
                   value={formData.cancellation_hours}
                   onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
                   min="0"
+                disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
                   required
                 />
-                <p className="text-xs text-muted-foreground mt-1">Hours before event to allow cancellation with refund</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formData.event_type === 'booked_show'
+                    ? 'Not applicable for booked shows'
+                    : formData.tickets_enabled
+                      ? 'Not applicable for ticketed events'
+                      : 'Hours before event to allow cancellation with refund'}
+                </p>
               </div>
             </div>
 
-            <div className="border-t pt-4">
-              <div className="mb-4">
-                <Label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={formData.open_registration_now}
-                    onChange={(e) => setFormData({ ...formData, open_registration_now: e.target.checked })}
-                    className="mr-2 h-4 w-4"
-                  />
-                  <span className="text-sm font-medium">
-                    Open Registration Now
-                  </span>
-                </Label>
-                <p className="text-xs text-muted-foreground ml-6 mt-1">
-                  If unchecked, registration will open at a specific date/time
-                </p>
-              </div>
-
-              {!formData.open_registration_now && (
-                <div>
-                  <Label htmlFor="edit-reg-opens">Registration Opens At *</Label>
-                  <Input
-                    id="edit-reg-opens"
-                    type="datetime-local"
-                    value={formData.registration_opens_at}
-                    onChange={(e) => setFormData({ ...formData, registration_opens_at: e.target.value })}
-                    required={!formData.open_registration_now}
-                  />
+            {formData.event_type !== 'booked_show' && (
+              <div className="border-t pt-4">
+                <div className="mb-4">
+                  <Label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={formData.open_registration_now}
+                      onChange={(e) => setFormData({ ...formData, open_registration_now: e.target.checked })}
+                      className="mr-2 h-4 w-4"
+                    />
+                    <span className="text-sm font-medium">
+                      Open Registration Now
+                    </span>
+                  </Label>
+                  <p className="text-xs text-muted-foreground ml-6 mt-1">
+                    If unchecked, registration will open at a specific date/time
+                  </p>
                 </div>
+
+                {!formData.open_registration_now && (
+                  <div>
+                    <Label htmlFor="edit-reg-opens">Registration Opens At *</Label>
+                    <Input
+                      id="edit-reg-opens"
+                      type="datetime-local"
+                      value={formData.registration_opens_at}
+                      onChange={(e) => setFormData({ ...formData, registration_opens_at: e.target.value })}
+                      required={!formData.open_registration_now}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="border-t pt-4 space-y-3">
+              <Label className="text-sm font-semibold">Tickets</Label>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={formData.tickets_enabled}
+                  onChange={(e) => setFormData({ ...formData, tickets_enabled: e.target.checked })}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                />
+                Add tickets
+              </label>
+
+              {formData.tickets_enabled && (
+                <>
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={formData.external_event}
+                      onChange={(e) => setFormData({ ...formData, external_event: e.target.checked })}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                    />
+                    External event
+                  </label>
+
+                  <div>
+                    <Label htmlFor="edit-external-link">External ticket link</Label>
+                    <Input
+                      id="edit-external-link"
+                      type="url"
+                      value={formData.external_ticket_url}
+                      onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
+                      disabled={!formData.external_event}
+                      placeholder="https://tickets.example.com"
+                    />
+                  </div>
+
+                  {!formData.external_event && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="edit-ticket-price">Ticket price (CAD)</Label>
+                        <Input
+                          id="edit-ticket-price"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.ticket_price}
+                          onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
+                          placeholder="20.00"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-ticket-quantity">Ticket quantity</Label>
+                        <Input
+                          id="edit-ticket-quantity"
+                          type="number"
+                          min="1"
+                          value={formData.ticket_quantity}
+                          onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
+                          placeholder="100"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="border-t pt-4 space-y-3">
+              <Label className="text-sm font-semibold">Tickets</Label>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={formData.tickets_enabled}
+                  onChange={(e) => {
+                    const nextValue = e.target.checked
+                    setFormData({
+                      ...formData,
+                      tickets_enabled: nextValue,
+                      credits_required: nextValue ? '0' : formData.credits_required || '5',
+                      cancellation_hours: nextValue ? '0' : formData.cancellation_hours || '4',
+                      external_event: nextValue ? formData.external_event : false,
+                      external_ticket_url: nextValue ? formData.external_ticket_url : '',
+                    })
+                  }}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                />
+                Add tickets
+              </label>
+
+              {formData.tickets_enabled && (
+                <>
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={formData.external_event}
+                      onChange={(e) => setFormData({ ...formData, external_event: e.target.checked })}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                    />
+                    External event
+                  </label>
+
+                  <div>
+                    <Label htmlFor="create-external-link">External ticket link</Label>
+                    <Input
+                      id="create-external-link"
+                      type="url"
+                      value={formData.external_ticket_url}
+                      onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
+                      disabled={!formData.external_event}
+                      placeholder="https://tickets.example.com"
+                    />
+                  </div>
+
+                  {!formData.external_event && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="create-ticket-price">Ticket price (CAD)</Label>
+                        <Input
+                          id="create-ticket-price"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.ticket_price}
+                          onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
+                          placeholder="20.00"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="create-ticket-quantity">Ticket quantity</Label>
+                        <Input
+                          id="create-ticket-quantity"
+                          type="number"
+                          min="1"
+                          value={formData.ticket_quantity}
+                          onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
+                          placeholder="100"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -704,6 +988,7 @@ export default function AdminEventsPage() {
       <Dialog open={showCreateForm} onOpenChange={(open) => {
         if (!open) {
           setShowCreateForm(false)
+          setCreateStep('details')
           resetFormData()
         }
       }}>
@@ -714,6 +999,8 @@ export default function AdminEventsPage() {
           </DialogHeader>
 
           <form onSubmit={handleCreateEvent} className="space-y-4">
+            {createStep === 'details' && (
+              <>
             <div>
               <Label htmlFor="create-title">Event Title *</Label>
               <Input
@@ -760,6 +1047,53 @@ export default function AdminEventsPage() {
                 <option value="16+">16+</option>
                 <option value="13+">13+</option>
               </select>
+            </div>
+
+            <div>
+              <Label>Event Type</Label>
+              <div className="flex items-center gap-4">
+                {[
+                  { value: 'open_mic', label: 'Open Mic' },
+                  { value: 'booked_show', label: 'Booked Show' },
+                ].map((option) => (
+                  <label key={option.value} className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="radio"
+                      name="create-event-type"
+                      value={option.value}
+                      checked={formData.event_type === option.value}
+                        onChange={(e) => {
+                          const nextType = e.target.value
+                          setFormData({
+                            ...formData,
+                            event_type: nextType,
+                            credits_required: nextType === 'booked_show' ? '0' : formData.credits_required || '5',
+                            cancellation_hours: nextType === 'booked_show' ? '0' : formData.cancellation_hours || '4',
+                          })
+                        }}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={formData.tickets_enabled}
+                  onChange={(e) => setFormData({ ...formData, tickets_enabled: e.target.checked })}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                />
+                Add tickets
+              </Label>
+              {formData.tickets_enabled && (
+                <Button type="button" size="sm" variant="outline" onClick={() => setCreateStep('tickets')}>
+                  Configure tickets
+                </Button>
+              )}
             </div>
 
             <div>
@@ -840,7 +1174,8 @@ export default function AdminEventsPage() {
                   type="number"
                   value={formData.credits_required}
                   onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
-                  min="1"
+                  min="0"
+                disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
                   required
                 />
               </div>
@@ -865,43 +1200,115 @@ export default function AdminEventsPage() {
                   value={formData.cancellation_hours}
                   onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
                   min="0"
+                disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
                   required
                 />
-                <p className="text-xs text-muted-foreground mt-1">Hours before event to allow cancellation with refund</p>
-              </div>
-            </div>
-
-            <div className="border-t pt-4">
-              <div className="mb-4">
-                <Label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={formData.open_registration_now}
-                    onChange={(e) => setFormData({ ...formData, open_registration_now: e.target.checked })}
-                    className="mr-2 h-4 w-4"
-                  />
-                  <span className="text-sm font-medium">
-                    Open Registration Now
-                  </span>
-                </Label>
-                <p className="text-xs text-muted-foreground ml-6 mt-1">
-                  If unchecked, registration will open at a specific date/time
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formData.event_type === 'booked_show'
+                    ? 'Not applicable for booked shows'
+                    : formData.tickets_enabled
+                      ? 'Not applicable for ticketed events'
+                      : 'Hours before event to allow cancellation with refund'}
                 </p>
               </div>
+            </div>
 
-              {!formData.open_registration_now && (
+            {formData.event_type !== 'booked_show' && (
+              <div className="border-t pt-4">
+                <div className="mb-4">
+                  <Label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={formData.open_registration_now}
+                      onChange={(e) => setFormData({ ...formData, open_registration_now: e.target.checked })}
+                      className="mr-2 h-4 w-4"
+                    />
+                    <span className="text-sm font-medium">
+                      Open Registration Now
+                    </span>
+                  </Label>
+                  <p className="text-xs text-muted-foreground ml-6 mt-1">
+                    If unchecked, registration will open at a specific date/time
+                  </p>
+                </div>
+
+                {!formData.open_registration_now && (
+                  <div>
+                    <Label htmlFor="create-reg-opens">Registration Opens At *</Label>
+                    <Input
+                      id="create-reg-opens"
+                      type="datetime-local"
+                      value={formData.registration_opens_at}
+                      onChange={(e) => setFormData({ ...formData, registration_opens_at: e.target.value })}
+                      required={!formData.open_registration_now}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+            </>
+            )}
+
+            {createStep === 'tickets' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-semibold">Ticket Settings</h4>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCreateStep('details')}>
+                    Back
+                  </Button>
+                </div>
+
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={formData.external_event}
+                    onChange={(e) => setFormData({ ...formData, external_event: e.target.checked })}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                  />
+                  External event
+                </label>
+
                 <div>
-                  <Label htmlFor="create-reg-opens">Registration Opens At *</Label>
+                  <Label htmlFor="create-external-link">External ticket link</Label>
                   <Input
-                    id="create-reg-opens"
-                    type="datetime-local"
-                    value={formData.registration_opens_at}
-                    onChange={(e) => setFormData({ ...formData, registration_opens_at: e.target.value })}
-                    required={!formData.open_registration_now}
+                    id="create-external-link"
+                    type="url"
+                    value={formData.external_ticket_url}
+                    onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
+                    disabled={!formData.external_event}
+                    placeholder="https://tickets.example.com"
                   />
                 </div>
-              )}
-            </div>
+
+                {!formData.external_event && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="create-ticket-price">Ticket price (CAD)</Label>
+                      <Input
+                        id="create-ticket-price"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.ticket_price}
+                        onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
+                        placeholder="20.00"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="create-ticket-quantity">Ticket quantity</Label>
+                      <Input
+                        id="create-ticket-quantity"
+                        type="number"
+                        min="1"
+                        value={formData.ticket_quantity}
+                        onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
+                        placeholder="100"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex gap-3 pt-4">
               <Button
@@ -916,6 +1323,7 @@ export default function AdminEventsPage() {
                 variant="outline"
                 onClick={() => {
                   setShowCreateForm(false)
+                  setCreateStep('details')
                   resetFormData()
                 }}
                 className="flex-1"

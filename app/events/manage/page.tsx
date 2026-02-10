@@ -37,12 +37,19 @@ export default function EventManagementPage() {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
   const [venues, setVenues] = useState<Venue[]>([])
   const router = useRouter()
+  const [createStep, setCreateStep] = useState<'details' | 'tickets'>('details')
   
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     theme: '',
     rating: '18+',
+    event_type: 'open_mic',
+    tickets_enabled: false,
+    external_event: false,
+    external_ticket_url: '',
+    ticket_price: '',
+    ticket_quantity: '',
     date: '',
     end_time: '',
     duration_hours: '2',
@@ -165,6 +172,12 @@ export default function EventManagementPage() {
       description: '',
       theme: '',
       rating: '18+',
+      event_type: 'open_mic',
+      tickets_enabled: false,
+      external_event: false,
+      external_ticket_url: '',
+      ticket_price: '',
+      ticket_quantity: '',
       date: '',
       end_time: '',
       duration_hours: '2',
@@ -200,22 +213,46 @@ export default function EventManagementPage() {
         return
       }
 
+      if (formData.tickets_enabled && formData.external_event && !formData.external_ticket_url) {
+        alert('Please provide an external ticket link')
+        setSubmitting(false)
+        return
+      }
+
+      if (formData.tickets_enabled && !formData.external_event) {
+        const priceValue = parseFloat(formData.ticket_price)
+        const quantityValue = parseInt(formData.ticket_quantity)
+        if (!Number.isFinite(priceValue) || priceValue <= 0 || !Number.isFinite(quantityValue) || quantityValue <= 0) {
+          alert('Please provide a valid ticket price and quantity')
+          setSubmitting(false)
+          return
+        }
+      }
+
       const durationMinutes = hoursToMinutes(formData.duration_hours)
       const endTimeValue = formData.end_time || computeEndTime(formData.date, durationMinutes)
       const endTimeIso = endTimeValue ? new Date(endTimeValue).toISOString() : null
 
+      const isBookedShow = formData.event_type === 'booked_show'
+      const isTicketed = formData.tickets_enabled
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
         rating: formData.rating || '18+',
+        event_type: formData.event_type || 'open_mic',
+        tickets_enabled: !!formData.tickets_enabled,
+        external_event: !!formData.external_event,
+        external_ticket_url: formData.tickets_enabled && formData.external_event
+          ? formData.external_ticket_url || null
+          : null,
         date: new Date(formData.date).toISOString(),
         end_time: endTimeIso,
         venue_id: formData.venue_id || null,
         location: location,
-        credits_required: parseInt(formData.credits_required),
+        credits_required: isBookedShow || isTicketed ? 0 : parseInt(formData.credits_required),
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
-        cancellation_hours: parseInt(formData.cancellation_hours),
+        cancellation_hours: isBookedShow || isTicketed ? 0 : parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
           ? null 
           : formData.registration_opens_at 
@@ -236,6 +273,18 @@ export default function EventManagementPage() {
         throw error
       }
 
+      if (formData.tickets_enabled && !formData.external_event) {
+        const ticketPrice = Math.round(parseFloat(formData.ticket_price) * 100)
+        const ticketQuantity = parseInt(formData.ticket_quantity)
+        await supabase.from('event_tickets').insert({
+          event_id: data.id,
+          name: 'General Admission',
+          price_cents: ticketPrice,
+          quantity: ticketQuantity,
+          sold: 0,
+        })
+      }
+
       // Assign creator as attending by default (non-blocking)
       try {
         await supabase
@@ -253,6 +302,7 @@ export default function EventManagementPage() {
 
       alert('Event created successfully!')
       setShowCreateForm(false)
+      setCreateStep('details')
       resetFormData()
       loadEvents()
     } catch (error: any) {
@@ -283,11 +333,23 @@ export default function EventManagementPage() {
       venueId = (event as any).venue_id
     }
 
+    const { data: ticketData } = await supabase
+      .from('event_tickets')
+      .select('price_cents, quantity')
+      .eq('event_id', event.id)
+      .maybeSingle()
+
     setFormData({
       title: event.title,
       description: event.description || '',
       theme: event.theme || '',
       rating: (event as any).rating || '18+',
+      event_type: (event as any).event_type || 'open_mic',
+      tickets_enabled: !!(event as any).tickets_enabled,
+      external_event: !!(event as any).external_event,
+      external_ticket_url: (event as any).external_ticket_url || '',
+      ticket_price: ticketData ? (ticketData.price_cents / 100).toFixed(2) : '',
+      ticket_quantity: ticketData ? ticketData.quantity.toString() : '',
       date: localDateTime,
       end_time: endTimeValue,
       duration_hours: minutesToHoursString(durationMinutes),
@@ -331,24 +393,48 @@ export default function EventManagementPage() {
         return
       }
 
+      if (formData.tickets_enabled && formData.external_event && !formData.external_ticket_url) {
+        alert('Please provide an external ticket link')
+        setSubmitting(false)
+        return
+      }
+
+      if (formData.tickets_enabled && !formData.external_event) {
+        const priceValue = parseFloat(formData.ticket_price)
+        const quantityValue = parseInt(formData.ticket_quantity)
+        if (!Number.isFinite(priceValue) || priceValue <= 0 || !Number.isFinite(quantityValue) || quantityValue <= 0) {
+          alert('Please provide a valid ticket price and quantity')
+          setSubmitting(false)
+          return
+        }
+      }
+
       const durationMinutes = hoursToMinutes(formData.duration_hours)
       const endTimeValue = formData.end_time || computeEndTime(formData.date, durationMinutes)
       const endTimeIso = endTimeValue ? new Date(endTimeValue).toISOString() : null
 
       const previousMax = editingEvent.max_attendees ?? null
       const nextMax = formData.max_attendees ? parseInt(formData.max_attendees) : null
+      const isBookedShow = formData.event_type === 'booked_show'
+      const isTicketed = formData.tickets_enabled
 
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
         rating: formData.rating || '18+',
+        event_type: formData.event_type || 'open_mic',
+        tickets_enabled: !!formData.tickets_enabled,
+        external_event: !!formData.external_event,
+        external_ticket_url: formData.tickets_enabled && formData.external_event
+          ? formData.external_ticket_url || null
+          : null,
         date: new Date(formData.date).toISOString(),
         end_time: endTimeIso,
         location: locationValue,
-        credits_required: parseInt(formData.credits_required),
+        credits_required: isBookedShow || isTicketed ? 0 : parseInt(formData.credits_required),
         max_attendees: nextMax,
-        cancellation_hours: parseInt(formData.cancellation_hours),
+        cancellation_hours: isBookedShow || isTicketed ? 0 : parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
           ? null 
           : formData.registration_opens_at 
@@ -365,6 +451,17 @@ export default function EventManagementPage() {
       if (error) {
         console.error('Error updating event:', error)
         throw error
+      }
+
+      if (formData.tickets_enabled && !formData.external_event) {
+        const ticketPrice = Math.round(parseFloat(formData.ticket_price) * 100)
+        const ticketQuantity = parseInt(formData.ticket_quantity)
+        await supabase.from('event_tickets').upsert({
+          event_id: editingEvent.id,
+          name: 'General Admission',
+          price_cents: ticketPrice,
+          quantity: ticketQuantity,
+        })
       }
 
       if (previousMax !== null && nextMax !== null && nextMax > previousMax) {
@@ -455,7 +552,10 @@ export default function EventManagementPage() {
       <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">My Events</CardTitle>
-          <Button onClick={() => setShowCreateForm(true)}>
+          <Button onClick={() => {
+            setCreateStep('details')
+            setShowCreateForm(true)
+          }}>
             + Create Event
           </Button>
         </div>
@@ -503,9 +603,15 @@ export default function EventManagementPage() {
                       <p>📍 {event.location}</p>
                       {event.theme && <p>🎨 Theme: {event.theme}</p>}
                       <p>🔞 {event.rating || '18+'}</p>
-                      <p>💳 {event.credits_required} credits</p>
+                      {event.event_type === 'booked_show' ? (
+                        <p>🎟️ Invite only</p>
+                      ) : (
+                        <p>💳 {event.credits_required} credits</p>
+                      )}
                       {event.max_attendees && <p>👥 Max {event.max_attendees} attendees</p>}
-                      <p>⏱️ Cancel up to {event.cancellation_hours || 4} hours before</p>
+                      {event.event_type !== 'booked_show' && (
+                        <p>⏱️ Cancel up to {event.cancellation_hours || 4} hours before</p>
+                      )}
                     </div>
 
                     <Separator />
@@ -625,6 +731,8 @@ export default function EventManagementPage() {
               <h3 className="text-xl font-bold mb-4 text-gray-900">Create New Event</h3>
 
               <form onSubmit={handleCreateEvent} className="space-y-4">
+                {createStep === 'details' && (
+                  <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Event Title *
@@ -682,6 +790,70 @@ export default function EventManagementPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Event Type
+                  </label>
+                  <div className="flex items-center gap-4">
+                    {[
+                      { value: 'open_mic', label: 'Open Mic' },
+                      { value: 'booked_show', label: 'Booked Show' },
+                    ].map((option) => (
+                      <label key={option.value} className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="radio"
+                          name="edit_event_type"
+                          value={option.value}
+                          checked={formData.event_type === option.value}
+                          onChange={(e) => {
+                            const nextType = e.target.value
+                            setFormData({
+                              ...formData,
+                              event_type: nextType,
+                              credits_required: nextType === 'booked_show' ? '0' : formData.credits_required || '5',
+                              cancellation_hours: nextType === 'booked_show' ? '0' : formData.cancellation_hours || '4',
+                            })
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Event Type
+                  </label>
+                  <div className="flex items-center gap-4">
+                    {[
+                      { value: 'open_mic', label: 'Open Mic' },
+                      { value: 'booked_show', label: 'Booked Show' },
+                    ].map((option) => (
+                      <label key={option.value} className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="radio"
+                          name="event_type"
+                          value={option.value}
+                          checked={formData.event_type === option.value}
+                          onChange={(e) => {
+                            const nextType = e.target.value
+                            setFormData({
+                              ...formData,
+                              event_type: nextType,
+                              credits_required: nextType === 'booked_show' ? '0' : formData.credits_required || '5',
+                              cancellation_hours: nextType === 'booked_show' ? '0' : formData.cancellation_hours || '4',
+                            })
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Rating
                   </label>
                   <select
@@ -694,6 +866,33 @@ export default function EventManagementPage() {
                     <option value="16+">16+</option>
                     <option value="13+">13+</option>
                   </select>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={formData.tickets_enabled}
+                      onChange={(e) => {
+                        const nextValue = e.target.checked
+                        setFormData({
+                          ...formData,
+                          tickets_enabled: nextValue,
+                          credits_required: nextValue ? '0' : formData.credits_required || '5',
+                          cancellation_hours: nextValue ? '0' : formData.cancellation_hours || '4',
+                          external_event: nextValue ? formData.external_event : false,
+                          external_ticket_url: nextValue ? formData.external_ticket_url : '',
+                        })
+                      }}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                    />
+                    Add tickets
+                  </label>
+                  {formData.tickets_enabled && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => setCreateStep('tickets')}>
+                      Configure tickets
+                    </Button>
+                  )}
                 </div>
 
                 <div>
@@ -782,7 +981,8 @@ export default function EventManagementPage() {
                       type="number"
                       value={formData.credits_required}
                       onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
-                      min="1"
+                      min="0"
+                      disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
@@ -811,43 +1011,201 @@ export default function EventManagementPage() {
                       value={formData.cancellation_hours}
                       onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
                       min="0"
+                      disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
-                    <p className="text-xs text-gray-500 mt-1">Hours before event to allow cancellation with refund</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {formData.event_type === 'booked_show'
+                        ? 'Not applicable for booked shows'
+                        : formData.tickets_enabled
+                          ? 'Not applicable for ticketed events'
+                          : 'Hours before event to allow cancellation with refund'}
+                    </p>
                   </div>
                 </div>
 
-                <div className="border-t pt-4">
-                  <div className="mb-4">
-                    <label className="flex items-center">
+                {formData.event_type !== 'booked_show' && (
+                  <div className="border-t pt-4">
+                    <div className="mb-4">
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.open_registration_now}
+                          onChange={(e) => setFormData({ ...formData, open_registration_now: e.target.checked })}
+                          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm font-medium text-gray-700">
+                          Open Registration Now
+                        </span>
+                      </label>
+                      <p className="text-xs text-gray-500 ml-6 mt-1">
+                        If unchecked, registration will open at a specific date/time
+                      </p>
+                    </div>
+
+                    {!formData.open_registration_now && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Registration Opens At *
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={formData.registration_opens_at}
+                          onChange={(e) => setFormData({ ...formData, registration_opens_at: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required={!formData.open_registration_now}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+                </>
+                )}
+
+                {createStep === 'tickets' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-lg font-semibold text-gray-900">Ticket Settings</h4>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setCreateStep('details')}>
+                        Back
+                      </Button>
+                    </div>
+
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
                       <input
                         type="checkbox"
-                        checked={formData.open_registration_now}
-                        onChange={(e) => setFormData({ ...formData, open_registration_now: e.target.checked })}
-                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        checked={formData.external_event}
+                        onChange={(e) => setFormData({ ...formData, external_event: e.target.checked })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="text-sm font-medium text-gray-700">
-                        Open Registration Now
-                      </span>
+                      External event
                     </label>
-                    <p className="text-xs text-gray-500 ml-6 mt-1">
-                      If unchecked, registration will open at a specific date/time
-                    </p>
-                  </div>
 
-                  {!formData.open_registration_now && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Registration Opens At *
+                        External ticket link
                       </label>
                       <input
-                        type="datetime-local"
-                        value={formData.registration_opens_at}
-                        onChange={(e) => setFormData({ ...formData, registration_opens_at: e.target.value })}
+                        type="url"
+                        value={formData.external_ticket_url}
+                        onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
+                        placeholder="https://tickets.example.com"
+                        disabled={!formData.external_event}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required={!formData.open_registration_now}
                       />
+                    </div>
+
+                    {!formData.external_event && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Ticket price (CAD)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData.ticket_price}
+                            onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
+                            placeholder="20.00"
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Ticket quantity
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={formData.ticket_quantity}
+                            onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
+                            placeholder="100"
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="border-t pt-4 space-y-3">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={formData.tickets_enabled}
+                      onChange={(e) => {
+                        const nextValue = e.target.checked
+                        setFormData({
+                          ...formData,
+                          tickets_enabled: nextValue,
+                          credits_required: nextValue ? '0' : formData.credits_required || '5',
+                          cancellation_hours: nextValue ? '0' : formData.cancellation_hours || '4',
+                          external_event: nextValue ? formData.external_event : false,
+                          external_ticket_url: nextValue ? formData.external_ticket_url : '',
+                        })
+                      }}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                    />
+                    Add tickets
+                  </label>
+
+                  {formData.tickets_enabled && (
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={formData.external_event}
+                          onChange={(e) => setFormData({ ...formData, external_event: e.target.checked })}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        External event
+                      </label>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          External ticket link
+                        </label>
+                        <input
+                          type="url"
+                          value={formData.external_ticket_url}
+                          onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
+                          placeholder="https://tickets.example.com"
+                          disabled={!formData.external_event}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      {!formData.external_event && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Ticket price (CAD)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={formData.ticket_price}
+                              onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
+                              placeholder="20.00"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Ticket quantity
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={formData.ticket_quantity}
+                              onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
+                              placeholder="100"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -864,6 +1222,7 @@ export default function EventManagementPage() {
                     type="button"
                     onClick={() => {
                       setShowCreateForm(false)
+                      setCreateStep('details')
                       resetFormData()
                     }}
                     className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium"
@@ -1008,7 +1367,8 @@ export default function EventManagementPage() {
                       type="number"
                       value={formData.credits_required}
                       onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
-                      min="1"
+                      min="0"
+                      disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
@@ -1037,43 +1397,122 @@ export default function EventManagementPage() {
                       value={formData.cancellation_hours}
                       onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
                       min="0"
+                      disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
-                    <p className="text-xs text-gray-500 mt-1">Hours before event to allow cancellation with refund</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {formData.event_type === 'booked_show'
+                        ? 'Not applicable for booked shows'
+                        : formData.tickets_enabled
+                          ? 'Not applicable for ticketed events'
+                          : 'Hours before event to allow cancellation with refund'}
+                    </p>
                   </div>
                 </div>
 
-                <div className="border-t pt-4">
-                  <div className="mb-4">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.open_registration_now}
-                        onChange={(e) => setFormData({ ...formData, open_registration_now: e.target.checked })}
-                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <span className="text-sm font-medium text-gray-700">
-                        Open Registration Now
-                      </span>
-                    </label>
-                    <p className="text-xs text-gray-500 ml-6 mt-1">
-                      If unchecked, registration will open at a specific date/time
-                    </p>
-                  </div>
-
-                  {!formData.open_registration_now && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Registration Opens At *
+                {formData.event_type !== 'booked_show' && (
+                  <div className="border-t pt-4">
+                    <div className="mb-4">
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.open_registration_now}
+                          onChange={(e) => setFormData({ ...formData, open_registration_now: e.target.checked })}
+                          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm font-medium text-gray-700">
+                          Open Registration Now
+                        </span>
                       </label>
-                      <input
-                        type="datetime-local"
-                        value={formData.registration_opens_at}
-                        onChange={(e) => setFormData({ ...formData, registration_opens_at: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required={!formData.open_registration_now}
-                      />
+                      <p className="text-xs text-gray-500 ml-6 mt-1">
+                        If unchecked, registration will open at a specific date/time
+                      </p>
+                    </div>
+
+                    {!formData.open_registration_now && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Registration Opens At *
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={formData.registration_opens_at}
+                          onChange={(e) => setFormData({ ...formData, registration_opens_at: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required={!formData.open_registration_now}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="border-t pt-4 space-y-3">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={formData.tickets_enabled}
+                      onChange={(e) => setFormData({ ...formData, tickets_enabled: e.target.checked })}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                    />
+                    Add tickets
+                  </label>
+
+                  {formData.tickets_enabled && (
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={formData.external_event}
+                          onChange={(e) => setFormData({ ...formData, external_event: e.target.checked })}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        External event
+                      </label>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          External ticket link
+                        </label>
+                        <input
+                          type="url"
+                          value={formData.external_ticket_url}
+                          onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
+                          placeholder="https://tickets.example.com"
+                          disabled={!formData.external_event}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      {!formData.external_event && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Ticket price (CAD)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={formData.ticket_price}
+                              onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
+                              placeholder="20.00"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Ticket quantity
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={formData.ticket_quantity}
+                              onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
+                              placeholder="100"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
