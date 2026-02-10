@@ -65,6 +65,7 @@ Static assets (icons, manifest, service worker)
    - avatar_url (text) - Profile picture URL
    - credits (integer, default 25)
    - stripe_customer_id (text)
+   - stripe_customer_mode ('test' | 'live', nullable)
    - bio (text)
    - instagram_link, youtube_link, twitter_link, website_link (text)
    - created_at, updated_at (timestamp)

@@ -7,6 +7,7 @@ import { sendEmail, getCreditPurchaseEmail } from '@/lib/email'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+const stripeMode = (process.env.NEXT_PUBLIC_STRIPE_MODE || 'test') as 'test' | 'live'
 
 export async function POST(request: Request) {
   const signature = request.headers.get('stripe-signature')
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
 
   const { data: profile, error: profileError } = await serviceClient
     .from('profiles')
-    .select('id, email, full_name, credits, stripe_customer_id')
+    .select('id, email, full_name, credits, stripe_customer_id, stripe_customer_mode')
     .eq('id', userId)
     .single()
 
@@ -114,6 +115,7 @@ export async function POST(request: Request) {
     .update({
       credits: newBalance,
       stripe_customer_id: profile.stripe_customer_id || session.customer || null,
+      stripe_customer_mode: profile.stripe_customer_mode || stripeMode,
     })
     .eq('id', userId)
 

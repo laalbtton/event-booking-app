@@ -11,6 +11,7 @@ type CheckoutRequest =
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const stripeMode = (process.env.NEXT_PUBLIC_STRIPE_MODE || 'test') as 'test' | 'live'
 
 export async function POST(request: Request) {
   try {
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
 
     const { data: profile } = await serviceClient
       .from('profiles')
-      .select('id, email, full_name, stripe_customer_id')
+      .select('id, email, full_name, stripe_customer_id, stripe_customer_mode')
       .eq('id', authData.user.id)
       .single()
 
@@ -79,6 +80,11 @@ export async function POST(request: Request) {
     }
 
     let customerId = profile.stripe_customer_id
+    const hasMatchingMode = profile.stripe_customer_mode === stripeMode
+    if (customerId && !hasMatchingMode) {
+      customerId = null
+    }
+
     if (!customerId && profile.email) {
       const customer = await stripe.customers.create({
         email: profile.email,
@@ -90,7 +96,7 @@ export async function POST(request: Request) {
       customerId = customer.id
       await serviceClient
         .from('profiles')
-        .update({ stripe_customer_id: customerId })
+        .update({ stripe_customer_id: customerId, stripe_customer_mode: stripeMode })
         .eq('id', profile.id)
     }
 

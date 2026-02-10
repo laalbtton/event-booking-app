@@ -25,6 +25,7 @@ export type Profile = {
   credits: number
   role: UserRole
   stripe_customer_id?: string | null
+  stripe_customer_mode?: 'test' | 'live' | null
   instagram_link: string | null
   youtube_link: string | null
   twitter_link: string | null
