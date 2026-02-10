@@ -650,8 +650,6 @@ export default function ProfilePage() {
                             : 'Booked'
                         const activityDate =
                           booking.booked_at
-                        const balanceDelta =
-                          activity === 'Booked' ? -booking.credits_used : booking.credits_used
                         const displayAmount =
                           activity === 'Booked' ? -booking.credits_used : booking.credits_used
 
@@ -659,19 +657,11 @@ export default function ProfilePage() {
                           ...booking,
                           activity,
                           activityDate,
-                          balanceDelta,
                           displayAmount,
                         }
                       })
 
                       rows.sort((a, b) => new Date(b.activityDate).getTime() - new Date(a.activityDate).getTime())
-
-                      let runningBalance = profile?.credits ?? 0
-                      const rowsWithBalance = rows.map((row) => {
-                        const balance = runningBalance
-                        runningBalance = balance - row.balanceDelta
-                        return { ...row, balance }
-                      })
 
                       return (
                         <div className="overflow-x-auto">
@@ -685,7 +675,7 @@ export default function ProfilePage() {
                                     year: 'numeric',
                                   })
 
-                                const grouped = rowsWithBalance.reduce((acc: Record<string, typeof rowsWithBalance>, row) => {
+                                const grouped = rows.reduce((acc: Record<string, typeof rows>, row) => {
                                   const key = formatActivityDate(row.activityDate)
                                   if (!acc[key]) acc[key] = []
                                   acc[key].push(row)
@@ -693,7 +683,7 @@ export default function ProfilePage() {
                                 }, {})
 
                                 const orderedDates: string[] = []
-                                rowsWithBalance.forEach((row) => {
+                                rows.forEach((row) => {
                                   const key = formatActivityDate(row.activityDate)
                                   if (!orderedDates.includes(key)) {
                                     orderedDates.push(key)
@@ -736,7 +726,6 @@ export default function ProfilePage() {
                                         <div className="text-sm">
                                           {row.displayAmount > 0 ? '+' : ''}{row.displayAmount}
                                         </div>
-                                        <div className="text-xs text-muted-foreground">Bal {row.balance}</div>
                                         {swipeDirection[row.id] === 'right' && (swipeOffset[row.id] || 0) > 50 && (
                                           <div className="text-xs text-muted-foreground mt-1">
                                             {formatTime(row.activityDate)}

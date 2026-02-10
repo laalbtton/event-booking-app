@@ -7,13 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase'
 import type { CreditTransaction } from '@/lib/supabase'
-import { formatDateTime } from '@/lib/dateUtils'
-
-type CreditRow = CreditTransaction & {
-  profiles?: {
-    credits?: number
-  }
-}
+import { formatDateTime, formatTime } from '@/lib/dateUtils'
 
 export default function CreditsHistoryPage() {
   const [transactions, setTransactions] = useState<CreditTransaction[]>([])
@@ -108,41 +102,95 @@ export default function CreditsHistoryPage() {
             <CardContent className="p-6 text-sm text-muted-foreground">No credit activity yet.</CardContent>
           </Card>
         ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Recent activity</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {transactions.map((transaction) => {
-                const isPositive = transaction.amount > 0
-                return (
-                  <div
-                    key={transaction.id}
-                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border pb-3 last:border-0 last:pb-0"
-                  >
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-gray-900">
-                        {transaction.transaction_type === 'purchase' ? 'Credits purchased' : 'Credits update'}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{formatDateTime(transaction.created_at)}</p>
-                      {transaction.notes && (
-                        <p className="text-xs text-muted-foreground">{transaction.notes}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={isPositive ? 'text-green-600 border-green-600' : 'text-red-600 border-red-600'}
-                      >
-                        {isPositive ? '+' : ''}
-                        {transaction.amount}
-                      </Badge>
-                    </div>
+          (() => {
+            const rows = [...transactions]
+            rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+            let runningBalance = currentBalance ?? 0
+            const rowsWithBalance = rows.map((row) => {
+              const balance = runningBalance
+              runningBalance = balance - row.amount
+              return { ...row, balance }
+            })
+
+            const formatActivityDate = (value: string) =>
+              new Date(value).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })
+
+            const grouped = rowsWithBalance.reduce((acc: Record<string, typeof rowsWithBalance>, row) => {
+              const key = formatActivityDate(row.created_at)
+              if (!acc[key]) acc[key] = []
+              acc[key].push(row)
+              return acc
+            }, {})
+
+            const orderedDates: string[] = []
+            rowsWithBalance.forEach((row) => {
+              const key = formatActivityDate(row.created_at)
+              if (!orderedDates.includes(key)) {
+                orderedDates.push(key)
+              }
+            })
+
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Recent activity</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-border text-sm">
+                      <tbody className="divide-y divide-border">
+                        {orderedDates.flatMap((groupDate) => [
+                          (
+                            <tr key={`${groupDate}-header`}>
+                              <td colSpan={3} className="px-4 py-2 text-xs font-semibold text-muted-foreground bg-muted/30">
+                                {groupDate}
+                              </td>
+                            </tr>
+                          ),
+                          ...(grouped[groupDate] || []).map((row) => {
+                            const isPositive = row.amount > 0
+                            return (
+                              <tr key={row.id} className="hover:bg-muted/30">
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="font-medium text-foreground truncate max-w-[220px] sm:max-w-[320px]">
+                                      {row.transaction_type === 'purchase' ? 'Credits purchased' : 'Credits update'}
+                                    </div>
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                      {formatTime(row.created_at)}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {row.transaction_type === 'purchase'
+                                      ? 'Stripe Checkout'
+                                      : (row.notes || '')}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-right text-muted-foreground">
+                                  <div className="text-sm">
+                                    {isPositive ? '+' : ''}
+                                    {row.amount}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                                    Bal {row.balance}
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          }),
+                        ])}
+                      </tbody>
+                    </table>
                   </div>
-                )
-              })}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )
+          })()
         )}
       </div>
       <NavigationTabs />
