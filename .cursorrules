@@ -11,13 +11,14 @@ Laal Button is a credit-based event booking platform for comedy shows and events
 - Features: booking, waitlist, cancellation with refunds, email notifications
 
 ## TECH STACK
-- **Framework**: Next.js 15 (App Router, Server Components)
+- **Framework**: Next.js (App Router, Server Components)
 - **Language**: TypeScript (strict mode)
 - **Database**: Supabase (PostgreSQL)
 - **Auth**: Supabase Auth (email/password + Google OAuth)
 - **Styling**: Tailwind CSS
 - **Email**: Resend
 - **Deployment**: Vercel
+ - **PWA**: Basic manifest + installable metadata
 
 ## KEY DIRECTORIES
 
@@ -55,6 +56,19 @@ Utility libraries and configurations
 ### /public
 Static assets (icons, manifest, service worker)
 
+## PWA (Basic Setup)
+We support a basic installable PWA setup.
+
+- **Manifest**: `public/manifest.json`
+- **Icons**: `public/icon-192.png`, `public/icon-512.png`
+- **Wiring**: `app/layout.tsx` exports `metadata.manifest`, `metadata.icons`, `metadata.appleWebApp`, and `viewport.themeColor`
+
+**Keep these in sync:**
+- `app/layout.tsx` `metadata.themeColor` should match `public/manifest.json` `theme_color`.
+- If you add screenshots in the manifest, ensure the referenced files exist in `/public`.
+
+Note: We are not using a service worker yet (no offline caching / push). Add that later only if needed.
+
 ## DATABASE SCHEMA (Supabase)
 
 ### Tables
@@ -63,7 +77,7 @@ Static assets (icons, manifest, service worker)
    - email (text)
    - full_name (text)
    - avatar_url (text) - Profile picture URL
-   - credits (integer, default 25)
+   - credits (integer, default 0)
    - stripe_customer_id (text)
    - stripe_customer_mode ('test' | 'live', nullable)
    - bio (text)
@@ -320,7 +334,7 @@ When you change credit logic, update ALL these:
 - Types: amount (integer), type (enum), description (text)
 
 **Credit Operations:**
-- Signup: +25 credits (handle_new_user trigger)
+- Signup: no default credits
 - Booking: -5 credits (or event.credits_required)
 - Cancellation: +5 credits (if within refund window)
 - Admin adjustment: +/- any amount
@@ -484,6 +498,13 @@ className="bg-blue-50 border-2 border-blue-200 text-blue-800 px-4 py-3 rounded"
 - **Public read**: For events, venues (anyone can view)
 - **User-specific**: Profiles, bookings (users can only see/edit their own)
 - **Admin-only**: Admin tables, sensitive operations
+
+**Admin transactions page:**
+- `app/admin/transactions/page.tsx` reads from `credit_transactions` and embeds `profiles(full_name,email)`.
+- If admins see *no rows* (or a permission error), ensure RLS policies allow admin `SELECT` on:
+  - `credit_transactions`
+  - `profiles` (for embedded reads)
+- Migration in repo: `credit_transactions_admin_rls.sql`
 
 **Common Policies:**
 ```sql
@@ -875,7 +896,7 @@ Vercel auto-deploys on push to main branch.
 Reference these when building:
 1. **Stripe Payments** - Buy credits with credit card
 2. **QR Code Check-in** - Scan QR at event entrance
-3. **PWA** - Progressive Web App (installable, push notifications)
+3. **PWA Enhancements** - Service worker, offline caching, push notifications
 4. **Event Reviews** - Rate and review events after attending
 5. **Referral Program** - Earn credits for inviting friends
 6. **Membership Tiers** - Subscription-based unlimited events

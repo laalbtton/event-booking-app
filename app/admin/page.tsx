@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string>('')
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null)
   const [creditAmount, setCreditAmount] = useState('')
   const [notes, setNotes] = useState('')
@@ -29,14 +30,21 @@ export default function AdminUsersPage() {
 
   async function loadUsers() {
     setLoading(true)
+    setLoadError('')
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (!error && data) {
-      setUsers(data)
+    if (error) {
+      console.error('Error loading users:', error)
+      setUsers([])
+      setLoadError(error.message || 'Failed to load users')
+      setLoading(false)
+      return
     }
+
+    setUsers(data || [])
     setLoading(false)
   }
 
@@ -114,6 +122,16 @@ export default function AdminUsersPage() {
 
   return (
     <div>
+      {loadError && (
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <div className="text-sm text-red-600">{loadError}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              If this is a permission error, it’s typically Supabase RLS blocking admin reads on `profiles`.
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div className="text-sm text-muted-foreground">
           Total Users: {users.length}

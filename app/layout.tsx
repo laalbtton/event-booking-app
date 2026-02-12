@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Link from 'next/link'
@@ -16,7 +16,25 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Laal Button Event Booking",
   description: "Book comedy shows and events with credits",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Laal Button",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/icon-192.png",
+  },
 };
+
+// Next.js 16+ expects themeColor under `viewport`, not `metadata`.
+export const viewport: Viewport = {
+  themeColor: "#2563eb", // Keep aligned with `public/manifest.json` theme_color
+}
 
 export default function RootLayout({
   children,

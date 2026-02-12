@@ -106,6 +106,16 @@ export default function AdminLayout({
               Bookings
             </Link>
             <Link
+              href="/admin/transactions"
+              className={`font-medium transition-colors ${
+                pathname === '/admin/transactions'
+                  ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
+                  : 'text-gray-700 hover:text-gray-900'
+              }`}
+            >
+              Transactions
+            </Link>
+            <Link
               href="/admin/requests"
               className={`font-medium transition-colors ${
                 pathname === '/admin/requests'

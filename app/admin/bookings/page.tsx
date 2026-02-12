@@ -29,6 +29,7 @@ type BookingWithDetails = {
 export default function AdminBookingsPage() {
   const [bookings, setBookings] = useState<BookingWithDetails[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string>('')
   const [filter, setFilter] = useState<'all' | 'confirmed' | 'waitlist'>('all')
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export default function AdminBookingsPage() {
 
   async function loadBookings() {
     setLoading(true)
+    setLoadError('')
     const { data, error } = await supabase
       .from('bookings')
       .select(`
@@ -46,9 +48,15 @@ export default function AdminBookingsPage() {
       `)
       .order('booked_at', { ascending: false })
 
-    if (!error && data) {
-      setBookings(data as any)
+    if (error) {
+      console.error('Error loading bookings:', error)
+      setBookings([])
+      setLoadError(error.message || 'Failed to load bookings')
+      setLoading(false)
+      return
     }
+
+    setBookings((data || []) as any)
     setLoading(false)
   }
 
@@ -68,6 +76,16 @@ export default function AdminBookingsPage() {
 
   return (
     <div>
+      {loadError && (
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <div className="text-sm text-red-600">{loadError}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              If this is a permission error, it’s typically Supabase RLS blocking admin reads on `bookings` (and embedded `profiles`).
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <div className="flex flex-wrap gap-2 mb-6">
         <Button
           variant={filter === 'all' ? 'default' : 'outline'}
