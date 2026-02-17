@@ -46,6 +46,14 @@ type InviteLink = {
   expires_at: string
 }
 
+type RecentRedemption = {
+  id: string
+  code: string
+  valueCents: number
+  redeemedAt: string
+  attendeeLabel: string
+}
+
 type EventDetails = {
   id: string
   title: string
@@ -54,7 +62,10 @@ type EventDetails = {
   created_by: string | null
   event_type: 'open_mic' | 'booked_show'
   max_attendees: number | null
+  food_coupon_enabled?: boolean
 }
+
+type ScannerEngine = 'native' | 'html5' | null
 
 function getInitials(name: string): string {
   return name
@@ -86,6 +97,17 @@ export default function AttendancePage() {
       .slice(0, 16)
   })
   const [showInviteAdvanced, setShowInviteAdvanced] = useState(false)
+  const [redeemCode, setRedeemCode] = useState('')
+  const [redeemOrderTotal, setRedeemOrderTotal] = useState('')
+  const [redeemNotes, setRedeemNotes] = useState('')
+  const [redeemLoading, setRedeemLoading] = useState(false)
+  const [redeemMessage, setRedeemMessage] = useState('')
+  const [redeemError, setRedeemError] = useState('')
+  const [recentRedemptions, setRecentRedemptions] = useState<RecentRedemption[]>([])
+  const [scannerActive, setScannerActive] = useState(false)
+  const [scannerSupported, setScannerSupported] = useState(true)
+  const [scannerMessage, setScannerMessage] = useState('')
+  const [scannerEngine, setScannerEngine] = useState<ScannerEngine>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
@@ -108,10 +130,22 @@ export default function AttendancePage() {
   const [swipeDirection, setSwipeDirection] = useState<Record<string, 'left' | 'right'>>({})
   const touchStartX = useRef<Record<string, number>>({})
   const touchStartY = useRef<Record<string, number>>({})
+  const scannerVideoRef = useRef<HTMLVideoElement | null>(null)
+  const scannerStreamRef = useRef<MediaStream | null>(null)
+  const scannerIntervalRef = useRef<number | null>(null)
+  const html5ScannerRef = useRef<any>(null)
 
   useEffect(() => {
     checkAuth()
   }, [])
+
+  useEffect(() => {
+    return () => {
+      stopScanner()
+    }
+  }, [])
+
+  const html5ScannerElementId = `coupon-qr-reader-${eventId}`
 
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -137,6 +171,101 @@ export default function AttendancePage() {
     await loadData(user.id)
   }
 
+  function stopScanner() {
+    if (scannerIntervalRef.current) {
+      window.clearInterval(scannerIntervalRef.current)
+      scannerIntervalRef.current = null
+    }
+    if (scannerStreamRef.current) {
+      scannerStreamRef.current.getTracks().forEach((track) => track.stop())
+      scannerStreamRef.current = null
+    }
+    if (scannerVideoRef.current) {
+      scannerVideoRef.current.srcObject = null
+    }
+    if (html5ScannerRef.current) {
+      const scanner = html5ScannerRef.current
+      html5ScannerRef.current = null
+      void scanner.stop().catch(() => undefined).finally(() => {
+        void scanner.clear().catch(() => undefined)
+      })
+    }
+    setScannerEngine(null)
+    setScannerActive(false)
+  }
+
+  async function startHtml5Scanner() {
+    const { Html5Qrcode } = await import('html5-qrcode')
+    const scanner = new Html5Qrcode(html5ScannerElementId)
+    html5ScannerRef.current = scanner
+    await scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 },
+      (decodedText: string) => {
+        if (!decodedText) return
+        setRedeemCode(decodedText.trim())
+        setScannerMessage('QR code detected. Ready to redeem.')
+        stopScanner()
+      },
+      () => undefined
+    )
+    setScannerSupported(true)
+    setScannerActive(true)
+    setScannerEngine('html5')
+    setScannerMessage('Scanner is active. Point camera at coupon QR code.')
+  }
+
+  async function startScanner() {
+    setScannerMessage('')
+    setRedeemError('')
+
+    const DetectorCtor = (window as any).BarcodeDetector
+    if (DetectorCtor) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+        })
+        scannerStreamRef.current = stream
+        if (scannerVideoRef.current) {
+          scannerVideoRef.current.srcObject = stream
+          await scannerVideoRef.current.play()
+        }
+
+        const detector = new DetectorCtor({ formats: ['qr_code'] })
+        scannerIntervalRef.current = window.setInterval(async () => {
+          try {
+            if (!scannerVideoRef.current) return
+            const barcodes = await detector.detect(scannerVideoRef.current)
+            if (!barcodes?.length) return
+            const rawValue = barcodes[0]?.rawValue
+            if (!rawValue) return
+            setRedeemCode(rawValue.trim())
+            setScannerMessage('QR code detected. Ready to redeem.')
+            stopScanner()
+          } catch {
+            // Keep polling frames.
+          }
+        }, 500)
+
+        setScannerSupported(true)
+        setScannerEngine('native')
+        setScannerActive(true)
+        setScannerMessage('Scanner is active. Point camera at coupon QR code.')
+        return
+      } catch {
+        stopScanner()
+      }
+    }
+
+    try {
+      await startHtml5Scanner()
+    } catch (error: any) {
+      stopScanner()
+      setScannerSupported(false)
+      setScannerMessage(error?.message || 'Could not start camera scanner. Use manual code entry.')
+    }
+  }
+
   async function loadData(userId: string) {
     setLoading(true)
     try {
@@ -154,7 +283,7 @@ export default function AttendancePage() {
       // Load event
       const { data: eventData, error: eventError } = await supabase
         .from('events')
-        .select('id, title, date, host_user_id, created_by, event_type, max_attendees')
+        .select('id, title, date, host_user_id, created_by, event_type, max_attendees, food_coupon_enabled')
         .eq('id', eventId)
         .single()
 
@@ -237,6 +366,46 @@ export default function AttendancePage() {
 
       if (waitlistError) throw waitlistError
       setWaitlistBookings(waitlistData as any)
+
+      if (eventData.food_coupon_enabled) {
+        const { data: redeemedVouchers, error: redeemedError } = await supabase
+          .from('booking_vouchers')
+          .select('id, code, value_cents, redeemed_at, user_id')
+          .eq('event_id', eventId)
+          .eq('status', 'redeemed')
+          .order('redeemed_at', { ascending: false })
+          .limit(8)
+
+        if (!redeemedError && redeemedVouchers) {
+          const attendeeMap = new Map<string, string>()
+          ;(bookingsData || []).forEach((booking: any) => {
+            if (booking.user_id && booking.profiles?.full_name) {
+              attendeeMap.set(booking.user_id, booking.profiles.full_name)
+            }
+          })
+          ;(waitlistData || []).forEach((booking: any) => {
+            if (booking.user_id && booking.profiles?.full_name && !attendeeMap.has(booking.user_id)) {
+              attendeeMap.set(booking.user_id, booking.profiles.full_name)
+            }
+          })
+
+          setRecentRedemptions(
+            redeemedVouchers
+              .filter((voucher: any) => voucher.redeemed_at)
+              .map((voucher: any) => ({
+                id: voucher.id,
+                code: voucher.code,
+                valueCents: Number(voucher.value_cents || 0),
+                redeemedAt: voucher.redeemed_at,
+                attendeeLabel: attendeeMap.get(voucher.user_id) || `User ${String(voucher.user_id).slice(0, 8)}`,
+              }))
+          )
+        } else {
+          setRecentRedemptions([])
+        }
+      } else {
+        setRecentRedemptions([])
+      }
 
       const { data: invitesData, error: invitesError } = await supabase
         .from('event_invites')
@@ -512,6 +681,62 @@ export default function AttendancePage() {
       alert('Error removing attendee: ' + error.message)
     } finally {
       setUpdating(null)
+    }
+  }
+
+  async function redeemCoupon() {
+    if (!redeemCode.trim()) {
+      setRedeemError('Enter a coupon code to redeem.')
+      return
+    }
+
+    setRedeemLoading(true)
+    setRedeemError('')
+    setRedeemMessage('')
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const parsedOrderTotal = redeemOrderTotal.trim()
+        ? Math.round(Number(redeemOrderTotal) * 100)
+        : undefined
+
+      if (parsedOrderTotal !== undefined && (Number.isNaN(parsedOrderTotal) || parsedOrderTotal < 0)) {
+        throw new Error('Order total must be a valid non-negative amount.')
+      }
+
+      const response = await fetch('/api/vouchers/redeem', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          code: redeemCode.trim().toUpperCase(),
+          orderTotalCents: parsedOrderTotal,
+          notes: redeemNotes.trim() || undefined,
+        }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to redeem coupon')
+      }
+
+      const discount = Number(data.discountCents || 0) / 100
+      setRedeemMessage(`Coupon redeemed successfully. Discount applied: $${discount.toFixed(2)}.`)
+      setRedeemCode('')
+      setRedeemOrderTotal('')
+      setRedeemNotes('')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await loadData(user.id)
+      }
+    } catch (error: any) {
+      setRedeemError(error.message || 'Failed to redeem coupon')
+    } finally {
+      setRedeemLoading(false)
     }
   }
 
@@ -900,6 +1125,101 @@ export default function AttendancePage() {
             </div>
           </CardContent>
         </Card>
+
+        {event.food_coupon_enabled && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-lg">Redeem Coupon</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Coupon code</label>
+                <input
+                  type="text"
+                  value={redeemCode}
+                  onChange={(e) => setRedeemCode(e.target.value)}
+                  placeholder="LB-XXXXXXXX"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                {!scannerActive ? (
+                  <Button type="button" variant="outline" size="sm" onClick={startScanner}>
+                    Scan QR with camera
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" onClick={stopScanner}>
+                    Stop scanner
+                  </Button>
+                )}
+                {!scannerSupported && (
+                  <span className="text-xs text-muted-foreground">QR scanning unavailable on this browser</span>
+                )}
+              </div>
+              {scannerActive && (
+                <div className="rounded-lg border p-2 bg-black/5">
+                  {scannerEngine === 'native' && (
+                    <video ref={scannerVideoRef} className="w-full rounded-md max-h-64 object-cover" playsInline muted />
+                  )}
+                  {scannerEngine === 'html5' && (
+                    <div id={html5ScannerElementId} className="w-full" />
+                  )}
+                </div>
+              )}
+              {scannerMessage && <p className="text-xs text-muted-foreground">{scannerMessage}</p>}
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Order total (CAD, optional)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={redeemOrderTotal}
+                  onChange={(e) => setRedeemOrderTotal(e.target.value)}
+                  placeholder="e.g. 24.50"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Notes (optional)</label>
+                <input
+                  type="text"
+                  value={redeemNotes}
+                  onChange={(e) => setRedeemNotes(e.target.value)}
+                  placeholder="Optional note for redemption log"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <Button onClick={redeemCoupon} disabled={redeemLoading}>
+                  {redeemLoading ? 'Redeeming...' : 'Redeem coupon'}
+                </Button>
+                {redeemMessage && <span className="text-sm text-green-700">{redeemMessage}</span>}
+                {redeemError && <span className="text-sm text-red-600">{redeemError}</span>}
+              </div>
+
+              <div className="pt-2 border-t">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Recent redemptions</p>
+                {recentRedemptions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No coupons redeemed yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {recentRedemptions.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-3 p-2 border rounded-lg">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{item.attendeeLabel}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {item.code} • {formatDateTime(item.redeemedAt)}
+                          </p>
+                        </div>
+                        <span className="text-sm font-medium">${(item.valueCents / 100).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {event.event_type === 'booked_show' && (
           <Card className="mt-6">

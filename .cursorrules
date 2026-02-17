@@ -183,6 +183,35 @@ Note: We are not using a service worker yet (no offline caching / push). Add tha
    - sold (integer, default 0)
    - created_at (timestamp)
 
+12. **booking_vouchers** (food coupon vouchers)
+   - id (uuid, pk)
+   - booking_id (uuid, unique, references bookings)
+   - event_id, user_id, venue_id (uuid)
+   - code (text, unique)
+   - value_cents (integer)
+   - status ('issued' | 'redeemed' | 'cancelled' | 'expired')
+   - expires_at, redeemed_at (timestamp)
+   - redeemed_by (uuid, nullable)
+   - metadata (jsonb)
+   - created_at, updated_at (timestamp)
+
+13. **voucher_redemptions** (audit log)
+   - id (uuid, pk)
+   - voucher_id (uuid, unique, references booking_vouchers)
+   - event_id, user_id, redeemed_by (uuid)
+   - discount_cents, order_total_cents (integer)
+   - notes (text)
+   - created_at (timestamp)
+
+14. **venue_staff** (venue-scoped permissions)
+   - id (uuid, pk)
+   - venue_id (uuid, references venues)
+   - user_id (uuid, references profiles)
+   - staff_role ('cashier' | 'manager')
+   - active (boolean)
+   - created_by (uuid, references profiles)
+   - created_at, updated_at (timestamp)
+
 ### Database Functions & Triggers
 - handle_new_user() - Creates profile on signup (25 default credits)
 - log_credit_transaction() - Logs all credit changes
@@ -296,6 +325,10 @@ When you change booking logic, consider ALL these:
 - Actions: Create booking, deduct credits, log transaction
 - Triggers: promote_from_waitlist(), assign_waitlist_position()
 - Email: Send booking confirmation (lib/email.ts)
+- Optional food coupon mode:
+  - Split charge into spot fee + coupon component
+  - Issue `booking_vouchers` row at booking time
+  - Venue redemption permissions can include `venue_staff` for the event venue
 
 **Cancel Booking:**
 - app/dashboard/page.tsx → handleCancelBooking()
@@ -303,6 +336,9 @@ When you change booking logic, consider ALL these:
 - Actions: Update status, refund credits (if eligible), log transaction
 - Triggers: promote_from_waitlist()
 - Email: Send cancellation confirmation
+- Coupon-aware cancellation:
+  - If voucher redeemed, coupon component is non-refundable
+  - If voucher unredeemed + policy allows, cancel voucher and refund coupon component
 
 **Waitlist:**
 - Auto-join if event full
@@ -339,6 +375,7 @@ When you change credit logic, update ALL these:
 - Cancellation: +5 credits (if within refund window)
 - Admin adjustment: +/- any amount
 - Purchase: +amount (Stripe integration, planned)
+- Coupon mode: split booking transactions (e.g., `booking_fee`, `food_coupon_issued`)
 
 **Pattern:** If processing credit change:
 1. Update profiles.credits
@@ -904,6 +941,7 @@ Reference these when building:
 8. **SMS Notifications** - Text message reminders
 9. **Event Photos** - Upload photos to event gallery
 10. **Analytics Dashboard** - Admin insights and reports
+11. **Food Coupon Vouchers** - Split booking fee and venue coupon redemption
 
 ## WHEN IN DOUBT
 

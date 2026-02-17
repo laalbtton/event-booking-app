@@ -55,6 +55,10 @@ export default function EventManagementPage() {
     duration_hours: '2',
     venue_id: '',
     credits_required: '5',
+    food_coupon_enabled: false,
+    spot_fee_credits: '5',
+    food_coupon_value_cents: '500',
+    food_coupon_expires_hours: '24',
     max_attendees: '',
     cancellation_hours: '4',
     open_registration_now: true,
@@ -183,6 +187,10 @@ export default function EventManagementPage() {
       duration_hours: '2',
       venue_id: '',
       credits_required: '5',
+      food_coupon_enabled: false,
+      spot_fee_credits: '5',
+      food_coupon_value_cents: '500',
+      food_coupon_expires_hours: '24',
       max_attendees: '',
       cancellation_hours: '4',
       open_registration_now: true,
@@ -251,6 +259,10 @@ export default function EventManagementPage() {
         venue_id: formData.venue_id || null,
         location: location,
         credits_required: isBookedShow || isTicketed ? 0 : parseInt(formData.credits_required),
+        food_coupon_enabled: !isBookedShow && !isTicketed && !!formData.food_coupon_enabled,
+        spot_fee_credits: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.spot_fee_credits || '0') : 0,
+        food_coupon_value_cents: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_value_cents || '0') : 0,
+        food_coupon_expires_hours: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_expires_hours || '24') : 24,
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
         cancellation_hours: isBookedShow || isTicketed ? 0 : parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
@@ -355,6 +367,10 @@ export default function EventManagementPage() {
       duration_hours: minutesToHoursString(durationMinutes),
       venue_id: venueId,
       credits_required: event.credits_required.toString(),
+      food_coupon_enabled: !!(event as any).food_coupon_enabled,
+      spot_fee_credits: ((event as any).spot_fee_credits ?? 5).toString(),
+      food_coupon_value_cents: ((event as any).food_coupon_value_cents ?? 500).toString(),
+      food_coupon_expires_hours: ((event as any).food_coupon_expires_hours ?? 24).toString(),
       max_attendees: event.max_attendees ? event.max_attendees.toString() : '',
       cancellation_hours: event.cancellation_hours.toString(),
       open_registration_now: !event.registration_opens_at,
@@ -433,6 +449,10 @@ export default function EventManagementPage() {
         end_time: endTimeIso,
         location: locationValue,
         credits_required: isBookedShow || isTicketed ? 0 : parseInt(formData.credits_required),
+        food_coupon_enabled: !isBookedShow && !isTicketed && !!formData.food_coupon_enabled,
+        spot_fee_credits: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.spot_fee_credits || '0') : 0,
+        food_coupon_value_cents: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_value_cents || '0') : 0,
+        food_coupon_expires_hours: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_expires_hours || '24') : 24,
         max_attendees: nextMax,
         cancellation_hours: isBookedShow || isTicketed ? 0 : parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
@@ -1025,6 +1045,54 @@ export default function EventManagementPage() {
                   </div>
                 </div>
 
+                {formData.event_type === 'open_mic' && !formData.tickets_enabled && (
+                  <div className="border-t pt-4 space-y-3">
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={formData.food_coupon_enabled}
+                        onChange={(e) => setFormData({ ...formData, food_coupon_enabled: e.target.checked })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                      />
+                      Enable venue food coupon
+                    </label>
+                    {formData.food_coupon_enabled && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Spot fee credits</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.spot_fee_credits}
+                            onChange={(e) => setFormData({ ...formData, spot_fee_credits: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Coupon value (cents)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.food_coupon_value_cents}
+                            onChange={(e) => setFormData({ ...formData, food_coupon_value_cents: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Coupon expiry (hours)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={formData.food_coupon_expires_hours}
+                            onChange={(e) => setFormData({ ...formData, food_coupon_expires_hours: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {formData.event_type !== 'booked_show' && (
                   <div className="border-t pt-4">
                     <div className="mb-4">
@@ -1410,6 +1478,54 @@ export default function EventManagementPage() {
                     </p>
                   </div>
                 </div>
+
+                {formData.event_type === 'open_mic' && !formData.tickets_enabled && (
+                  <div className="border-t pt-4 space-y-3">
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={formData.food_coupon_enabled}
+                        onChange={(e) => setFormData({ ...formData, food_coupon_enabled: e.target.checked })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                      />
+                      Enable venue food coupon
+                    </label>
+                    {formData.food_coupon_enabled && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Spot fee credits</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.spot_fee_credits}
+                            onChange={(e) => setFormData({ ...formData, spot_fee_credits: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Coupon value (cents)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.food_coupon_value_cents}
+                            onChange={(e) => setFormData({ ...formData, food_coupon_value_cents: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Coupon expiry (hours)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={formData.food_coupon_expires_hours}
+                            onChange={(e) => setFormData({ ...formData, food_coupon_expires_hours: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {formData.event_type !== 'booked_show' && (
                   <div className="border-t pt-4">

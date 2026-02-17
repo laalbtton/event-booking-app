@@ -29,6 +29,9 @@ type EventDetails = {
   end_time: string | null
   location: string
   credits_required: number
+  food_coupon_enabled?: boolean
+  spot_fee_credits?: number
+  food_coupon_value_cents?: number
   max_attendees: number | null
   cancellation_hours: number
   host_user_id: string | null
@@ -272,6 +275,14 @@ export default function PublicEventPage() {
                   <span><strong className="font-semibold">Type:</strong> Invite only</span>
                 ) : event.tickets_enabled ? (
                   <span><strong className="font-semibold">Tickets:</strong> {event.external_event ? 'External' : 'Available'}</span>
+                ) : event.food_coupon_enabled ? (
+                  <span>
+                    <strong className="font-semibold">Cost:</strong>{' '}
+                    {Math.max(0, Number(event.spot_fee_credits || 0)) + Math.ceil(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100)} credits
+                    {' '}({Math.max(0, Number(event.spot_fee_credits || 0))} spot + ${(
+                      Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100
+                    ).toFixed(2)} coupon)
+                  </span>
                 ) : (
                   <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
                 )}

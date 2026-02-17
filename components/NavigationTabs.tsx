@@ -19,6 +19,7 @@ export default function NavigationTabs() {
   const router = useRouter()
   const [userRole, setUserRole] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isVenueStaff, setIsVenueStaff] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [userId, setUserId] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState('')
@@ -205,6 +206,15 @@ export default function NavigationTabs() {
       setIsAdmin(!!adminData)
       setUserRole(adminData ? 'admin' : 'performer')
     }
+
+    const { data: venueStaffRow } = await supabase
+      .from('venue_staff')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('active', true)
+      .limit(1)
+      .maybeSingle()
+    setIsVenueStaff(!!venueStaffRow)
   }
 
   async function handleSignOut() {
@@ -320,6 +330,22 @@ export default function NavigationTabs() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 <span className="text-xs font-medium text-center leading-tight">Admin</span>
+              </Link>
+            )}
+
+            {(!isAdmin && isVenueStaff) && (
+              <Link
+                href="/venues/redemptions"
+                className={`${navItemClass} ${
+                  isActive('/venues/redemptions')
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a5 5 0 10-10 0v2m-2 0h14l-1 10H6L5 9z" />
+                </svg>
+                <span className="text-xs font-medium text-center leading-tight">Venue</span>
               </Link>
             )}
             <Button

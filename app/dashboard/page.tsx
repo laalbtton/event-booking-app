@@ -8,12 +8,24 @@ import { formatDateTime, formatTime } from '@/lib/dateUtils'
 import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
 import { createNotification } from '@/lib/notifications'
-import { sendBookingConfirmationEmail, sendWaitlistPromotionEmail, sendBookingCancellationEmail, sendWaitlistPositionEmail } from '@/lib/emailService'
+import { sendBookingConfirmationEmail, sendWaitlistPromotionEmail, sendWaitlistPositionEmail } from '@/lib/emailService'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { QRCodeSVG } from 'qrcode.react'
+import { Copy } from 'lucide-react'
+
+type MyCoupon = {
+  id: string
+  eventTitle: string
+  eventDate: string | null
+  code: string
+  valueCents: number
+  status: 'issued' | 'redeemed' | 'cancelled' | 'expired'
+  expiresAt: string | null
+}
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -29,7 +41,9 @@ export default function Dashboard() {
   const [roleRequestStatus, setRoleRequestStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null)
   const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
   const [eventTab, setEventTab] = useState<'perform' | 'attend'>('perform')
+  const [myActivityTab, setMyActivityTab] = useState<'bookings' | 'coupons'>('bookings')
   const [invitedEventIds, setInvitedEventIds] = useState<Set<string>>(new Set())
+  const [myCoupons, setMyCoupons] = useState<MyCoupon[]>([])
   const previousBookingsRef = useRef<any[]>([])
   const [settingAlert, setSettingAlert] = useState<string | null>(null)
   const [alertSet, setAlertSet] = useState<Set<string>>(new Set())
@@ -55,6 +69,60 @@ export default function Dashboard() {
     const location = formatLocationValue(value)
     const [name] = location.split(',')
     return name.trim() || location
+  }
+
+  function getEffectiveCreditsRequired(event: Event): number {
+    if (!event.food_coupon_enabled) return event.credits_required
+    const spotFee = Math.max(0, Number(event.spot_fee_credits || 0))
+    const couponCredits = Math.ceil(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100)
+    return spotFee + couponCredits
+  }
+
+  function formatCouponStatus(status: MyCoupon['status']) {
+    if (status === 'issued') return 'Issued'
+    if (status === 'redeemed') return 'Redeemed'
+    if (status === 'expired') return 'Expired'
+    return 'Cancelled'
+  }
+
+  function copyCouponCode(code: string) {
+    navigator.clipboard.writeText(code)
+    alert('Coupon code copied!')
+  }
+
+  async function loadMyCoupons(userId: string) {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+    if (!accessToken) {
+      setMyCoupons([])
+      return
+    }
+
+    const response = await fetch('/api/vouchers/my', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to load coupons')
+    }
+
+    const vouchers = Array.isArray(result.vouchers) ? result.vouchers : []
+    const scoped = vouchers.filter((voucher: any) => voucher && voucher.id && voucher.code)
+    setMyCoupons(
+      scoped.map((voucher: any) => ({
+        id: voucher.id,
+        eventTitle: voucher.eventTitle || 'Event',
+        eventDate: voucher.eventDate || null,
+        code: voucher.code,
+        valueCents: Number(voucher.valueCents || 0),
+        status: voucher.status,
+        expiresAt: voucher.expiresAt || null,
+      }))
+    )
   }
 
   useEffect(() => {
@@ -408,6 +476,8 @@ export default function Dashboard() {
         setAlertSet(new Set(alertsData.map(a => a.event_id)))
       }
 
+      await loadMyCoupons(userId)
+
     } catch (error: any) {
       setError(error.message)
     } finally {
@@ -475,93 +545,42 @@ export default function Dashboard() {
         throw new Error('You have already booked this event')
       }
 
-      // Check if user has enough credits
-      if (profile.credits < event.credits_required) {
+      const effectiveCreditsRequired = getEffectiveCreditsRequired(event)
+      if (profile.credits < effectiveCreditsRequired) {
         throw new Error('Insufficient credits')
       }
-
-      // CRITICAL: Check capacity RIGHT BEFORE creating booking
-      // This minimizes race condition window
-      const { count: confirmedCount, error: countError } = await supabase
-        .from('bookings')
-        .select('*', { count: 'exact', head: true })
-        .eq('event_id', event.id)
-        .eq('status', 'confirmed')
-
-      if (countError) throw countError
-
-      // Determine booking status based on CURRENT capacity
-      let bookingStatus: 'confirmed' | 'waitlist' = 'confirmed'
-      
-      if (event.max_attendees !== null && confirmedCount !== null) {
-        if (confirmedCount >= event.max_attendees) {
-          bookingStatus = 'waitlist'
-        }
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) {
+        throw new Error('Not authenticated')
       }
 
-      // Create booking with determined status
-      const { data: newBooking, error: bookingError } = await supabase
-        .from('bookings')
-        .insert({
-          user_id: profile.id,
-          event_id: event.id,
-          credits_used: event.credits_required,
-          status: bookingStatus
-        })
-        .select()
-        .single()
+      const response = await fetch('/api/bookings/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ eventId: event.id }),
+      })
 
-      if (bookingError) throw bookingError
-
-      // Update waitlist positions if joining waitlist
-      if (bookingStatus === 'waitlist') {
-        await supabase.rpc('update_waitlist_positions', { event_uuid: event.id })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create booking')
       }
 
-      // Deduct credits
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ 
-          credits: profile.credits - event.credits_required,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', profile.id)
-
-      if (updateError) {
-        // Rollback: delete the booking if credit deduction fails
-        await supabase.from('bookings').delete().eq('id', newBooking.id)
-        throw updateError
-      }
-
-      // Create transaction record (non-blocking - if it fails, booking still succeeds)
-      try {
-        await supabase.from('credit_transactions').insert({
-          user_id: profile.id,
-          amount: -event.credits_required,
-          transaction_type: 'booking',
-          notes: `${bookingStatus === 'waitlist' ? 'Waitlist: ' : ''}Booked event: ${event.title}`
-        })
-      } catch (transactionError: any) {
-        // Log error but don't fail the booking
-        console.warn('Failed to log credit transaction:', transactionError)
-      }
-
-      // Send email notification (non-blocking)
-      if (bookingStatus === 'waitlist') {
-        // For waitlist, we'll send email when position is set
-        // Email will be sent via the notification system
-      } else {
-        // Send confirmation email for confirmed bookings
-        sendBookingConfirmationEmail(profile.id, newBooking.id, event.id).catch(err => {
-          console.warn('Failed to send booking confirmation email:', err)
+      if (result.bookingStatus === 'confirmed' && result.bookingId) {
+        sendBookingConfirmationEmail(profile.id, result.bookingId, event.id).catch((emailError) => {
+          console.warn('Failed to send booking confirmation email:', emailError)
         })
       }
 
-      // Reload data
       await loadData(profile.id)
-      
-      if (bookingStatus === 'waitlist') {
+
+      if (result.bookingStatus === 'waitlist') {
         alert('Event is full. You have been added to the waitlist. You will be notified if a spot opens up.')
+      } else if (result.voucher) {
+        alert(`Event booked successfully! Food coupon issued: ${result.voucher.code}`)
       } else {
         alert('Event booked successfully!')
       }
@@ -616,135 +635,37 @@ export default function Dashboard() {
     setError('')
 
     try {
-      // Update booking status to cancelled
-      const { error: bookingError } = await supabase
-        .from('bookings')
-        .update({ status: 'cancelled' })
-        .eq('id', booking.id)
-
-      if (bookingError) throw bookingError
-
-      // If a confirmed booking was cancelled and event has max_attendees, promote next waitlist member
-      if (booking.status === 'confirmed' && event.max_attendees) {
-        // Get current confirmed count (after cancellation)
-        const { count: currentConfirmedCount, error: countError } = await supabase
-          .from('bookings')
-          .select('*', { count: 'exact', head: true })
-          .eq('event_id', event.id)
-          .eq('status', 'confirmed')
-
-        if (!countError && currentConfirmedCount !== null && currentConfirmedCount < event.max_attendees) {
-          // Use database function to promote waitlist member and update positions
-          // This bypasses RLS since the function runs with SECURITY DEFINER
-          const { data: functionResult, error: functionError } = await supabase
-            .rpc('promote_waitlist_and_update_positions', { event_uuid: event.id })
-          
-          if (functionError) {
-            console.error('Error promoting waitlist member:', functionError)
-          } else if (functionResult && functionResult.success === false) {
-            console.error('Waitlist promotion failed:', functionResult.error || functionResult.message)
-          } else if (functionResult && functionResult.promoted === true && functionResult.promoted_booking_id) {
-            // Someone was promoted! Send them notification and email
-            try {
-              // Fetch the promoted booking to get the user_id
-              const { data: promotedBooking, error: bookingFetchError } = await supabase
-                .from('bookings')
-                .select('user_id, event_id')
-                .eq('id', functionResult.promoted_booking_id)
-                .single()
-
-              if (!bookingFetchError && promotedBooking) {
-                // Create notification for the promoted user
-                await createNotification(
-                  promotedBooking.user_id,
-                  'waitlist_promoted',
-                  'Promoted to Confirmed! 🎉',
-                  `Congratulations! You've been promoted from the waitlist to confirmed for "${event.title}"!`,
-                  functionResult.promoted_booking_id,
-                  promotedBooking.event_id
-                )
-
-                // Send email to the promoted user (non-blocking)
-                sendWaitlistPromotionEmail(promotedBooking.user_id, promotedBooking.event_id).catch(err => {
-                  console.warn('Failed to send waitlist promotion email:', err)
-                })
-              }
-            } catch (promotionError) {
-              console.error('Error handling waitlist promotion notification:', promotionError)
-            }
-          }
-        }
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) {
+        throw new Error('Not authenticated')
       }
 
-      // Waitlist always gets full refund
-      const shouldRefund = booking.status === 'waitlist' || willGetRefund
-
-      if (shouldRefund) {
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ 
-            credits: profile.credits + booking.credits_used,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', profile.id)
-
-        if (updateError) throw updateError
-
-        // Log refund transaction (non-blocking)
-        try {
-          await supabase.from('credit_transactions').insert({
-            user_id: profile.id,
-            amount: booking.credits_used,
-            transaction_type: 'refund',
-            reference_id: booking.id,
-            notes: `Refund for cancelled ${booking.status === 'waitlist' ? 'waitlist' : 'event'}: ${event.title}`
-          })
-        } catch (transactionError: any) {
-          // Log error but don't fail the refund
-          console.warn('Failed to log refund transaction:', transactionError)
-        }
-
-        alert(`${booking.status === 'waitlist' ? 'Waitlist removed' : 'Booking cancelled'}. ${booking.credits_used} credit${booking.credits_used > 1 ? 's have' : ' has'} been refunded to your account.`)
-      } else {
-        // Log cancellation without refund (non-blocking)
-        try {
-          await supabase.from('credit_transactions').insert({
-            user_id: profile.id,
-            amount: 0,
-            transaction_type: 'cancellation_no_refund',
-            reference_id: booking.id,
-            notes: `Cancelled event without refund (within ${cancellationWindow}h window): ${event.title}`
-          })
-        } catch (transactionError: any) {
-          // Log error but don't fail the cancellation
-          console.warn('Failed to log cancellation transaction:', transactionError)
-        }
-
-        alert('Booking cancelled. No refund issued as cancellation was within the event window.')
-      }
-
-      // Update waitlist positions if this was a confirmed booking
-      if (booking.status === 'confirmed') {
-        await supabase.rpc('update_waitlist_positions', { event_uuid: event.id })
-      }
-
-      // Send cancellation email (non-blocking)
-      const refundStatus = shouldRefund 
-        ? `Full refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''} processed`
-        : `No refund (cancelled within ${cancellationWindow}h window)`
-      
-      sendBookingCancellationEmail(
-        profile.id,
-        event.title,
-        formatDateTime(event.date),
-        shouldRefund ? booking.credits_used : 0,
-        refundStatus
-      ).catch(err => {
-        console.warn('Failed to send cancellation email:', err)
+      const response = await fetch('/api/bookings/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ bookingId: booking.id }),
       })
 
-      // Reload data
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to cancel booking')
+      }
+
       await loadData(profile.id)
+
+      const refundedCredits = Number(result.refundedCredits || 0)
+      if (refundedCredits > 0) {
+        const voucherNote = result.voucherRefunded ? ' Food coupon credits were also refunded.' : ''
+        alert(
+          `${booking.status === 'waitlist' ? 'Waitlist removed' : 'Booking cancelled'}. ${refundedCredits} credit${refundedCredits > 1 ? 's have' : ' has'} been refunded to your account.${voucherNote}`
+        )
+      } else {
+        alert('Booking cancelled. No refund issued based on cancellation policy and voucher status.')
+      }
 
     } catch (error: any) {
       setError(error.message)
@@ -766,6 +687,13 @@ export default function Dashboard() {
       </div>
     )
   }
+
+  const activeUpcomingBookings = myBookings.filter(
+    (booking) =>
+      new Date(booking.events.date) >= currentTime &&
+      booking.status !== 'cancelled' &&
+      booking.events.status !== 'cancelled'
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -850,14 +778,30 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* My Bookings Section - Upcoming Only */}
-        {myBookings.filter((booking) => new Date(booking.events.date) >= currentTime && booking.status !== 'cancelled' && booking.events.status !== 'cancelled').length > 0 && (
-          <div className="mb-8 sm:mb-10">
-            <h2 className="text-xl sm:text-2xl font-bold mb-5 sm:mb-6 tracking-tight">My Bookings</h2>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {myBookings
-                .filter((booking) => new Date(booking.events.date) >= currentTime && booking.status !== 'cancelled' && booking.events.status !== 'cancelled')
-                .map((booking) => {
+        <div className="mb-8 sm:mb-10">
+          <h2 className="text-xl sm:text-2xl font-bold mb-5 sm:mb-6 tracking-tight">My Activity</h2>
+          <Tabs value={myActivityTab} onValueChange={(value) => setMyActivityTab(value as 'bookings' | 'coupons')}>
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="bookings">
+                <span className="sm:hidden">Bookings</span>
+                <span className="hidden sm:inline">My Bookings</span>
+              </TabsTrigger>
+              <TabsTrigger value="coupons">
+                <span className="sm:hidden">Coupons</span>
+                <span className="hidden sm:inline">My Coupons</span>
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="bookings">
+              {activeUpcomingBookings.length === 0 ? (
+                <Card>
+                  <CardContent className="p-8 text-center text-muted-foreground">
+                    No upcoming bookings yet.
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {activeUpcomingBookings.map((booking) => {
                 const eventDate = new Date(booking.events.date)
                 const now = currentTime
                 const hoursUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
@@ -1045,16 +989,84 @@ export default function Dashboard() {
                 </Link>
                 )
               })}
-            </div>
-          </div>
-        )}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="coupons">
+              {myCoupons.length === 0 ? (
+                <Card>
+                  <CardContent className="p-8 text-center text-muted-foreground">
+                    No coupons issued yet.
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {myCoupons.map((coupon) => (
+                    <Card key={coupon.id} className="border-l-4 border-l-blue-500">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="text-base md:text-lg line-clamp-2">{coupon.eventTitle}</CardTitle>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              coupon.status === 'issued' && 'text-blue-600 border-blue-600',
+                              coupon.status === 'redeemed' && 'text-green-600 border-green-600',
+                              coupon.status === 'expired' && 'text-amber-600 border-amber-600',
+                              coupon.status === 'cancelled' && 'text-muted-foreground'
+                            )}
+                          >
+                            {formatCouponStatus(coupon.status)}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="text-sm text-muted-foreground">
+                          {coupon.eventDate ? `📅 ${formatDateTime(coupon.eventDate)}` : '📅 Event date unavailable'}
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Code</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-foreground">{coupon.code}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => copyCouponCode(coupon.code)}
+                              aria-label="Copy coupon code"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Value</span>
+                          <span className="font-medium">${(coupon.valueCents / 100).toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Expires</span>
+                          <span>{coupon.expiresAt ? formatDateTime(coupon.expiresAt) : 'No expiry'}</span>
+                        </div>
+                        <div className="pt-2 border-t flex justify-center">
+                          <div className="bg-white p-2 rounded border">
+                            <QRCodeSVG value={coupon.code} size={96} />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
 
         {/* Available Events Section */}
         <div>
           <h2 className="text-xl sm:text-2xl font-bold mb-5 sm:mb-6 tracking-tight">Available Events</h2>
 
           <Tabs value={eventTab} onValueChange={(value) => setEventTab(value as 'perform' | 'attend')} className="mb-6">
-            <TabsList className="grid w-full max-w-xs grid-cols-2">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="perform">Perform</TabsTrigger>
               <TabsTrigger value="attend">Attend</TabsTrigger>
             </TabsList>
@@ -1084,9 +1096,14 @@ export default function Dashboard() {
             return (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {filteredEvents.map((event) => {
-                  const booking = myBookings.find(b => b.event_id === event.id)
-                  const isBooked = !!booking
-                  const canAfford = (profile?.credits || 0) >= event.credits_required
+                  const activeBooking = myBookings.find(
+                    (b) =>
+                      b.event_id === event.id &&
+                      (b.status === 'confirmed' || b.status === 'waitlist')
+                  )
+                  const isBooked = !!activeBooking
+                  const effectiveCreditsRequired = getEffectiveCreditsRequired(event)
+                  const canAfford = (profile?.credits || 0) >= effectiveCreditsRequired
                   const isBooking = bookingLoading === event.id
                   const now = new Date()
                   const startTime = new Date(event.date)
@@ -1126,7 +1143,7 @@ export default function Dashboard() {
                               )}
                               {event.event_type !== 'booked_show' && (
                                 <Badge variant="secondary" className="whitespace-nowrap">
-                                  {event.credits_required} {event.credits_required === 1 ? 'credit' : 'credits'}
+                                  {effectiveCreditsRequired} {effectiveCreditsRequired === 1 ? 'credit' : 'credits'}
                                 </Badge>
                               )}
                             </div>
@@ -1177,12 +1194,19 @@ export default function Dashboard() {
 
                           {event.event_type !== 'booked_show' && !event.tickets_enabled && (
                             <div className="flex items-center justify-between gap-2 pt-2 border-t">
-                              <p className="text-xs text-muted-foreground">
-                                ⏱️ Cancel {event.cancellation_hours || 4}h before
-                              </p>
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">
+                                  ⏱️ Cancel {event.cancellation_hours || 4}h before
+                                </p>
+                                {event.food_coupon_enabled && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Spot fee {event.spot_fee_credits || 0} credits + coupon ${(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100).toFixed(2)}
+                                  </p>
+                                )}
+                              </div>
                               
                               {isBooked ? (
-                                booking.status === 'waitlist' ? (
+                                activeBooking?.status === 'waitlist' ? (
                                   <Badge variant="outline" className="text-yellow-600 border-yellow-600">
                                     ⏳ Waitlisted
                                   </Badge>

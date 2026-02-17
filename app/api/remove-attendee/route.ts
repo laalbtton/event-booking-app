@@ -82,10 +82,26 @@ export async function POST(request: NextRequest) {
     const cancellationWindow = event.cancellation_hours || 4
     const refundAllowed = booking.status === 'waitlist' || hoursUntilEvent >= cancellationWindow
 
-    const { error: updateError } = await supabase
+    let updateError: any = null
+    const withDateUpdate = await supabase
       .from('bookings')
       .update({ status: 'cancelled', cancellation_date: now.toISOString() })
       .eq('id', booking.id)
+
+    if (withDateUpdate.error) {
+      if (
+        withDateUpdate.error.code === '42703' ||
+        withDateUpdate.error.message?.includes('cancellation_date')
+      ) {
+        const fallbackUpdate = await supabase
+          .from('bookings')
+          .update({ status: 'cancelled' })
+          .eq('id', booking.id)
+        updateError = fallbackUpdate.error || null
+      } else {
+        updateError = withDateUpdate.error
+      }
+    }
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })

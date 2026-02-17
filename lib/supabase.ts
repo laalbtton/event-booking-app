@@ -63,6 +63,10 @@ export type Event = {
   end_time: string | null
   location: string | null
   credits_required: number
+  food_coupon_enabled?: boolean
+  spot_fee_credits?: number
+  food_coupon_value_cents?: number
+  food_coupon_expires_hours?: number
   max_attendees: number | null
   cancellation_hours: number
   registration_opens_at: string | null
@@ -122,5 +126,36 @@ export type CreditTransaction = {
   notes: string | null
   created_by: string | null
   stripe_payment_id?: string | null
+  created_at: string
+}
+
+export type BookingVoucherStatus = 'issued' | 'redeemed' | 'cancelled' | 'expired'
+
+export type BookingVoucher = {
+  id: string
+  booking_id: string
+  event_id: string
+  user_id: string
+  venue_id: string | null
+  code: string
+  value_cents: number
+  status: BookingVoucherStatus
+  expires_at: string | null
+  redeemed_at: string | null
+  redeemed_by: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type VoucherRedemption = {
+  id: string
+  voucher_id: string
+  event_id: string
+  user_id: string
+  redeemed_by: string | null
+  discount_cents: number
+  order_total_cents: number | null
+  notes: string | null
   created_at: string
 }

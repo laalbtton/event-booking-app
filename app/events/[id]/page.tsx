@@ -33,6 +33,9 @@ type EventDetails = {
   location: string
   venue_id: string | null
   credits_required: number
+  food_coupon_enabled?: boolean
+  spot_fee_credits?: number
+  food_coupon_value_cents?: number
   max_attendees: number | null
   cancellation_hours: number
   registration_opens_at: string | null
@@ -292,77 +295,47 @@ export default function EventDetailsPage() {
         throw new Error('You have already booked this event')
       }
 
-      if (profile.credits < eventData.credits_required) {
+      const effectiveCreditsRequired = eventData.food_coupon_enabled
+        ? Math.max(0, Number(eventData.spot_fee_credits || 0)) +
+          Math.ceil(Math.max(0, Number(eventData.food_coupon_value_cents || 0)) / 100)
+        : eventData.credits_required
+
+      if (profile.credits < effectiveCreditsRequired) {
         throw new Error('Insufficient credits')
       }
 
-      const { count: confirmedCount, error: countError } = await supabase
-        .from('bookings')
-        .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventData.id)
-        .eq('status', 'confirmed')
-
-      if (countError) throw countError
-
-      let bookingStatus: 'confirmed' | 'waitlist' = 'confirmed'
-      if (eventData.max_attendees !== null && confirmedCount !== null) {
-        if (confirmedCount >= eventData.max_attendees) {
-          bookingStatus = 'waitlist'
-        }
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) {
+        throw new Error('Not authenticated')
       }
 
-      const { data: newBooking, error: bookingError } = await supabase
-        .from('bookings')
-        .insert({
-          user_id: profile.id,
-          event_id: eventData.id,
-          credits_used: eventData.credits_required,
-          status: bookingStatus
-        })
-        .select()
-        .single()
+      const response = await fetch('/api/bookings/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ eventId: eventData.id }),
+      })
 
-      if (bookingError) throw bookingError
-
-      if (bookingStatus === 'waitlist') {
-        await supabase.rpc('update_waitlist_positions', { event_uuid: eventData.id })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create booking')
       }
 
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          credits: profile.credits - eventData.credits_required,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', profile.id)
-
-      if (updateError) {
-        await supabase.from('bookings').delete().eq('id', newBooking.id)
-        throw updateError
-      }
-
-      try {
-        await supabase.from('credit_transactions').insert({
-          user_id: profile.id,
-          amount: -eventData.credits_required,
-          transaction_type: 'booking',
-          notes: `${bookingStatus === 'waitlist' ? 'Waitlist: ' : ''}Booked event: ${eventData.title}`
-        })
-      } catch (transactionError: any) {
-        console.warn('Failed to log credit transaction:', transactionError)
-      }
-
-      if (bookingStatus === 'confirmed') {
-        sendBookingConfirmationEmail(profile.id, newBooking.id, eventData.id).catch(err => {
-          console.warn('Failed to send booking confirmation email:', err)
+      if (result.bookingStatus === 'confirmed' && result.bookingId) {
+        sendBookingConfirmationEmail(profile.id, result.bookingId, eventData.id).catch((emailError) => {
+          console.warn('Failed to send booking confirmation email:', emailError)
         })
       }
 
       await loadEventDetails()
-      setUserBooking(newBooking)
 
-      if (bookingStatus === 'waitlist') {
+      if (result.bookingStatus === 'waitlist') {
         alert('Event is full. You have been added to the waitlist.')
+      } else if (result.voucher) {
+        alert(`Event booked successfully! Food coupon issued: ${result.voucher.code}`)
       } else {
         alert('Event booked successfully!')
       }
@@ -400,7 +373,8 @@ export default function EventDetailsPage() {
     : null
   const isRegistrationOpen = !event.registration_opens_at || new Date() >= new Date(event.registration_opens_at)
   const isFull = event.max_attendees !== null && confirmedBookings.length >= event.max_attendees
-  const isAlreadyBooked = !!userBooking
+  const isAlreadyBooked =
+    !!userBooking && (userBooking.status === 'confirmed' || userBooking.status === 'waitlist')
   const bookingLabel = isFull ? 'Join Waitlist' : 'Book Event'
   const now = new Date()
   const startTime = new Date(event.date)
@@ -488,6 +462,14 @@ export default function EventDetailsPage() {
                     <span><strong className="font-semibold">Type:</strong> Invite only</span>
                   ) : event.tickets_enabled ? (
                     <span><strong className="font-semibold">Tickets:</strong> {event.external_event ? 'External' : 'Available'}</span>
+                  ) : event.food_coupon_enabled ? (
+                    <span>
+                      <strong className="font-semibold">Cost:</strong>{' '}
+                      {Math.max(0, Number(event.spot_fee_credits || 0)) + Math.ceil(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100)} credits
+                      {' '}({Math.max(0, Number(event.spot_fee_credits || 0))} spot + ${(
+                        Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100
+                      ).toFixed(2)} coupon)
+                    </span>
                   ) : (
                     <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
                   )}
