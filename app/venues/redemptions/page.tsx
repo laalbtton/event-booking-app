@@ -252,6 +252,14 @@ export default function VenueRedemptionsPage() {
   }
 
   async function startHtml5Scanner() {
+    setScannerSupported(true)
+    setScannerEngine('html5')
+    setScannerActive(true)
+    setScannerMessage('Starting camera scanner...')
+
+    // Ensure the scanner container is mounted before constructing Html5Qrcode.
+    await new Promise((resolve) => window.setTimeout(resolve, 0))
+
     const { Html5Qrcode } = await import('html5-qrcode')
     const scanner = new Html5Qrcode(html5ScannerElementId)
     html5ScannerRef.current = scanner
@@ -266,9 +274,6 @@ export default function VenueRedemptionsPage() {
       },
       () => undefined
     )
-    setScannerSupported(true)
-    setScannerActive(true)
-    setScannerEngine('html5')
     setScannerMessage('Scanner is active. Point camera at coupon QR code.')
   }
 
@@ -279,13 +284,18 @@ export default function VenueRedemptionsPage() {
     const DetectorCtor = (window as any).BarcodeDetector
     if (DetectorCtor) {
       try {
+        setScannerSupported(true)
+        setScannerEngine('native')
+        setScannerActive(true)
+        setScannerMessage('Starting camera scanner...')
+
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' } },
         })
         scannerStreamRef.current = stream
         if (scannerVideoRef.current) {
           scannerVideoRef.current.srcObject = stream
-          await scannerVideoRef.current.play()
+          await scannerVideoRef.current.play().catch(() => undefined)
         }
 
         const detector = new DetectorCtor({ formats: ['qr_code'] })
@@ -304,9 +314,6 @@ export default function VenueRedemptionsPage() {
           }
         }, 500)
 
-        setScannerSupported(true)
-        setScannerEngine('native')
-        setScannerActive(true)
         setScannerMessage('Scanner is active. Point camera at coupon QR code.')
         return
       } catch {
@@ -511,7 +518,13 @@ export default function VenueRedemptionsPage() {
             {scannerActive && (
               <div className="rounded-lg border p-2 bg-black/5">
                 {scannerEngine === 'native' && (
-                  <video ref={scannerVideoRef} className="w-full rounded-md max-h-64 object-cover" playsInline muted />
+                  <video
+                    ref={scannerVideoRef}
+                    className="w-full rounded-md max-h-64 min-h-40 object-cover bg-black"
+                    playsInline
+                    muted
+                    autoPlay
+                  />
                 )}
                 {scannerEngine === 'html5' && (
                   <div id={html5ScannerElementId} className="w-full" />
