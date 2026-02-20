@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/poster-autopost/worker",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 10 * * *"
     }
   ]
 }
