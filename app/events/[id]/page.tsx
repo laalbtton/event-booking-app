@@ -28,6 +28,9 @@ type EventDetails = {
   tickets_enabled: boolean
   external_event: boolean
   external_ticket_url: string | null
+  poster_url: string | null
+  poster_caption: string | null
+  poster_updated_at: string | null
   date: string
   end_time: string | null
   location: string
@@ -84,6 +87,8 @@ export default function EventDetailsPage() {
   const [isEventCreator, setIsEventCreator] = useState(false)
   const [venue, setVenue] = useState<VenueDetails | null>(null)
   const [venueOpen, setVenueOpen] = useState(false)
+  const [eventAutoPostEnabled, setEventAutoPostEnabled] = useState(false)
+  const [prefLoading, setPrefLoading] = useState(false)
 
 
   function copyPublicLink() {
@@ -107,6 +112,54 @@ export default function EventDetailsPage() {
 
     navigator.clipboard.writeText(text)
     alert('Attendee list copied!')
+  }
+
+  function copyPosterLink() {
+    if (!event?.poster_url) return
+    navigator.clipboard.writeText(event.poster_url)
+    alert('Poster link copied!')
+  }
+
+  async function sharePoster() {
+    if (!event?.poster_url) return
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({
+          title: `${event.title} poster`,
+          text: event.poster_caption || `Check out this event poster for ${event.title}`,
+          url: event.poster_url,
+        })
+        return
+      }
+      copyPosterLink()
+    } catch {
+      copyPosterLink()
+    }
+  }
+
+  async function toggleEventAutoPost(enabled: boolean) {
+    try {
+      setPrefLoading(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/poster-autopost/preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ eventId, enabled }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Failed to update preference')
+      setEventAutoPostEnabled(enabled)
+    } catch (error: any) {
+      alert(error.message || 'Could not update poster auto-post preference')
+    } finally {
+      setPrefLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -137,6 +190,14 @@ export default function EventDetailsPage() {
           .in('status', ['confirmed', 'waitlist'])
           .maybeSingle()
         setUserBooking(userBookingData || null)
+
+        const { data: prefData } = await supabase
+          .from('poster_auto_post_prefs')
+          .select('auto_post_enabled')
+          .eq('user_id', user.id)
+          .eq('event_id', eventId)
+          .maybeSingle()
+        setEventAutoPostEnabled(!!prefData?.auto_post_enabled)
 
         const { data: alertsData, error: alertsError } = await supabase
           .from('registration_alerts')
@@ -579,6 +640,42 @@ export default function EventDetailsPage() {
             )}
           </CardContent>
         </Card>
+
+        {event.poster_url && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-lg md:text-xl">Event Poster</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={event.poster_url}
+                alt={`${event.title} poster`}
+                className="w-full max-h-[500px] object-contain rounded border bg-muted/30"
+              />
+              {event.poster_caption && (
+                <p className="text-sm text-muted-foreground">{event.poster_caption}</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <a href={event.poster_url} target="_blank" rel="noreferrer" download>
+                  <Button variant="outline" size="sm">Download</Button>
+                </a>
+                <Button variant="outline" size="sm" onClick={copyPosterLink}>Copy Link</Button>
+                <Button variant="outline" size="sm" onClick={sharePoster}>Share</Button>
+                {(userBooking || isHost || isEventCreator) && (
+                  <Button
+                    variant={eventAutoPostEnabled ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => toggleEventAutoPost(!eventAutoPostEnabled)}
+                    disabled={prefLoading}
+                  >
+                    {eventAutoPostEnabled ? 'Auto-post On' : 'Enable Auto-post'}
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Confirmed Attendees */}
         <Card className="mb-6">

@@ -90,6 +90,27 @@ export default function Dashboard() {
     alert('Coupon code copied!')
   }
 
+  function copyPosterLink(url: string) {
+    navigator.clipboard.writeText(url)
+    alert('Poster link copied!')
+  }
+
+  async function sharePoster(url: string, title: string) {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({
+          title: `${title} poster`,
+          text: `Check out this event poster for ${title}`,
+          url,
+        })
+        return
+      }
+      copyPosterLink(url)
+    } catch {
+      copyPosterLink(url)
+    }
+  }
+
   async function loadMyCoupons(userId: string) {
     const { data: sessionData } = await supabase.auth.getSession()
     const accessToken = sessionData.session?.access_token
@@ -982,6 +1003,49 @@ export default function Dashboard() {
                               }
                             </p>
                           )}
+                        </div>
+                      )}
+
+                      {booking.events.poster_url && (
+                        <div className="space-y-2 pt-2 border-t">
+                          <p className="text-xs text-muted-foreground">Poster available</p>
+                          <div className="flex flex-wrap gap-2">
+                            <a
+                              href={booking.events.poster_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              download
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Button size="sm" variant="outline" className="text-xs">
+                                Download Poster
+                              </Button>
+                            </a>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                copyPosterLink(booking.events.poster_url)
+                              }}
+                            >
+                              Copy Poster Link
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                sharePoster(booking.events.poster_url, booking.events.title)
+                              }}
+                            >
+                              Share Poster
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </CardContent>

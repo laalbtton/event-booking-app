@@ -59,6 +59,9 @@ export type Event = {
   tickets_enabled: boolean
   external_event: boolean
   external_ticket_url: string | null
+  poster_url?: string | null
+  poster_caption?: string | null
+  poster_updated_at?: string | null
   date: string
   end_time: string | null
   location: string | null
@@ -157,5 +160,60 @@ export type VoucherRedemption = {
   discount_cents: number
   order_total_cents: number | null
   notes: string | null
+  created_at: string
+}
+
+export type SocialProvider = 'instagram'
+
+export type SocialAccount = {
+  id: string
+  user_id: string
+  provider: SocialProvider
+  external_account_id: string
+  account_username: string | null
+  access_token: string
+  refresh_token: string | null
+  expires_at: string | null
+  metadata: Record<string, unknown>
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type PosterAutoPostPreference = {
+  id: string
+  user_id: string
+  event_id: string | null
+  auto_post_enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type SocialPostJobStatus = 'pending' | 'processing' | 'posted' | 'failed' | 'skipped'
+
+export type SocialPostJob = {
+  id: string
+  user_id: string
+  event_id: string
+  provider: SocialProvider
+  poster_url: string
+  poster_caption: string | null
+  status: SocialPostJobStatus
+  idempotency_key: string
+  attempt_count: number
+  last_error: string | null
+  scheduled_for: string
+  processed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SocialPostAttempt = {
+  id: string
+  job_id: string
+  attempt_number: number
+  status: 'posted' | 'failed' | 'skipped'
+  provider_response: Record<string, unknown> | null
+  error_message: string | null
   created_at: string
 }

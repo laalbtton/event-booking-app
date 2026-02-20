@@ -60,6 +60,11 @@ export default function ProfilePage() {
   const [swipingId, setSwipingId] = useState<string | null>(null)
   const [swipeOffset, setSwipeOffset] = useState<Record<string, number>>({})
   const [swipeDirection, setSwipeDirection] = useState<Record<string, 'right' | 'left'>>({})
+  const [instagramConnected, setInstagramConnected] = useState(false)
+  const [instagramUsername, setInstagramUsername] = useState<string | null>(null)
+  const [globalAutoPostEnabled, setGlobalAutoPostEnabled] = useState(false)
+  const [autopostLoading, setAutopostLoading] = useState(false)
+  const [autopostJobs, setAutopostJobs] = useState<any[]>([])
   const touchStartX = useRef<Record<string, number>>({})
   const touchStartY = useRef<Record<string, number>>({})
   const router = useRouter()
@@ -215,11 +220,115 @@ export default function ProfilePage() {
         setInvites(invitesData as any)
       }
 
+      await loadPosterAutomationState(userId)
+
     } catch (error: any) {
       console.error('Error loading profile:', error)
       alert('Error loading profile: ' + error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadPosterAutomationState(userId: string) {
+    const { data: socialRows } = await supabase
+      .from('social_accounts')
+      .select('account_username, is_active')
+      .eq('user_id', userId)
+      .eq('provider', 'instagram')
+      .eq('is_active', true)
+      .limit(1)
+
+    const social = socialRows && socialRows[0]
+    setInstagramConnected(!!social)
+    setInstagramUsername(social?.account_username || null)
+
+    const { data: prefRows } = await supabase
+      .from('poster_auto_post_prefs')
+      .select('auto_post_enabled')
+      .eq('user_id', userId)
+      .is('event_id', null)
+      .limit(1)
+
+    setGlobalAutoPostEnabled(!!prefRows?.[0]?.auto_post_enabled)
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+    if (!accessToken) {
+      setAutopostJobs([])
+      return
+    }
+
+    const jobsResponse = await fetch('/api/poster-autopost/jobs?mine=true', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    const jobsResult = await jobsResponse.json().catch(() => ({}))
+    if (jobsResponse.ok) {
+      setAutopostJobs(Array.isArray(jobsResult.jobs) ? jobsResult.jobs.slice(0, 6) : [])
+    }
+  }
+
+  async function handleConnectInstagram() {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/social/instagram/connect?redirect=/profile', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.connectUrl) throw new Error(result.error || 'Failed to start OAuth')
+      window.location.href = result.connectUrl
+    } catch (error: any) {
+      alert(error.message || 'Could not connect Instagram')
+    }
+  }
+
+  async function handleDisconnectInstagram() {
+    try {
+      setAutopostLoading(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/social/instagram/disconnect', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Failed to disconnect')
+
+      if (profile) await loadPosterAutomationState(profile.id)
+    } catch (error: any) {
+      alert(error.message || 'Could not disconnect Instagram')
+    } finally {
+      setAutopostLoading(false)
+    }
+  }
+
+  async function updateGlobalAutoPost(enabled: boolean) {
+    try {
+      setAutopostLoading(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/poster-autopost/preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ eventId: null, enabled }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Failed to update preference')
+      setGlobalAutoPostEnabled(enabled)
+    } catch (error: any) {
+      alert(error.message || 'Could not update auto-post setting')
+    } finally {
+      setAutopostLoading(false)
     }
   }
 
@@ -791,6 +900,62 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
         )}
+
+        <Card className="shadow-sm mt-6">
+          <CardHeader>
+            <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">Poster Auto-Post</CardTitle>
+            <CardDescription>Connect Instagram and control poster auto-post behavior.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-lg">
+              <div>
+                <p className="text-sm font-medium">
+                  Instagram {instagramConnected ? `connected${instagramUsername ? ` as @${instagramUsername}` : ''}` : 'not connected'}
+                </p>
+                <p className="text-xs text-muted-foreground">Only Instagram Business/Creator accounts are supported.</p>
+              </div>
+              {instagramConnected ? (
+                <Button variant="outline" onClick={handleDisconnectInstagram} disabled={autopostLoading}>
+                  Disconnect
+                </Button>
+              ) : (
+                <Button onClick={handleConnectInstagram} disabled={autopostLoading}>
+                  Connect Instagram
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div>
+                <p className="text-sm font-medium">Enable auto-post by default</p>
+                <p className="text-xs text-muted-foreground">Applied to new event posters unless you override per event.</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={globalAutoPostEnabled}
+                disabled={!instagramConnected || autopostLoading}
+                onChange={(e) => updateGlobalAutoPost(e.target.checked)}
+                className="h-4 w-4"
+              />
+            </div>
+
+            <div>
+              <p className="text-sm font-medium mb-2">Recent auto-post activity</p>
+              {autopostJobs.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No poster jobs yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {autopostJobs.map((job) => (
+                    <div key={job.id} className="flex items-center justify-between text-xs p-2 border rounded">
+                      <span className="text-muted-foreground">{new Date(job.created_at).toLocaleString()}</span>
+                      <Badge variant="outline">{job.status}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

@@ -7,6 +7,10 @@
     {
       "path": "/api/check-registration-opens",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/poster-autopost/worker",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

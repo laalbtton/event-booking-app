@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { QrCode, Link as LinkIcon } from 'lucide-react'
+import { QrCode, Link as LinkIcon, Image as ImageIcon, Upload, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type Venue = {
@@ -25,6 +25,8 @@ type Venue = {
   name: string
   address: string
 }
+
+const MAX_POSTER_BYTES = 10 * 1024 * 1024
 
 export default function EventManagementPage() {
   const [events, setEvents] = useState<Event[]>([])
@@ -36,6 +38,9 @@ export default function EventManagementPage() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
   const [venues, setVenues] = useState<Venue[]>([])
+  const [posterUploadingId, setPosterUploadingId] = useState<string | null>(null)
+  const [posterJobSummary, setPosterJobSummary] = useState<Record<string, { posted: number; failed: number; pending: number; skipped: number }>>({})
+  const [posterPublishMeta, setPosterPublishMeta] = useState<Record<string, { count: number; lastPublishedAt: string | null }>>({})
   const router = useRouter()
   const [createStep, setCreateStep] = useState<'details' | 'tickets'>('details')
   
@@ -152,8 +157,61 @@ export default function EventManagementPage() {
 
     if (!error && data) {
       setEvents(data)
+      await loadPosterJobSummary((data || []).map((item: any) => item.id))
+      await loadPosterPublishMeta((data || []).map((item: any) => item.id))
     }
     setLoading(false)
+  }
+
+  async function loadPosterJobSummary(eventIds: string[]) {
+    if (eventIds.length === 0) {
+      setPosterJobSummary({})
+      return
+    }
+    const { data } = await supabase
+      .from('social_post_jobs')
+      .select('event_id, status')
+      .in('event_id', eventIds)
+      .order('created_at', { ascending: false })
+
+    const summary: Record<string, { posted: number; failed: number; pending: number; skipped: number }> = {}
+    for (const id of eventIds) {
+      summary[id] = { posted: 0, failed: 0, pending: 0, skipped: 0 }
+    }
+    for (const row of data || []) {
+      if (!summary[row.event_id]) continue
+      if (row.status === 'posted') summary[row.event_id].posted += 1
+      if (row.status === 'failed') summary[row.event_id].failed += 1
+      if (row.status === 'pending' || row.status === 'processing') summary[row.event_id].pending += 1
+      if (row.status === 'skipped') summary[row.event_id].skipped += 1
+    }
+    setPosterJobSummary(summary)
+  }
+
+  async function loadPosterPublishMeta(eventIds: string[]) {
+    if (eventIds.length === 0) {
+      setPosterPublishMeta({})
+      return
+    }
+
+    const { data } = await supabase
+      .from('poster_publish_history')
+      .select('event_id, published_at')
+      .in('event_id', eventIds)
+      .order('published_at', { ascending: false })
+
+    const meta: Record<string, { count: number; lastPublishedAt: string | null }> = {}
+    for (const id of eventIds) {
+      meta[id] = { count: 0, lastPublishedAt: null }
+    }
+    for (const row of data || []) {
+      if (!meta[row.event_id]) continue
+      meta[row.event_id].count += 1
+      if (!meta[row.event_id].lastPublishedAt) {
+        meta[row.event_id].lastPublishedAt = row.published_at
+      }
+    }
+    setPosterPublishMeta(meta)
   }
 
   async function loadVenues() {
@@ -546,6 +604,92 @@ export default function EventManagementPage() {
     }
   }
 
+  async function handlePosterUpload(eventId: string, file: File) {
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file')
+      return
+    }
+    if (file.size > MAX_POSTER_BYTES) {
+      alert('Poster file must be 10MB or smaller')
+      return
+    }
+
+    setPosterUploadingId(eventId)
+    try {
+      const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-')
+      const path = `${eventId}/${Date.now()}-${cleanName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('event-posters')
+        .upload(path, file, { upsert: false, cacheControl: '3600' })
+
+      if (uploadError) throw uploadError
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('event-posters').getPublicUrl(path)
+
+      const caption = window.prompt('Poster caption (optional):') || null
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/posters/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          eventId,
+          action: 'set',
+          posterUrl: publicUrl,
+          posterCaption: caption,
+        }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Failed to save poster')
+
+      alert(`Poster saved. Queued ${result.jobs?.jobsQueued || 0} auto-post job(s).`)
+      await loadEvents()
+    } catch (error: any) {
+      alert(error.message || 'Failed to upload poster')
+    } finally {
+      setPosterUploadingId(null)
+    }
+  }
+
+  async function handlePosterRemove(eventId: string) {
+    if (!confirm('Remove this event poster?')) return
+    setPosterUploadingId(eventId)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/posters/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          eventId,
+          action: 'remove',
+        }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Failed to remove poster')
+      await loadEvents()
+    } catch (error: any) {
+      alert(error.message || 'Failed to remove poster')
+    } finally {
+      setPosterUploadingId(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background pb-20">
@@ -677,6 +821,43 @@ export default function EventManagementPage() {
 
                       {activeTab === 'upcoming' && (
                         <>
+                          <label className="inline-flex">
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) handlePosterUpload(event.id, file)
+                                e.currentTarget.value = ''
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="bg-sky-50 hover:bg-sky-100 border-sky-200 text-sky-700"
+                              disabled={posterUploadingId === event.id}
+                              asChild
+                            >
+                              <span>
+                                {posterUploadingId === event.id ? 'Saving...' : (event.poster_url ? 'Update Poster' : 'Add Poster')}
+                              </span>
+                            </Button>
+                          </label>
+                          {event.poster_url && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-700"
+                              onClick={() => handlePosterRemove(event.id)}
+                              disabled={posterUploadingId === event.id}
+                              title="Remove Poster"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -717,6 +898,23 @@ export default function EventManagementPage() {
                         </Button>
                       )}
                     </div>
+                    {event.poster_url && (
+                      <div className="text-xs text-sky-700 space-y-1">
+                        <div className="flex items-center gap-1">
+                          <ImageIcon className="w-3.5 h-3.5" />
+                          Poster published
+                        </div>
+                        <div className="text-muted-foreground">
+                          Posted: {posterJobSummary[event.id]?.posted || 0} | Pending: {posterJobSummary[event.id]?.pending || 0} | Failed: {posterJobSummary[event.id]?.failed || 0}
+                        </div>
+                        <div className="text-muted-foreground">
+                          Publishes: {posterPublishMeta[event.id]?.count || 0}
+                          {posterPublishMeta[event.id]?.lastPublishedAt
+                            ? ` | Last: ${new Date(posterPublishMeta[event.id].lastPublishedAt as string).toLocaleString()}`
+                            : ''}
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
