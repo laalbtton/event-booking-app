@@ -13,9 +13,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
 import { QRCodeSVG } from 'qrcode.react'
-import { Copy } from 'lucide-react'
+import { Copy, ChevronDown } from 'lucide-react'
 
 type MyCoupon = {
   id: string
@@ -28,6 +29,7 @@ type MyCoupon = {
 }
 
 export default function Dashboard() {
+  const { confirm } = useConfirmDialog()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [myBookings, setMyBookings] = useState<any[]>([])
@@ -47,6 +49,8 @@ export default function Dashboard() {
   const previousBookingsRef = useRef<any[]>([])
   const [settingAlert, setSettingAlert] = useState<string | null>(null)
   const [alertSet, setAlertSet] = useState<Set<string>>(new Set())
+  const [expandedPosterActions, setExpandedPosterActions] = useState<Set<string>>(new Set())
+  const [showRedeemedCoupons, setShowRedeemedCoupons] = useState(false)
   const router = useRouter()
 
   function formatLocationValue(value: unknown): string {
@@ -93,6 +97,74 @@ export default function Dashboard() {
   function copyPosterLink(url: string) {
     navigator.clipboard.writeText(url)
     alert('Poster link copied!')
+  }
+
+  function togglePosterActions(bookingId: string) {
+    setExpandedPosterActions((prev) => {
+      const next = new Set(prev)
+      if (next.has(bookingId)) {
+        next.delete(bookingId)
+      } else {
+        next.add(bookingId)
+      }
+      return next
+    })
+  }
+
+  function renderCouponCard(coupon: MyCoupon) {
+    return (
+      <Card key={coupon.id} className="border-l-4 border-l-blue-500">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-2">
+            <CardTitle className="text-base md:text-lg line-clamp-2">{coupon.eventTitle}</CardTitle>
+            <Badge
+              variant="outline"
+              className={cn(
+                coupon.status === 'issued' && 'text-blue-600 border-blue-600',
+                coupon.status === 'redeemed' && 'text-green-600 border-green-600',
+                coupon.status === 'expired' && 'text-amber-600 border-amber-600',
+                coupon.status === 'cancelled' && 'text-muted-foreground'
+              )}
+            >
+              {formatCouponStatus(coupon.status)}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="text-sm text-muted-foreground">
+            {coupon.eventDate ? `📅 ${formatDateTime(coupon.eventDate)}` : '📅 Event date unavailable'}
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Code</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-foreground">{coupon.code}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => copyCouponCode(coupon.code)}
+                aria-label="Copy coupon code"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Value</span>
+            <span className="font-medium">${(coupon.valueCents / 100).toFixed(2)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Expires</span>
+            <span>{coupon.expiresAt ? formatDateTime(coupon.expiresAt) : 'No expiry'}</span>
+          </div>
+          <div className="pt-2 border-t flex justify-center">
+            <div className="bg-white p-2 rounded border">
+              <QRCodeSVG value={coupon.code} size={96} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   async function sharePoster(url: string, title: string) {
@@ -566,6 +638,30 @@ export default function Dashboard() {
         throw new Error('You have already booked this event')
       }
 
+      const now = new Date()
+      const eventStart = new Date(event.date)
+      const hoursUntilEvent = (eventStart.getTime() - now.getTime()) / (1000 * 60 * 60)
+      const cancellationWindow = event.cancellation_hours || 4
+      const inNoRefundWindow = hoursUntilEvent < cancellationWindow
+      const confirmedCount = eventConfirmedCounts[event.id] || 0
+      const isFullAtConfirmation = event.max_attendees !== null && confirmedCount >= event.max_attendees
+
+      if (inNoRefundWindow) {
+        const confirmMessage = isFullAtConfirmation
+          ? `This event is currently full, so you will join the waitlist.\n\nIf you get promoted to confirmed inside ${cancellationWindow} hours of the start time, cancelling later may not be refundable.\n\nDo you want to continue and join the waitlist?`
+          : `This booking is inside the ${cancellationWindow}-hour no-refund window.\n\nIf you book now and cancel later, you may not receive a credit refund.\n\nDo you want to continue?`
+
+        const shouldProceed = await confirm({
+          title: 'Please read before you confirm',
+          message: confirmMessage,
+          confirmText: isFullAtConfirmation ? 'Join Waitlist' : 'Book Spot',
+          cancelText: 'Nevermind',
+        })
+        if (!shouldProceed) {
+          return
+        }
+      }
+
       const effectiveCreditsRequired = getEffectiveCreditsRequired(event)
       if (profile.credits < effectiveCreditsRequired) {
         throw new Error('Insufficient credits')
@@ -648,7 +744,14 @@ export default function Dashboard() {
           : `Cancel registration for "${event.title}"?\n\n⚠️ You will NOT receive a refund because cancellation is within ${cancellationWindow} hours of the event.\n\nAre you sure you want to cancel?`
     }
 
-    if (!confirm(confirmMessage)) {
+    const shouldProceed = await confirm({
+      title: 'Confirm cancellation',
+      message: confirmMessage,
+      confirmText: booking.status === 'waitlist' ? 'Leave Waitlist' : 'Cancel Booking',
+      cancelText: 'Keep Booking',
+      variant: 'destructive',
+    })
+    if (!shouldProceed) {
       return
     }
 
@@ -1008,44 +1111,62 @@ export default function Dashboard() {
 
                       {booking.events.poster_url && (
                         <div className="space-y-2 pt-2 border-t">
-                          <p className="text-xs text-muted-foreground">Poster available</p>
-                          <div className="flex flex-wrap gap-2">
-                            <a
-                              href={booking.events.poster_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              download
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Button size="sm" variant="outline" className="text-xs">
-                                Download Poster
+                          <button
+                            type="button"
+                            className="w-full flex items-center justify-between text-xs text-muted-foreground"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              togglePosterActions(booking.id)
+                            }}
+                          >
+                            <span>Poster available</span>
+                            <ChevronDown
+                              className={cn(
+                                'h-4 w-4 transition-transform',
+                                expandedPosterActions.has(booking.id) && 'rotate-180'
+                              )}
+                            />
+                          </button>
+                          {expandedPosterActions.has(booking.id) && (
+                            <div className="flex flex-wrap gap-2">
+                              <a
+                                href={booking.events.poster_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                download
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Button size="sm" variant="outline" className="text-xs">
+                                  Download Poster
+                                </Button>
+                              </a>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  copyPosterLink(booking.events.poster_url)
+                                }}
+                              >
+                                Copy Poster Link
                               </Button>
-                            </a>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                copyPosterLink(booking.events.poster_url)
-                              }}
-                            >
-                              Copy Poster Link
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                sharePoster(booking.events.poster_url, booking.events.title)
-                              }}
-                            >
-                              Share Poster
-                            </Button>
-                          </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  sharePoster(booking.events.poster_url, booking.events.title)
+                                }}
+                              >
+                                Share Poster
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </CardContent>
@@ -1065,61 +1186,62 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {myCoupons.map((coupon) => (
-                    <Card key={coupon.id} className="border-l-4 border-l-blue-500">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <CardTitle className="text-base md:text-lg line-clamp-2">{coupon.eventTitle}</CardTitle>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              coupon.status === 'issued' && 'text-blue-600 border-blue-600',
-                              coupon.status === 'redeemed' && 'text-green-600 border-green-600',
-                              coupon.status === 'expired' && 'text-amber-600 border-amber-600',
-                              coupon.status === 'cancelled' && 'text-muted-foreground'
+                (() => {
+                  const activeCoupons = myCoupons.filter((coupon) => coupon.status === 'issued')
+                  const redeemedCoupons = myCoupons.filter((coupon) => coupon.status === 'redeemed')
+                  const otherCoupons = myCoupons.filter(
+                    (coupon) => coupon.status !== 'issued' && coupon.status !== 'redeemed'
+                  )
+
+                  return (
+                    <div className="space-y-6">
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-foreground">Active coupons</p>
+                        {activeCoupons.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No active coupons.</p>
+                        ) : (
+                          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            {activeCoupons.map((coupon) => renderCouponCard(coupon))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-3 border-t pt-4">
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between text-sm font-semibold"
+                          onClick={() => setShowRedeemedCoupons((prev) => !prev)}
+                        >
+                          <span>Redeemed coupons ({redeemedCoupons.length})</span>
+                          <ChevronDown
+                            className={cn('h-4 w-4 transition-transform', showRedeemedCoupons && 'rotate-180')}
+                          />
+                        </button>
+                        {showRedeemedCoupons && (
+                          <>
+                            {redeemedCoupons.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No redeemed coupons.</p>
+                            ) : (
+                              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {redeemedCoupons.map((coupon) => renderCouponCard(coupon))}
+                              </div>
                             )}
-                          >
-                            {formatCouponStatus(coupon.status)}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="text-sm text-muted-foreground">
-                          {coupon.eventDate ? `📅 ${formatDateTime(coupon.eventDate)}` : '📅 Event date unavailable'}
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Code</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-foreground">{coupon.code}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={() => copyCouponCode(coupon.code)}
-                              aria-label="Copy coupon code"
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Value</span>
-                          <span className="font-medium">${(coupon.valueCents / 100).toFixed(2)}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Expires</span>
-                          <span>{coupon.expiresAt ? formatDateTime(coupon.expiresAt) : 'No expiry'}</span>
-                        </div>
-                        <div className="pt-2 border-t flex justify-center">
-                          <div className="bg-white p-2 rounded border">
-                            <QRCodeSVG value={coupon.code} size={96} />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                            {otherCoupons.length > 0 && (
+                              <div className="space-y-3 border-t pt-4">
+                                <p className="text-sm font-semibold text-muted-foreground">
+                                  Expired / cancelled coupons ({otherCoupons.length})
+                                </p>
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                  {otherCoupons.map((coupon) => renderCouponCard(coupon))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()
               )}
             </TabsContent>
           </Tabs>

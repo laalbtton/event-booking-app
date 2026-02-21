@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
+import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { Trash2, Edit, MapPin, Car, Accessibility, UtensilsCrossed } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/lib/dateUtils'
@@ -58,6 +59,7 @@ type RedemptionRow = {
 }
 
 export default function AdminVenuesPage() {
+  const { confirm } = useConfirmDialog()
   const [activeTab, setActiveTab] = useState<'venues' | 'redemptions'>('venues')
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
@@ -384,7 +386,14 @@ export default function AdminVenuesPage() {
   }
 
   async function handleDeleteVenue(venueId: string, venueName: string) {
-    if (!confirm(`Are you sure you want to delete "${venueName}"? This will remove the venue from all events that use it.`)) {
+    const shouldProceed = await confirm({
+      title: 'Delete venue?',
+      message: `Are you sure you want to delete "${venueName}"? This will remove the venue from all events that use it.`,
+      confirmText: 'Delete venue',
+      cancelText: 'Keep venue',
+      variant: 'destructive',
+    })
+    if (!shouldProceed) {
       return
     }
 

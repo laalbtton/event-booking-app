@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
 import { Copy } from 'lucide-react'
 
@@ -67,6 +68,7 @@ type AttendeeBooking = {
 }
 
 export default function EventDetailsPage() {
+  const { confirm } = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
   const eventId = params.id as string
@@ -354,6 +356,30 @@ export default function EventDetailsPage() {
 
       if (userBooking) {
         throw new Error('You have already booked this event')
+      }
+
+      const now = new Date()
+      const eventStart = new Date(eventData.date)
+      const hoursUntilEvent = (eventStart.getTime() - now.getTime()) / (1000 * 60 * 60)
+      const cancellationWindow = eventData.cancellation_hours || 4
+      const inNoRefundWindow = hoursUntilEvent < cancellationWindow
+      const isFullAtConfirmation =
+        eventData.max_attendees !== null && confirmedBookings.length >= eventData.max_attendees
+
+      if (inNoRefundWindow) {
+        const confirmMessage = isFullAtConfirmation
+          ? `This event is currently full, so you will join the waitlist.\n\nIf you get promoted to confirmed inside ${cancellationWindow} hours of the start time, cancelling later may not be refundable.\n\nDo you want to continue and join the waitlist?`
+          : `This booking is inside the ${cancellationWindow}-hour no-refund window.\n\nIf you book now and cancel later, you may not receive a credit refund.\n\nDo you want to continue?`
+
+        const shouldProceed = await confirm({
+          title: 'Please read before you confirm',
+          message: confirmMessage,
+          confirmText: isFullAtConfirmation ? 'Join Waitlist' : 'Book Spot',
+          cancelText: 'Nevermind',
+        })
+        if (!shouldProceed) {
+          return
+        }
       }
 
       const effectiveCreditsRequired = eventData.food_coupon_enabled

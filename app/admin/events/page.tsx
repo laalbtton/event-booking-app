@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { QrCode, Link as LinkIcon, Edit, Users, Image as ImageIcon, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +26,7 @@ type Venue = {
 const MAX_POSTER_BYTES = 10 * 1024 * 1024
 
 export default function AdminEventsPage() {
+  const { confirm } = useConfirmDialog()
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -488,7 +490,14 @@ export default function AdminEventsPage() {
   }
 
   async function handleCancelEvent(eventId: string, eventTitle: string) {
-    if (!confirm(`Cancel "${eventTitle}" and refund all attendees? This cannot be undone.`)) {
+    const shouldProceed = await confirm({
+      title: 'Cancel event?',
+      message: `Cancel "${eventTitle}" and refund all attendees? This cannot be undone.`,
+      confirmText: 'Yes, cancel event',
+      cancelText: 'Keep event',
+      variant: 'destructive',
+    })
+    if (!shouldProceed) {
       return
     }
 
@@ -571,7 +580,14 @@ export default function AdminEventsPage() {
   }
 
   async function handlePosterRemove(eventId: string) {
-    if (!confirm('Remove this event poster?')) return
+    const shouldProceed = await confirm({
+      title: 'Remove poster?',
+      message: 'Remove this event poster?',
+      confirmText: 'Remove',
+      cancelText: 'Keep',
+      variant: 'destructive',
+    })
+    if (!shouldProceed) return
     setPosterUploadingId(eventId)
     try {
       const { data: sessionData } = await supabase.auth.getSession()
