@@ -24,10 +24,15 @@ A `.env.local` file must exist in the project root with these secrets (injected 
 
 If `.env.local` is missing, create it by writing each secret from the corresponding environment variable. See `.cursorrules` for the full list including optional variables.
 
+### Test account
+
+A verified test account is available via `TEST_LOGIN_USERNAME` / `TEST_LOGIN_PASSWORD` secrets. This account has admin privileges, so after login it initially redirects to `/admin`. Use the bottom navigation bar to reach `/dashboard`, `/profile`, etc.
+
 ### Gotchas
 
 - The project uses **npm** (not pnpm/yarn) — confirmed by `package-lock.json`.
 - Node.js 18.18+ is required (Next.js 16.x requirement). The VM ships with Node 22.x which works fine.
-- Supabase Auth requires email verification for new accounts; you cannot complete the full login flow without access to the verification email or a pre-existing verified account.
+- Supabase Auth requires email verification for new accounts; you cannot complete the full login flow without access to the verification email or a pre-existing verified account. Use the test account secrets instead.
+- The test account is an admin user — login redirects to `/admin` by default. Navigate to `/dashboard` via the bottom nav bar for the regular user experience.
 - Protected routes (`/dashboard`, `/profile`, `/events/*`, `/admin/*`) redirect to `/login` when unauthenticated.
-- The `npm run dev` process must be started with `npx next dev` (not via `npm run dev`) when running in the background to avoid the npm wrapper exiting prematurely.
+- When running `npm run dev` in the background, use `npx next dev` directly to avoid the npm wrapper exiting prematurely.
