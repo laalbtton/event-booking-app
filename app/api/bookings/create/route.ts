@@ -18,6 +18,15 @@ function buildVoucherCode() {
   return `LB-${token}`
 }
 
+function buildAudienceCheckinCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let token = ''
+  for (let i = 0; i < 6; i += 1) {
+    token += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+  return `AUD-${token}`
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = getAdminClient()
@@ -43,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, credits')
+      .select('id, credits, role, audience_free_passes_remaining')
       .eq('id', authData.user.id)
       .single()
 
@@ -54,7 +63,7 @@ export async function POST(request: NextRequest) {
     const { data: event, error: eventError } = await supabase
       .from('events')
       .select(
-        'id, title, status, event_type, tickets_enabled, credits_required, max_attendees, registration_opens_at, venue_id, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents, food_coupon_expires_hours'
+        'id, title, status, event_type, tickets_enabled, audience_enabled, audience_capacity, audience_deposit_credits, max_attendees, registration_opens_at, venue_id, credits_required, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents, food_coupon_expires_hours, date, end_time'
       )
       .eq('id', eventId)
       .single()
@@ -69,11 +78,15 @@ export async function POST(request: NextRequest) {
     if (event.event_type === 'booked_show') {
       return NextResponse.json({ error: 'This show is invite-only' }, { status: 400 })
     }
-    if (event.tickets_enabled) {
+    if (event.tickets_enabled && event.event_type !== 'open_mic') {
       return NextResponse.json({ error: 'This event requires tickets, not booking credits' }, { status: 400 })
     }
     if (event.registration_opens_at && new Date() < new Date(event.registration_opens_at)) {
       return NextResponse.json({ error: 'Registration is not open yet' }, { status: 400 })
+    }
+
+    if (profile.role === 'audience' && !event.audience_enabled) {
+      return NextResponse.json({ error: 'Audience registration is not enabled for this event' }, { status: 400 })
     }
 
     const { count: existingBookingCount, error: existingBookingError } = await supabase
@@ -90,53 +103,97 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You already have a booking for this event' }, { status: 400 })
     }
 
-    const foodCouponEnabled = !!event.food_coupon_enabled
+    const isAudienceBooking = profile.role === 'audience'
+    const foodCouponEnabled = !isAudienceBooking && !!event.food_coupon_enabled
     const spotFeeCredits = Math.max(0, Number(event.spot_fee_credits || 0))
     const couponValueCents = Math.max(0, Number(event.food_coupon_value_cents || 0))
     const couponCreditsComponent = Math.ceil(couponValueCents / 100)
-    const totalCreditsRequired = foodCouponEnabled
+    const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 1))
+    const totalCreditsRequired = isAudienceBooking
+      ? audienceDepositCredits
+      : foodCouponEnabled
       ? spotFeeCredits + couponCreditsComponent
       : Math.max(0, Number(event.credits_required || 0))
 
-    if (profile.credits < totalCreditsRequired) {
+    const hasAudienceFreePass = isAudienceBooking && Number(profile.audience_free_passes_remaining || 0) > 0
+    const creditsToDebit = hasAudienceFreePass ? 0 : totalCreditsRequired
+
+    if (profile.credits < creditsToDebit) {
       return NextResponse.json({ error: 'Insufficient credits' }, { status: 400 })
     }
 
-    const { count: confirmedCount, error: confirmedCountError } = await supabase
+    const performerCapacity = event.max_attendees
+    const audienceCapacity = Math.max(0, Number((event as any).audience_capacity || 15))
+    const capacityField = isAudienceBooking ? audienceCapacity : performerCapacity
+    const capacityScope = isAudienceBooking ? 'audience' : 'performer'
+
+    const confirmedCountQuery = supabase
       .from('bookings')
       .select('id', { count: 'exact', head: true })
       .eq('event_id', event.id)
       .eq('status', 'confirmed')
+      .eq('booking_scope', capacityScope)
+
+    const { count: confirmedCount, error: confirmedCountError } = await confirmedCountQuery
 
     if (confirmedCountError) {
       return NextResponse.json({ error: confirmedCountError.message }, { status: 500 })
     }
 
-    const isFull = event.max_attendees !== null && (confirmedCount ?? 0) >= event.max_attendees
+    const isFull = capacityField !== null && (confirmedCount ?? 0) >= capacityField
     const bookingStatus: 'confirmed' | 'waitlist' = isFull ? 'waitlist' : 'confirmed'
+
+    let audienceCheckinCode: string | null = null
+    if (isAudienceBooking) {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const candidate = buildAudienceCheckinCode()
+        const { data: existingCode } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('audience_checkin_code', candidate)
+          .maybeSingle()
+        if (!existingCode) {
+          audienceCheckinCode = candidate
+          break
+        }
+      }
+      if (!audienceCheckinCode) {
+        return NextResponse.json({ error: 'Failed to create check-in code' }, { status: 500 })
+      }
+    }
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
         user_id: authData.user.id,
         event_id: event.id,
-        credits_used: totalCreditsRequired,
+        credits_used: creditsToDebit,
         status: bookingStatus,
         attendance_status: null,
+        booking_scope: isAudienceBooking ? 'audience' : 'performer',
+        audience_checkin_code: audienceCheckinCode,
       })
-      .select('id, user_id, event_id, credits_used, status')
+      .select('id, user_id, event_id, credits_used, status, booking_scope, audience_checkin_code')
       .single()
 
     if (bookingError || !booking) {
       return NextResponse.json({ error: bookingError?.message || 'Failed to create booking' }, { status: 500 })
     }
 
+    const profilePatch: Record<string, any> = {
+      credits: profile.credits - creditsToDebit,
+      updated_at: new Date().toISOString(),
+    }
+    if (hasAudienceFreePass) {
+      profilePatch.audience_free_passes_remaining = Math.max(
+        0,
+        Number(profile.audience_free_passes_remaining || 0) - 1
+      )
+    }
+
     const { error: creditUpdateError } = await supabase
       .from('profiles')
-      .update({
-        credits: profile.credits - totalCreditsRequired,
-        updated_at: new Date().toISOString(),
-      })
+      .update(profilePatch)
       .eq('id', authData.user.id)
 
     if (creditUpdateError) {
@@ -149,7 +206,25 @@ export async function POST(request: NextRequest) {
     }
 
     const transactions = []
-    if (foodCouponEnabled) {
+    if (isAudienceBooking) {
+      if (hasAudienceFreePass) {
+        transactions.push({
+          user_id: authData.user.id,
+          amount: 0,
+          transaction_type: 'audience_free_pass_used',
+          reference_id: booking.id,
+          notes: `Audience free pass used: ${event.title}`,
+        })
+      } else {
+        transactions.push({
+          user_id: authData.user.id,
+          amount: -creditsToDebit,
+          transaction_type: 'audience_deposit_hold',
+          reference_id: booking.id,
+          notes: `Audience deposit held: ${event.title}`,
+        })
+      }
+    } else if (foodCouponEnabled) {
       transactions.push({
         user_id: authData.user.id,
         amount: -spotFeeCredits,
@@ -169,7 +244,7 @@ export async function POST(request: NextRequest) {
     } else {
       transactions.push({
         user_id: authData.user.id,
-        amount: -totalCreditsRequired,
+        amount: -creditsToDebit,
         transaction_type: 'booking',
         reference_id: booking.id,
         notes: `Booked event: ${event.title}`,
@@ -183,7 +258,10 @@ export async function POST(request: NextRequest) {
     let voucher: any = null
     if (foodCouponEnabled && bookingStatus === 'confirmed' && couponValueCents > 0) {
       const expiresHours = Math.max(1, Number(event.food_coupon_expires_hours || 24))
-      const expiresAt = new Date(Date.now() + expiresHours * 60 * 60 * 1000).toISOString()
+      const eventStart = new Date(event.date)
+      const fallbackEnd = new Date(eventStart.getTime() + 2 * 60 * 60 * 1000)
+      const eventEnd = (event as any).end_time ? new Date((event as any).end_time) : fallbackEnd
+      const expiresAt = new Date(eventEnd.getTime() + expiresHours * 60 * 60 * 1000).toISOString()
       const maxAttempts = 5
       let created = null
 
@@ -216,9 +294,16 @@ export async function POST(request: NextRequest) {
 
       if (!created) {
         await supabase.from('bookings').delete().eq('id', booking.id)
+        const rollbackPatch: Record<string, any> = {
+          credits: profile.credits,
+          updated_at: new Date().toISOString(),
+        }
+        if (hasAudienceFreePass) {
+          rollbackPatch.audience_free_passes_remaining = Number(profile.audience_free_passes_remaining || 0)
+        }
         await supabase
           .from('profiles')
-          .update({ credits: profile.credits, updated_at: new Date().toISOString() })
+          .update(rollbackPatch)
           .eq('id', authData.user.id)
 
         return NextResponse.json({ error: 'Failed to issue food coupon voucher' }, { status: 500 })
@@ -236,7 +321,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       bookingId: booking.id,
       bookingStatus: booking.status,
-      creditsDebited: totalCreditsRequired,
+      bookingScope: booking.booking_scope,
+      checkinCode: booking.audience_checkin_code,
+      creditsDebited: creditsToDebit,
+      usedAudienceFreePass: hasAudienceFreePass,
       split: foodCouponEnabled
         ? {
             bookingFeeCredits: spotFeeCredits,

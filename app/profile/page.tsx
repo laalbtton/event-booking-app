@@ -19,6 +19,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
+import { signOutAndCleanup } from '@/lib/authClient'
 
 type EventBooking = {
   id: string
@@ -47,6 +49,7 @@ type InviteItem = {
 }
 
 export default function ProfilePage() {
+  const { authResolved, user } = useAuthBootstrap()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [eventBookings, setEventBookings] = useState<EventBooking[]>([])
   const [invites, setInvites] = useState<InviteItem[]>([])
@@ -79,24 +82,19 @@ export default function ProfilePage() {
   })
 
   useEffect(() => {
-    checkAuth()
-  }, [])
-
-  async function checkAuth() {
-    const { data: { user } } = await supabase.auth.getUser()
-    
+    if (!authResolved) return
     if (!user) {
+      setLoading(false)
       router.push('/login')
       return
     }
 
-    // Get avatar URL from user metadata (for Google OAuth users)
     const avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture || null
     setAuthAvatarUrl(avatar)
     setAvatarUrl(avatar)
-
-    loadProfile(user.id)
-  }
+    setLoading(true)
+    void loadProfile(user.id)
+  }, [authResolved, user, router])
 
   // Generate initials from name
   function getInitials(name: string | null | undefined): string {
@@ -116,7 +114,7 @@ export default function ProfilePage() {
   }
 
   async function handleSignOut() {
-    await supabase.auth.signOut()
+    await signOutAndCleanup()
     router.push('/')
   }
 
@@ -461,7 +459,7 @@ export default function ProfilePage() {
     touchStartY.current[rowId] = 0
   }
 
-  if (loading) {
+  if (!authResolved || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="w-full max-w-md">

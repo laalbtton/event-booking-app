@@ -14,9 +14,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
+import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { cn } from '@/lib/utils'
 import { QRCodeSVG } from 'qrcode.react'
 import { Copy, ChevronDown } from 'lucide-react'
+import { toast } from 'sonner'
+import { signOutAndCleanup } from '@/lib/authClient'
 
 type MyCoupon = {
   id: string
@@ -30,6 +33,7 @@ type MyCoupon = {
 
 export default function Dashboard() {
   const { confirm } = useConfirmDialog()
+  const { authResolved, user } = useAuthBootstrap()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [myBookings, setMyBookings] = useState<any[]>([])
@@ -91,12 +95,12 @@ export default function Dashboard() {
 
   function copyCouponCode(code: string) {
     navigator.clipboard.writeText(code)
-    alert('Coupon code copied!')
+    toast.success('Coupon code copied!')
   }
 
   function copyPosterLink(url: string) {
     navigator.clipboard.writeText(url)
-    alert('Poster link copied!')
+    toast.success('Poster link copied!')
   }
 
   function togglePosterActions(bookingId: string) {
@@ -191,12 +195,22 @@ export default function Dashboard() {
       return
     }
 
-    const response = await fetch('/api/vouchers/my', {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    })
+    const makeRequest = async (token: string) =>
+      fetch('/api/vouchers/my', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+    let response = await makeRequest(accessToken)
+    if (response.status === 401) {
+      const retrySession = await supabase.auth.getSession()
+      const retryToken = retrySession.data.session?.access_token
+      if (retryToken) {
+        response = await makeRequest(retryToken)
+      }
+    }
 
     const result = await response.json().catch(() => ({}))
     if (!response.ok) {
@@ -219,8 +233,26 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    checkAuth()
-  }, [])
+    if (!authResolved) return
+    if (!user) {
+      setLoading(false)
+      router.push('/login')
+      return
+    }
+    if (user.user_metadata?.onboarding_role_pending) {
+      setLoading(false)
+      router.push('/onboarding/role')
+      return
+    }
+    setLoading(true)
+    void checkAuth(user.id)
+  }, [authResolved, user, router])
+
+  useEffect(() => {
+    if (userRole === 'audience') {
+      setEventTab('attend')
+    }
+  }, [userRole])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -376,6 +408,7 @@ export default function Dashboard() {
         async (payload) => {
           // When a new confirmed booking is created, increase count
           if (payload.new && (payload.new as any).status === 'confirmed') {
+            if ((payload.new as any).booking_scope === 'audience') return
             const eventId = (payload.new as any).event_id
             setEventConfirmedCounts(prev => ({
               ...prev,
@@ -398,6 +431,7 @@ export default function Dashboard() {
           if (!newBooking || !oldBooking) return
           
           const eventId = newBooking.event_id
+          if (newBooking.booking_scope === 'audience' || oldBooking.booking_scope === 'audience') return
           
           // If status changed from confirmed to something else, decrease count
           if (oldBooking.status === 'confirmed' && newBooking.status !== 'confirmed') {
@@ -425,6 +459,7 @@ export default function Dashboard() {
         async (payload) => {
           // When a confirmed booking is deleted, decrease count
           if (payload.old && (payload.old as any).status === 'confirmed') {
+            if ((payload.old as any).booking_scope === 'audience') return
             const eventId = (payload.old as any).event_id
             setEventConfirmedCounts(prev => ({
               ...prev,
@@ -441,51 +476,49 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id, myBookings])
 
-  async function checkAuth() {
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      router.push('/login')
-      return
-    }
-
-    // Check user role
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (!profileError && profile) {
-      setUserRole(profile.role)
-      setIsAdmin(profile.role === 'admin')
-    } else {
-      // Fallback: check admin_users table for backward compatibility
-      const { data: adminData } = await supabase
-        .from('admin_users')
-        .select('*')
-        .eq('user_id', user.id)
+  async function checkAuth(userId: string) {
+    try {
+      // Check user role
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
         .single()
 
-    setIsAdmin(!!adminData)
-    setUserRole(adminData ? 'admin' : 'performer')
+      if (!profileError && profile) {
+        setUserRole(profile.role)
+        setIsAdmin(profile.role === 'admin')
+      } else {
+        // Fallback: check admin_users table for backward compatibility
+        const { data: adminData } = await supabase
+          .from('admin_users')
+          .select('*')
+          .eq('user_id', userId)
+          .single()
+
+        setIsAdmin(!!adminData)
+        setUserRole(adminData ? 'admin' : 'performer')
+      }
+
+      // Check for existing role change request
+      const { data: requestData } = await supabase
+        .from('role_change_requests')
+        .select('status')
+        .eq('user_id', userId)
+        .eq('requested_role', 'event_creator')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (requestData) {
+        setRoleRequestStatus(requestData.status)
+      }
+
+      loadData(userId)
+    } catch (error: any) {
+      setError(error.message || 'Failed to restore your session')
+      setLoading(false)
     }
-
-    // Check for existing role change request
-    const { data: requestData } = await supabase
-      .from('role_change_requests')
-      .select('status')
-      .eq('user_id', user.id)
-      .eq('requested_role', 'event_creator')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (requestData) {
-      setRoleRequestStatus(requestData.status)
-    }
-
-    loadData(user.id)
   }
 
   async function loadData(userId: string) {
@@ -517,13 +550,14 @@ export default function Dashboard() {
         const eventIds = eventsData.map(e => e.id)
         const { data: confirmedCountsData, error: countsError } = await supabase
           .from('bookings')
-          .select('event_id, status')
+          .select('event_id, status, booking_scope')
           .in('event_id', eventIds)
           .eq('status', 'confirmed')
 
         if (!countsError && confirmedCountsData) {
           const counts: Record<string, number> = {}
-          confirmedCountsData.forEach(booking => {
+          confirmedCountsData.forEach((booking: any) => {
+            if (booking.booking_scope === 'audience') return
             counts[booking.event_id] = (counts[booking.event_id] || 0) + 1
           })
           setEventConfirmedCounts(counts)
@@ -611,7 +645,7 @@ export default function Dashboard() {
     setError('')
 
     try {
-      if (event.tickets_enabled) {
+      if (event.tickets_enabled && event.event_type !== 'open_mic') {
         throw new Error('This event uses external tickets')
       }
       if (event.event_type === 'booked_show') {
@@ -662,7 +696,12 @@ export default function Dashboard() {
         }
       }
 
-      const effectiveCreditsRequired = getEffectiveCreditsRequired(event)
+      const isAudienceUser = userRole === 'audience'
+      const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 1))
+      const audienceHasFreePass = Number(profile.audience_free_passes_remaining || 0) > 0
+      const effectiveCreditsRequired = isAudienceUser
+        ? (audienceHasFreePass ? 0 : audienceDepositCredits)
+        : getEffectiveCreditsRequired(event)
       if (profile.credits < effectiveCreditsRequired) {
         throw new Error('Insufficient credits')
       }
@@ -695,11 +734,11 @@ export default function Dashboard() {
       await loadData(profile.id)
 
       if (result.bookingStatus === 'waitlist') {
-        alert('Event is full. You have been added to the waitlist. You will be notified if a spot opens up.')
+        toast.success('Event is full. You have been added to the waitlist. You will be notified if a spot opens up.')
       } else if (result.voucher) {
-        alert(`Event booked successfully! Food coupon issued: ${result.voucher.code}`)
+        toast.success(`Event booked successfully! Food coupon issued: ${result.voucher.code}`)
       } else {
-        alert('Event booked successfully!')
+        toast.success('Event booked successfully!')
       }
 
     } catch (error: any) {
@@ -707,11 +746,11 @@ export default function Dashboard() {
       
       // Better error message if capacity is reached
       if (error.message.includes('full capacity')) {
-        alert('Event is at full capacity. You have been added to the waitlist instead.')
+        toast.info('Event is at full capacity. You have been added to the waitlist instead.')
         // Retry as waitlist
         // (You could add logic here to automatically try booking as waitlist)
       } else {
-        alert(error.message)
+        toast.error(error.message)
       }
     } finally {
       setBookingLoading(null)
@@ -722,6 +761,7 @@ export default function Dashboard() {
     if (!profile) return
 
     const event = booking.events
+    const isAudienceBooking = booking.booking_scope === 'audience'
     const eventDate = new Date(event.date)
     const now = currentTime
     const hoursUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
@@ -735,12 +775,16 @@ export default function Dashboard() {
     if (booking.status === 'waitlist') {
       confirmMessage = isBookedShow
         ? `Remove yourself from the waitlist for "${event.title}"?`
-        : `Remove yourself from the waitlist for "${event.title}"?\n\nYou will receive a full refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
+        : isAudienceBooking && booking.credits_used === 0
+          ? `Remove yourself from the waitlist for "${event.title}"?\n\nYour free audience pass will be restored.`
+          : `Remove yourself from the waitlist for "${event.title}"?\n\nYou will receive a full refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
     } else {
       confirmMessage = isBookedShow
         ? `Cancel participation for "${event.title}"?`
         : willGetRefund
-          ? `Cancel registration for "${event.title}"?\n\nYou will receive a refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
+          ? isAudienceBooking && booking.credits_used === 0
+            ? `Cancel registration for "${event.title}"?\n\nYour free audience pass will be restored.`
+            : `Cancel registration for "${event.title}"?\n\nYou will receive a refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
           : `Cancel registration for "${event.title}"?\n\n⚠️ You will NOT receive a refund because cancellation is within ${cancellationWindow} hours of the event.\n\nAre you sure you want to cancel?`
     }
 
@@ -782,29 +826,32 @@ export default function Dashboard() {
       await loadData(profile.id)
 
       const refundedCredits = Number(result.refundedCredits || 0)
-      if (refundedCredits > 0) {
+      const restoredFreePass = !!result.restoredFreePass
+      if (restoredFreePass) {
+        toast.success('Booking cancelled. Your free audience pass has been restored.')
+      } else if (refundedCredits > 0) {
         const voucherNote = result.voucherRefunded ? ' Food coupon credits were also refunded.' : ''
-        alert(
+        toast.success(
           `${booking.status === 'waitlist' ? 'Waitlist removed' : 'Booking cancelled'}. ${refundedCredits} credit${refundedCredits > 1 ? 's have' : ' has'} been refunded to your account.${voucherNote}`
         )
       } else {
-        alert('Booking cancelled. No refund issued based on cancellation policy and voucher status.')
+        toast.info('Booking cancelled. No refund issued based on cancellation policy and voucher status.')
       }
 
     } catch (error: any) {
       setError(error.message)
-      alert('Error cancelling booking: ' + error.message)
+      toast.error('Error cancelling booking: ' + error.message)
     } finally {
       setCancellingBooking(null)
     }
   }
 
   async function handleSignOut() {
-    await supabase.auth.signOut()
+    await signOutAndCleanup()
     router.push('/')
   }
 
-  if (loading) {
+  if (!authResolved || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-2xl">Loading...</div>
@@ -890,6 +937,21 @@ export default function Dashboard() {
                 <Link href="/credits">Credits History</Link>
               </Button>
             </div>
+            <div className="mt-4 space-y-2 text-sm text-white/90">
+              {userRole === 'audience' && (
+                <p>
+                  {Number(profile?.audience_free_passes_remaining || 0) > 0
+                    ? `You have ${profile?.audience_free_passes_remaining || 0} free pass available.`
+                    : 'No free pass remaining right now.'}
+                </p>
+              )}
+              <p>
+                Attend events free with Redeemable Credits.{' '}
+                <Link href="/redeemable-credits" className="underline underline-offset-2 font-medium">
+                  How this works
+                </Link>
+              </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -971,6 +1033,7 @@ export default function Dashboard() {
 
                 const isWaitlist = booking.status === 'waitlist'
                 const isEventCancelled = booking.events.status === 'cancelled'
+                const isAudienceBooking = booking.booking_scope === 'audience'
                 const confirmedCount = eventConfirmedCounts[booking.event_id] || 0
                 const spotsLeft = booking.events.max_attendees !== null
                   ? booking.events.max_attendees - confirmedCount
@@ -1060,6 +1123,10 @@ export default function Dashboard() {
                           <span>💳</span>
                           {isBookedShow ? (
                             <span>Invite only</span>
+                          ) : isAudienceBooking ? (
+                            booking.credits_used > 0
+                              ? <span>Deposit held: {booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
+                              : <span>Free pass used</span>
                           ) : (
                             <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
                           )}
@@ -1074,6 +1141,17 @@ export default function Dashboard() {
                           </Badge>
                         )}
                       </div>
+
+                      {isAudienceBooking && booking.audience_checkin_code && (
+                        <div className="text-xs text-muted-foreground rounded-md border bg-muted/30 px-2 py-1">
+                          Check-in code: <span className="font-medium text-foreground">{booking.audience_checkin_code}</span>
+                        </div>
+                      )}
+                      {isAudienceBooking && (
+                        <p className="text-xs text-muted-foreground">
+                          Not marked attended? You can request a review soon.
+                        </p>
+                      )}
 
                       {canCancel && (
                         <div className="space-y-2 pt-2 border-t">
@@ -1251,27 +1329,36 @@ export default function Dashboard() {
         <div>
           <h2 className="text-xl sm:text-2xl font-bold mb-5 sm:mb-6 tracking-tight">Available Events</h2>
 
-          <Tabs value={eventTab} onValueChange={(value) => setEventTab(value as 'perform' | 'attend')} className="mb-6">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="perform">Perform</TabsTrigger>
-              <TabsTrigger value="attend">Attend</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {userRole !== 'audience' ? (
+            <Tabs value={eventTab} onValueChange={(value) => setEventTab(value as 'perform' | 'attend')} className="mb-6">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="perform">Perform</TabsTrigger>
+                <TabsTrigger value="attend">Attend</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          ) : (
+            <div className="mb-4 rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
+              Audience mode: use Attend events only.
+            </div>
+          )}
 
           {(() => {
+            const isAudienceUser = userRole === 'audience'
             const filteredEvents = events.filter((event) =>
-              eventTab === 'perform'
-                ? event.event_type !== 'booked_show' && !event.tickets_enabled
+              isAudienceUser
+                ? event.event_type === 'open_mic'
+                : eventTab === 'perform'
+                ? event.event_type === 'open_mic'
                 : event.event_type === 'booked_show'
                   ? !invitedEventIds.has(event.id)
-                  : event.tickets_enabled
+                  : event.tickets_enabled && event.event_type !== 'open_mic'
             )
 
             if (filteredEvents.length === 0) {
               return (
                 <Card>
                   <CardContent className="p-8 text-center text-muted-foreground">
-                    {eventTab === 'perform'
+                    {(userRole !== 'audience' && eventTab === 'perform')
                       ? 'No upcoming events available to perform'
                       : 'No upcoming shows available to attend'}
                   </CardContent>
@@ -1289,7 +1376,14 @@ export default function Dashboard() {
                   )
                   const isBooked = !!activeBooking
                   const effectiveCreditsRequired = getEffectiveCreditsRequired(event)
-                  const canAfford = (profile?.credits || 0) >= effectiveCreditsRequired
+                  const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 1))
+                  const audienceHasFreePass = Number(profile?.audience_free_passes_remaining || 0) > 0
+                  const isAudienceUser = userRole === 'audience'
+                  const creditsRequiredForCard = isAudienceUser
+                    ? (audienceHasFreePass ? 0 : audienceDepositCredits)
+                    : effectiveCreditsRequired
+                  const hasRedeemableCredits = event.tickets_enabled && Number((event as any).audience_deposit_credits || 0) > 0
+                  const canAfford = (profile?.credits || 0) >= creditsRequiredForCard
                   const isBooking = bookingLoading === event.id
                   const now = new Date()
                   const startTime = new Date(event.date)
@@ -1329,7 +1423,12 @@ export default function Dashboard() {
                               )}
                               {event.event_type !== 'booked_show' && (
                                 <Badge variant="secondary" className="whitespace-nowrap">
-                                  {effectiveCreditsRequired} {effectiveCreditsRequired === 1 ? 'credit' : 'credits'}
+                                  {creditsRequiredForCard} {creditsRequiredForCard === 1 ? 'credit' : 'credits'}
+                                </Badge>
+                              )}
+                              {hasRedeemableCredits && (
+                                <Badge variant="outline" className="text-emerald-700 border-emerald-600 whitespace-nowrap">
+                                  Redeemable Credits
                                 </Badge>
                               )}
                             </div>
@@ -1378,12 +1477,19 @@ export default function Dashboard() {
                             )}
                           </div>
 
-                          {event.event_type !== 'booked_show' && !event.tickets_enabled && (
+                          {event.event_type !== 'booked_show' && (
                             <div className="flex items-center justify-between gap-2 pt-2 border-t">
                               <div className="space-y-1">
                                 <p className="text-xs text-muted-foreground">
                                   ⏱️ Cancel {event.cancellation_hours || 4}h before
                                 </p>
+                                {isAudienceUser && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {audienceHasFreePass
+                                      ? '1 free audience pass will be used'
+                                      : `Deposit hold ${audienceDepositCredits} credit${audienceDepositCredits === 1 ? '' : 's'}`}
+                                  </p>
+                                )}
                                 {event.food_coupon_enabled && (
                                   <p className="text-xs text-muted-foreground">
                                     Spot fee {event.spot_fee_credits || 0} credits + coupon ${(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100).toFixed(2)}
@@ -1446,13 +1552,13 @@ export default function Dashboard() {
                                       ? 'Not enough credits' 
                                       : isFull 
                                         ? 'Join Waitlist' 
-                                        : 'Book Event'}
+                                        : isAudienceUser ? 'Reserve Spot' : 'Book Event'}
                                 </Button>
                               )}
                             </div>
                           )}
 
-                          {(event.event_type === 'booked_show' || event.tickets_enabled) && (
+                          {(event.event_type === 'booked_show' || (event.tickets_enabled && event.event_type !== 'open_mic')) && (
                             <div className="flex items-center justify-end gap-2 pt-2 border-t">
                               {event.tickets_enabled && event.external_event && event.external_ticket_url ? (
                                 <a

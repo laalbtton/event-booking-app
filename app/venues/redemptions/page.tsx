@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 
 type VenueOption = {
   id: string
@@ -35,10 +36,37 @@ type RedemptionRow = {
   event_date: string
 }
 
+type VoucherPreview = {
+  id: string
+  code: string
+  eventId: string
+  eventTitle: string
+  attendeeName: string
+  attendeeEmail: string | null
+  valueCents: number
+  status: string
+  expiresAt: string | null
+  canRedeem: boolean
+}
+
+type IssuedVoucherRow = {
+  id: string
+  eventId: string
+  eventTitle: string
+  eventDate: string | null
+  attendeeName: string
+  attendeeEmail: string | null
+  code: string
+  valueCents: number
+  status: string
+  expiresAt: string | null
+}
+
 type ScannerEngine = 'native' | 'html5' | null
 
 export default function VenueRedemptionsPage() {
   const router = useRouter()
+  const { confirm } = useConfirmDialog()
 
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -57,6 +85,10 @@ export default function VenueRedemptionsPage() {
   const [redeemLoading, setRedeemLoading] = useState(false)
   const [redeemMessage, setRedeemMessage] = useState('')
   const [redeemError, setRedeemError] = useState('')
+  const [redeemPreview, setRedeemPreview] = useState<VoucherPreview | null>(null)
+  const [issuedVouchers, setIssuedVouchers] = useState<IssuedVoucherRow[]>([])
+  const [issuedLoading, setIssuedLoading] = useState(false)
+  const [issuedSearch, setIssuedSearch] = useState('')
 
   const [scannerActive, setScannerActive] = useState(false)
   const [scannerSupported, setScannerSupported] = useState(true)
@@ -79,8 +111,9 @@ export default function VenueRedemptionsPage() {
     if (selectedVenueId) {
       loadEventsForVenue(selectedVenueId)
       loadRedemptions(selectedVenueId, selectedEventId)
+      loadIssuedVouchers(selectedVenueId, selectedEventId, issuedSearch)
     }
-  }, [selectedVenueId, selectedEventId, fromDate, toDate])
+  }, [selectedVenueId, selectedEventId, fromDate, toDate, issuedSearch])
 
   async function checkAccessAndLoad() {
     setLoading(true)
@@ -228,6 +261,72 @@ export default function VenueRedemptionsPage() {
     setListLoading(false)
   }
 
+  async function loadIssuedVouchers(venueId: string, eventId: string, query: string) {
+    setIssuedLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const accessToken = session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const params = new URLSearchParams({
+        venueId,
+        eventId: eventId || 'all',
+      })
+      if (query.trim()) params.set('q', query.trim())
+
+      const response = await fetch(`/api/vouchers/issued?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Failed to load issued coupons')
+
+      setIssuedVouchers((data.vouchers || []) as IssuedVoucherRow[])
+    } catch {
+      setIssuedVouchers([])
+    } finally {
+      setIssuedLoading(false)
+    }
+  }
+
+  async function lookupVoucher(inputCode?: string): Promise<VoucherPreview | null> {
+    const code = (inputCode || redeemCode).trim().toUpperCase()
+    if (!code) {
+      setRedeemPreview(null)
+      return null
+    }
+    setRedeemError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const accessToken = session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const params = new URLSearchParams({ code })
+      if (selectedEventId !== 'all') {
+        params.set('eventId', selectedEventId)
+      }
+
+      const response = await fetch(`/api/vouchers/lookup?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Failed to lookup coupon')
+
+      const preview = data.voucher as VoucherPreview
+      setRedeemPreview(preview)
+      setRedeemCode(preview.code)
+      setRedeemOrderTotal((Math.max(0, Number(preview.valueCents || 0)) / 100).toFixed(2))
+      return preview
+    } catch (error: any) {
+      setRedeemPreview(null)
+      setRedeemError(error.message || 'Failed to lookup coupon')
+      return null
+    }
+  }
+
   function stopScanner() {
     if (scannerIntervalRef.current) {
       window.clearInterval(scannerIntervalRef.current)
@@ -268,7 +367,9 @@ export default function VenueRedemptionsPage() {
       { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 },
       (decodedText: string) => {
         if (!decodedText) return
-        setRedeemCode(decodedText.trim())
+        const code = decodedText.trim()
+        setRedeemCode(code)
+        void lookupVoucher(code)
         setScannerMessage('QR code detected. Ready to redeem.')
         stopScanner()
       },
@@ -306,7 +407,9 @@ export default function VenueRedemptionsPage() {
             if (!barcodes?.length) return
             const rawValue = barcodes[0]?.rawValue
             if (!rawValue) return
-            setRedeemCode(rawValue.trim())
+            const code = rawValue.trim()
+            setRedeemCode(code)
+            void lookupVoucher(code)
             setScannerMessage('QR code detected. Ready to redeem.')
             stopScanner()
           } catch {
@@ -350,6 +453,26 @@ export default function VenueRedemptionsPage() {
         throw new Error('Order total must be a valid non-negative amount.')
       }
 
+      const preview = redeemPreview || (await lookupVoucher(redeemCode))
+      if (!preview) {
+        throw new Error('Please lookup a valid coupon first')
+      }
+      if (!preview.canRedeem) {
+        throw new Error('This coupon is not redeemable in its current state')
+      }
+
+      const amountText = `$${(Math.max(0, Number(preview.valueCents || 0)) / 100).toFixed(2)}`
+      const shouldRedeem = await confirm({
+        title: 'Confirm coupon redemption',
+        message: `Redeem ${amountText} for ${preview.attendeeName}?\n\nCoupon: ${preview.code}`,
+        confirmText: `Redeem ${amountText}`,
+        cancelText: 'Cancel',
+      })
+      if (!shouldRedeem) {
+        setRedeemLoading(false)
+        return
+      }
+
       const response = await fetch('/api/vouchers/redeem', {
         method: 'POST',
         headers: {
@@ -369,8 +492,10 @@ export default function VenueRedemptionsPage() {
       setRedeemCode('')
       setRedeemOrderTotal('')
       setRedeemNotes('')
+      setRedeemPreview(null)
       if (selectedVenueId) {
         await loadRedemptions(selectedVenueId, selectedEventId)
+        await loadIssuedVouchers(selectedVenueId, selectedEventId, issuedSearch)
       }
     } catch (error: any) {
       setRedeemError(error.message || 'Failed to redeem coupon')
@@ -495,12 +620,32 @@ export default function VenueRedemptionsPage() {
           <CardContent className="space-y-3">
             <div>
               <Label>Coupon code</Label>
-              <Input
-                value={redeemCode}
-                onChange={(e) => setRedeemCode(e.target.value)}
-                placeholder="LB-XXXXXXXX"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  value={redeemCode}
+                  onChange={(e) => {
+                    setRedeemCode(e.target.value)
+                    setRedeemPreview(null)
+                  }}
+                  placeholder="LB-XXXXXXXX"
+                />
+                <Button type="button" variant="outline" onClick={() => lookupVoucher()} disabled={!redeemCode.trim()}>
+                  Lookup
+                </Button>
+              </div>
             </div>
+            {redeemPreview && (
+              <div className="rounded-md border p-3 text-sm bg-muted/30">
+                <p className="font-medium">{redeemPreview.attendeeName}</p>
+                <p className="text-xs text-muted-foreground">{redeemPreview.code} • {redeemPreview.eventTitle}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Badge variant="outline">${(redeemPreview.valueCents / 100).toFixed(2)}</Badge>
+                  <Badge variant={redeemPreview.canRedeem ? 'secondary' : 'destructive'}>
+                    {redeemPreview.canRedeem ? 'Ready to redeem' : redeemPreview.status}
+                  </Badge>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               {!scannerActive ? (
                 <Button type="button" variant="outline" size="sm" onClick={startScanner}>
@@ -534,13 +679,14 @@ export default function VenueRedemptionsPage() {
             {scannerMessage && <p className="text-xs text-muted-foreground">{scannerMessage}</p>}
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <Label>Order total (CAD, optional)</Label>
+                <Label>Coupon amount (auto-filled)</Label>
                 <Input
                   type="number"
                   min="0"
                   step="0.01"
                   value={redeemOrderTotal}
                   onChange={(e) => setRedeemOrderTotal(e.target.value)}
+                  disabled
                 />
               </div>
               <div>
@@ -555,6 +701,61 @@ export default function VenueRedemptionsPage() {
               {redeemMessage && <span className="text-sm text-green-700">{redeemMessage}</span>}
               {redeemError && <span className="text-sm text-red-600">{redeemError}</span>}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Issued Coupons</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+              <Input
+                value={issuedSearch}
+                onChange={(e) => setIssuedSearch(e.target.value)}
+                placeholder="Search attendee name, email, or coupon code"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => selectedVenueId && loadIssuedVouchers(selectedVenueId, selectedEventId, issuedSearch)}
+                disabled={!selectedVenueId}
+              >
+                Refresh
+              </Button>
+            </div>
+            {issuedLoading ? (
+              <p className="text-sm text-muted-foreground">Loading issued coupons...</p>
+            ) : issuedVouchers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No coupons found for this scope.</p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-auto pr-1">
+                {issuedVouchers.map((voucher) => (
+                  <div key={voucher.id} className="flex items-center justify-between gap-3 border rounded-md p-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{voucher.attendeeName}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {voucher.code} • {voucher.eventTitle}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">${(voucher.valueCents / 100).toFixed(2)}</Badge>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setRedeemCode(voucher.code)
+                          void lookupVoucher(voucher.code)
+                        }}
+                      >
+                        Select
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

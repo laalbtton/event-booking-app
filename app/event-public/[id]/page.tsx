@@ -38,6 +38,7 @@ type EventDetails = {
   host_profile?: {
     full_name: string
   } | null
+  audience_expected_count?: number
 }
 
 type AttendeeBooking = {
@@ -57,6 +58,7 @@ export default function PublicEventPage() {
   const [event, setEvent] = useState<EventDetails | null>(null)
   const [confirmedBookings, setConfirmedBookings] = useState<AttendeeBooking[]>([])
   const [waitlistBookings, setWaitlistBookings] = useState<AttendeeBooking[]>([])
+  const [audienceExpectedCount, setAudienceExpectedCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [isUnavailable, setIsUnavailable] = useState(false)
   const [hostProfile, setHostProfile] = useState<{ full_name: string } | null>(null)
@@ -106,6 +108,7 @@ export default function PublicEventPage() {
         .select(`
           id,
           status,
+          booking_scope,
           waitlist_position,
           profiles (id, full_name)
         `)
@@ -114,7 +117,8 @@ export default function PublicEventPage() {
         .order('booked_at', { ascending: true })
 
       if (confirmedError) throw confirmedError
-      setConfirmedBookings(confirmedData as any)
+      const performerConfirmed = (confirmedData || []).filter((booking: any) => booking.booking_scope !== 'audience')
+      setConfirmedBookings(performerConfirmed as any)
 
       // Load waitlist bookings (public - no auth required)
       const { data: waitlistData, error: waitlistError } = await supabase
@@ -122,6 +126,7 @@ export default function PublicEventPage() {
         .select(`
           id,
           status,
+          booking_scope,
           waitlist_position,
           profiles (id, full_name)
         `)
@@ -130,7 +135,16 @@ export default function PublicEventPage() {
         .order('waitlist_position', { ascending: true })
 
       if (waitlistError) throw waitlistError
-      setWaitlistBookings(waitlistData as any)
+      const performerWaitlist = (waitlistData || []).filter((booking: any) => booking.booking_scope !== 'audience')
+      setWaitlistBookings(performerWaitlist as any)
+
+      const { count: audienceCount } = await supabase
+        .from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', eventId)
+        .eq('booking_scope', 'audience')
+        .in('status', ['confirmed', 'waitlist'])
+      setAudienceExpectedCount(audienceCount || 0)
 
     } catch (error: any) {
       console.error('Error loading event details:', error)
@@ -318,6 +332,13 @@ export default function PublicEventPage() {
                 <div className="flex items-center text-sm md:text-base">
                   <span className="mr-2">👥</span>
                   <span>{confirmedBookings.length} registered</span>
+                </div>
+              )}
+
+              {audienceExpectedCount >= 5 && (
+                <div className="flex items-center text-sm md:text-base">
+                  <span className="mr-2">🧑‍🤝‍🧑</span>
+                  <span>Expected audience: {audienceExpectedCount}</span>
                 </div>
               )}
 

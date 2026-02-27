@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
 import { Copy } from 'lucide-react'
+import { toast } from 'sonner'
 
 
 
@@ -45,6 +46,7 @@ type EventDetails = {
   registration_opens_at: string | null
   host_user_id: string | null
   created_by: string | null
+  audience_expected_count?: number
 }
 
 type VenueDetails = {
@@ -76,6 +78,7 @@ export default function EventDetailsPage() {
   const [event, setEvent] = useState<EventDetails | null>(null)
   const [confirmedBookings, setConfirmedBookings] = useState<AttendeeBooking[]>([])
   const [waitlistBookings, setWaitlistBookings] = useState<AttendeeBooking[]>([])
+  const [audienceExpectedCount, setAudienceExpectedCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
@@ -96,7 +99,7 @@ export default function EventDetailsPage() {
   function copyPublicLink() {
     const publicUrl = `${window.location.origin}/event-public/${eventId}`
     navigator.clipboard.writeText(publicUrl)
-    alert('Public link copied to clipboard!')
+    toast.success('Public link copied to clipboard!')
   }
 
   function copyAttendeeList() {
@@ -113,13 +116,13 @@ export default function EventDetailsPage() {
     }
 
     navigator.clipboard.writeText(text)
-    alert('Attendee list copied!')
+    toast.success('Attendee list copied!')
   }
 
   function copyPosterLink() {
     if (!event?.poster_url) return
     navigator.clipboard.writeText(event.poster_url)
-    alert('Poster link copied!')
+    toast.success('Poster link copied!')
   }
 
   async function sharePoster() {
@@ -158,7 +161,7 @@ export default function EventDetailsPage() {
       if (!response.ok) throw new Error(result.error || 'Failed to update preference')
       setEventAutoPostEnabled(enabled)
     } catch (error: any) {
-      alert(error.message || 'Could not update poster auto-post preference')
+      toast.error(error.message || 'Could not update poster auto-post preference')
     } finally {
       setPrefLoading(false)
     }
@@ -270,6 +273,7 @@ export default function EventDetailsPage() {
         .select(`
           id,
           status,
+          booking_scope,
           waitlist_position,
           profiles (id, full_name, email)
         `)
@@ -278,7 +282,8 @@ export default function EventDetailsPage() {
         .order('booked_at', { ascending: true })
 
       if (confirmedError) throw confirmedError
-      setConfirmedBookings(confirmedData as any)
+      const performerConfirmed = (confirmedData || []).filter((booking: any) => booking.booking_scope !== 'audience')
+      setConfirmedBookings(performerConfirmed as any)
 
       // Load waitlist bookings
       const { data: waitlistData, error: waitlistError } = await supabase
@@ -286,6 +291,7 @@ export default function EventDetailsPage() {
         .select(`
           id,
           status,
+          booking_scope,
           waitlist_position,
           profiles (id, full_name, email)
         `)
@@ -294,11 +300,21 @@ export default function EventDetailsPage() {
         .order('waitlist_position', { ascending: true })
 
       if (waitlistError) throw waitlistError
-      setWaitlistBookings(waitlistData as any)
+      const performerWaitlist = (waitlistData || []).filter((booking: any) => booking.booking_scope !== 'audience')
+      setWaitlistBookings(performerWaitlist as any)
+
+      const { count: audienceCount } = await supabase
+        .from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', eventId)
+        .eq('booking_scope', 'audience')
+        .in('status', ['confirmed', 'waitlist'])
+
+      setAudienceExpectedCount(audienceCount || 0)
 
     } catch (error: any) {
       console.error('Error loading event details:', error)
-      alert('Error loading event details')
+      toast.error('Error loading event details')
     } finally {
       setLoading(false)
     }
@@ -420,15 +436,15 @@ export default function EventDetailsPage() {
       await loadEventDetails()
 
       if (result.bookingStatus === 'waitlist') {
-        alert('Event is full. You have been added to the waitlist.')
+        toast.success('Event is full. You have been added to the waitlist.')
       } else if (result.voucher) {
-        alert(`Event booked successfully! Food coupon issued: ${result.voucher.code}`)
+        toast.success(`Event booked successfully! Food coupon issued: ${result.voucher.code}`)
       } else {
-        alert('Event booked successfully!')
+        toast.success('Event booked successfully!')
       }
     } catch (error: any) {
       setError(error.message)
-      alert(error.message)
+      toast.error(error.message)
     } finally {
       setBookingLoading(false)
     }
@@ -587,6 +603,13 @@ export default function EventDetailsPage() {
                   <div className="flex items-center text-sm md:text-base text-gray-900">
                     <span className="mr-2">👥</span>
                     <span>{confirmedBookings.length} registered (Unlimited)</span>
+                  </div>
+                )}
+
+                {audienceExpectedCount >= 5 && (
+                  <div className="flex items-center text-sm md:text-base text-gray-900">
+                    <span className="mr-2">🧑‍🤝‍🧑</span>
+                    <span>Expected audience: {audienceExpectedCount}</span>
                   </div>
                 )}
 

@@ -18,6 +18,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
+  function shouldRouteToRoleOnboarding(user: { user_metadata?: Record<string, any> }) {
+    const pendingFromMetadata = !!user.user_metadata?.onboarding_role_pending
+    const pendingFromStorage =
+      typeof window !== 'undefined' && window.localStorage.getItem('pending_role_onboarding') === '1'
+    return pendingFromMetadata || pendingFromStorage
+  }
+
   useEffect(() => {
     async function handleHashAuth() {
       if (typeof window === 'undefined') return
@@ -43,6 +50,12 @@ export default function LoginPage() {
         const { data: { user }, error: userError } = await supabase.auth.getUser()
         if (userError || !user) {
           throw userError || new Error('No user returned after OAuth')
+        }
+
+        if (shouldRouteToRoleOnboarding(user)) {
+          window.localStorage.removeItem('pending_role_onboarding')
+          router.replace('/onboarding/role')
+          return
         }
 
         const avatarFromAuth = user.user_metadata?.avatar_url || user.user_metadata?.picture || null
@@ -89,6 +102,12 @@ export default function LoginPage() {
       })
 
       if (error) throw error
+
+      if (shouldRouteToRoleOnboarding(data.user)) {
+        window.localStorage.removeItem('pending_role_onboarding')
+        router.push('/onboarding/role')
+        return
+      }
 
       // Check if admin
       const { data: adminData } = await supabase

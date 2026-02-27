@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { QrCode, Link as LinkIcon, Image as ImageIcon, Upload, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 type Venue = {
   id: string
@@ -62,6 +63,9 @@ export default function EventManagementPage() {
     duration_hours: '2',
     venue_id: '',
     credits_required: '5',
+    audience_capacity: '15',
+    tickets_redeemable_credits_enabled: false,
+    tickets_redeemable_credits_amount: '5',
     food_coupon_enabled: false,
     spot_fee_credits: '5',
     food_coupon_value_cents: '500',
@@ -247,6 +251,9 @@ export default function EventManagementPage() {
       duration_hours: '2',
       venue_id: '',
       credits_required: '5',
+      audience_capacity: '15',
+      tickets_redeemable_credits_enabled: false,
+      tickets_redeemable_credits_amount: '5',
       food_coupon_enabled: false,
       spot_fee_credits: '5',
       food_coupon_value_cents: '500',
@@ -276,13 +283,13 @@ export default function EventManagementPage() {
       }
 
       if (!formData.venue_id) {
-        alert('Please select a venue')
+        toast.error('Please select a venue')
         setSubmitting(false)
         return
       }
 
       if (formData.tickets_enabled && formData.external_event && !formData.external_ticket_url) {
-        alert('Please provide an external ticket link')
+        toast.error('Please provide an external ticket link')
         setSubmitting(false)
         return
       }
@@ -290,8 +297,9 @@ export default function EventManagementPage() {
       if (formData.tickets_enabled && !formData.external_event) {
         const priceValue = parseFloat(formData.ticket_price)
         const quantityValue = parseInt(formData.ticket_quantity)
-        if (!Number.isFinite(priceValue) || priceValue <= 0 || !Number.isFinite(quantityValue) || quantityValue <= 0) {
-          alert('Please provide a valid ticket price and quantity')
+        const minAllowedPrice = formData.tickets_redeemable_credits_enabled ? 0 : 0.01
+        if (!Number.isFinite(priceValue) || priceValue < minAllowedPrice || !Number.isFinite(quantityValue) || quantityValue <= 0) {
+          toast.error('Please provide a valid ticket price and quantity')
           setSubmitting(false)
           return
         }
@@ -318,13 +326,17 @@ export default function EventManagementPage() {
         end_time: endTimeIso,
         venue_id: formData.venue_id || null,
         location: location,
-        credits_required: isBookedShow || isTicketed ? 0 : parseInt(formData.credits_required),
+        credits_required: isBookedShow ? 0 : parseInt(formData.credits_required),
+        audience_capacity: isTicketed ? parseInt(formData.audience_capacity || '15') : 0,
+        audience_deposit_credits: isTicketed && formData.tickets_redeemable_credits_enabled
+          ? parseInt(formData.tickets_redeemable_credits_amount || '5')
+          : 0,
         food_coupon_enabled: !isBookedShow && !isTicketed && !!formData.food_coupon_enabled,
         spot_fee_credits: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.spot_fee_credits || '0') : 0,
         food_coupon_value_cents: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_value_cents || '0') : 0,
         food_coupon_expires_hours: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_expires_hours || '24') : 24,
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
-        cancellation_hours: isBookedShow || isTicketed ? 0 : parseInt(formData.cancellation_hours),
+        cancellation_hours: isBookedShow ? 0 : parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
           ? null 
           : formData.registration_opens_at 
@@ -372,14 +384,14 @@ export default function EventManagementPage() {
         console.warn('Failed to auto-book creator as attendee:', bookingError)
       }
 
-      alert('Event created successfully!')
+      toast.success('Event created successfully!')
       setShowCreateForm(false)
       setCreateStep('details')
       resetFormData()
       loadEvents()
     } catch (error: any) {
       console.error('Full error:', error)
-      alert('Error: ' + error.message)
+      toast.error('Error: ' + error.message)
     } finally {
       setSubmitting(false)
     }
@@ -427,6 +439,9 @@ export default function EventManagementPage() {
       duration_hours: minutesToHoursString(durationMinutes),
       venue_id: venueId,
       credits_required: event.credits_required.toString(),
+      audience_capacity: ((event as any).audience_capacity ?? 15).toString(),
+      tickets_redeemable_credits_enabled: Number((event as any).audience_deposit_credits || 0) > 0,
+      tickets_redeemable_credits_amount: (((event as any).audience_deposit_credits ?? 5) || 5).toString(),
       food_coupon_enabled: !!(event as any).food_coupon_enabled,
       spot_fee_credits: ((event as any).spot_fee_credits ?? 5).toString(),
       food_coupon_value_cents: ((event as any).food_coupon_value_cents ?? 500).toString(),
@@ -464,13 +479,13 @@ export default function EventManagementPage() {
       }
 
       if (!formData.venue_id) {
-        alert('Please select a venue')
+        toast.error('Please select a venue')
         setSubmitting(false)
         return
       }
 
       if (formData.tickets_enabled && formData.external_event && !formData.external_ticket_url) {
-        alert('Please provide an external ticket link')
+        toast.error('Please provide an external ticket link')
         setSubmitting(false)
         return
       }
@@ -478,8 +493,9 @@ export default function EventManagementPage() {
       if (formData.tickets_enabled && !formData.external_event) {
         const priceValue = parseFloat(formData.ticket_price)
         const quantityValue = parseInt(formData.ticket_quantity)
-        if (!Number.isFinite(priceValue) || priceValue <= 0 || !Number.isFinite(quantityValue) || quantityValue <= 0) {
-          alert('Please provide a valid ticket price and quantity')
+        const minAllowedPrice = formData.tickets_redeemable_credits_enabled ? 0 : 0.01
+        if (!Number.isFinite(priceValue) || priceValue < minAllowedPrice || !Number.isFinite(quantityValue) || quantityValue <= 0) {
+          toast.error('Please provide a valid ticket price and quantity')
           setSubmitting(false)
           return
         }
@@ -508,13 +524,17 @@ export default function EventManagementPage() {
         date: new Date(formData.date).toISOString(),
         end_time: endTimeIso,
         location: locationValue,
-        credits_required: isBookedShow || isTicketed ? 0 : parseInt(formData.credits_required),
+        credits_required: isBookedShow ? 0 : parseInt(formData.credits_required),
+        audience_capacity: isTicketed ? parseInt(formData.audience_capacity || '15') : 0,
+        audience_deposit_credits: isTicketed && formData.tickets_redeemable_credits_enabled
+          ? parseInt(formData.tickets_redeemable_credits_amount || '5')
+          : 0,
         food_coupon_enabled: !isBookedShow && !isTicketed && !!formData.food_coupon_enabled,
         spot_fee_credits: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.spot_fee_credits || '0') : 0,
         food_coupon_value_cents: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_value_cents || '0') : 0,
         food_coupon_expires_hours: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_expires_hours || '24') : 24,
         max_attendees: nextMax,
-        cancellation_hours: isBookedShow || isTicketed ? 0 : parseInt(formData.cancellation_hours),
+        cancellation_hours: isBookedShow ? 0 : parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
           ? null 
           : formData.registration_opens_at 
@@ -556,14 +576,14 @@ export default function EventManagementPage() {
         }
       }
 
-      alert('Event updated successfully!')
+      toast.success('Event updated successfully!')
       setShowEditForm(false)
       setEditingEvent(null)
       resetFormData()
       loadEvents()
     } catch (error: any) {
       console.error('Full error:', error)
-      alert('Error: ' + error.message)
+      toast.error('Error: ' + error.message)
     } finally {
       setSubmitting(false)
     }
@@ -601,25 +621,25 @@ export default function EventManagementPage() {
 
       const data = await response.json()
       if (data.alreadyCancelled) {
-        alert('This event is already cancelled.')
+        toast.info('This event is already cancelled.')
         return
       }
 
-      alert('Event cancelled and refunds processed.')
+      toast.success('Event cancelled and refunds processed.')
       loadEvents()
     } catch (error: any) {
       console.error('Error cancelling event:', error)
-      alert('Error: ' + error.message)
+      toast.error('Error: ' + error.message)
     }
   }
 
   async function handlePosterUpload(eventId: string, file: File) {
     if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file')
+      toast.error('Please upload an image file')
       return
     }
     if (file.size > MAX_POSTER_BYTES) {
-      alert('Poster file must be 10MB or smaller')
+      toast.error('Poster file must be 10MB or smaller')
       return
     }
 
@@ -660,10 +680,10 @@ export default function EventManagementPage() {
       const result = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(result.error || 'Failed to save poster')
 
-      alert(`Poster saved. Queued ${result.jobs?.jobsQueued || 0} auto-post job(s).`)
+      toast.success(`Poster saved. Queued ${result.jobs?.jobsQueued || 0} auto-post job(s).`)
       await loadEvents()
     } catch (error: any) {
-      alert(error.message || 'Failed to upload poster')
+      toast.error(error.message || 'Failed to upload poster')
     } finally {
       setPosterUploadingId(null)
     }
@@ -700,7 +720,7 @@ export default function EventManagementPage() {
       if (!response.ok) throw new Error(result.error || 'Failed to remove poster')
       await loadEvents()
     } catch (error: any) {
-      alert(error.message || 'Failed to remove poster')
+      toast.error(error.message || 'Failed to remove poster')
     } finally {
       setPosterUploadingId(null)
     }
@@ -825,7 +845,7 @@ export default function EventManagementPage() {
                         onClick={() => {
                           const publicUrl = `${window.location.origin}/event-public/${event.id}`
                           navigator.clipboard.writeText(publicUrl)
-                          alert('Public link copied!')
+                          toast.success('Public link copied!')
                         }}
                         variant="outline"
                         size="sm"
@@ -1112,8 +1132,6 @@ export default function EventManagementPage() {
                         setFormData({
                           ...formData,
                           tickets_enabled: nextValue,
-                          credits_required: nextValue ? '0' : formData.credits_required || '5',
-                          cancellation_hours: nextValue ? '0' : formData.cancellation_hours || '4',
                           external_event: nextValue ? formData.external_event : false,
                           external_ticket_url: nextValue ? formData.external_ticket_url : '',
                         })
@@ -1216,7 +1234,7 @@ export default function EventManagementPage() {
                       value={formData.credits_required}
                       onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
                       min="0"
-                      disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
+                      disabled={formData.event_type === 'booked_show'}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
@@ -1245,7 +1263,7 @@ export default function EventManagementPage() {
                       value={formData.cancellation_hours}
                       onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
                       min="0"
-                      disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
+                      disabled={formData.event_type === 'booked_show'}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
@@ -1378,6 +1396,49 @@ export default function EventManagementPage() {
                       />
                     </div>
 
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Audience capacity
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.audience_capacity}
+                          onChange={(e) => setFormData({ ...formData, audience_capacity: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={formData.tickets_redeemable_credits_enabled}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                tickets_redeemable_credits_enabled: e.target.checked,
+                                tickets_redeemable_credits_amount: e.target.checked
+                                  ? (formData.tickets_redeemable_credits_amount || '5')
+                                  : '5',
+                                ticket_price: e.target.checked ? '0' : formData.ticket_price,
+                              })
+                            }
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                          />
+                          Redeemable credits
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.tickets_redeemable_credits_amount}
+                          onChange={(e) => setFormData({ ...formData, tickets_redeemable_credits_amount: e.target.value })}
+                          disabled={!formData.tickets_redeemable_credits_enabled}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                        />
+                      </div>
+                    </div>
+
                     {!formData.external_event && (
                       <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -1391,6 +1452,7 @@ export default function EventManagementPage() {
                             value={formData.ticket_price}
                             onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
                             placeholder="20.00"
+                            disabled={formData.tickets_redeemable_credits_enabled}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         </div>
@@ -1422,8 +1484,6 @@ export default function EventManagementPage() {
                         setFormData({
                           ...formData,
                           tickets_enabled: nextValue,
-                          credits_required: nextValue ? '0' : formData.credits_required || '5',
-                          cancellation_hours: nextValue ? '0' : formData.cancellation_hours || '4',
                           external_event: nextValue ? formData.external_event : false,
                           external_ticket_url: nextValue ? formData.external_ticket_url : '',
                         })
@@ -1457,6 +1517,48 @@ export default function EventManagementPage() {
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Audience capacity
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.audience_capacity}
+                            onChange={(e) => setFormData({ ...formData, audience_capacity: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={formData.tickets_redeemable_credits_enabled}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  tickets_redeemable_credits_enabled: e.target.checked,
+                                  tickets_redeemable_credits_amount: e.target.checked
+                                    ? (formData.tickets_redeemable_credits_amount || '5')
+                                    : '5',
+                                  ticket_price: e.target.checked ? '0' : formData.ticket_price,
+                                })
+                              }
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                            />
+                            Redeemable credits
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.tickets_redeemable_credits_amount}
+                            onChange={(e) => setFormData({ ...formData, tickets_redeemable_credits_amount: e.target.value })}
+                            disabled={!formData.tickets_redeemable_credits_enabled}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                          />
+                        </div>
+                      </div>
                       {!formData.external_event && (
                         <div className="grid grid-cols-2 gap-4">
                           <div>
@@ -1470,6 +1572,7 @@ export default function EventManagementPage() {
                               value={formData.ticket_price}
                               onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
                               placeholder="20.00"
+                              disabled={formData.tickets_redeemable_credits_enabled}
                               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                           </div>
@@ -1650,7 +1753,7 @@ export default function EventManagementPage() {
                       value={formData.credits_required}
                       onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
                       min="0"
-                      disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
+                      disabled={formData.event_type === 'booked_show'}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
@@ -1679,7 +1782,7 @@ export default function EventManagementPage() {
                       value={formData.cancellation_hours}
                       onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
                       min="0"
-                      disabled={formData.event_type === 'booked_show' || formData.tickets_enabled}
+                      disabled={formData.event_type === 'booked_show'}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
@@ -1812,6 +1915,48 @@ export default function EventManagementPage() {
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Audience capacity
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.audience_capacity}
+                            onChange={(e) => setFormData({ ...formData, audience_capacity: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={formData.tickets_redeemable_credits_enabled}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  tickets_redeemable_credits_enabled: e.target.checked,
+                                  tickets_redeemable_credits_amount: e.target.checked
+                                    ? (formData.tickets_redeemable_credits_amount || '5')
+                                    : '5',
+                                  ticket_price: e.target.checked ? '0' : formData.ticket_price,
+                                })
+                              }
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                            />
+                            Redeemable credits
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.tickets_redeemable_credits_amount}
+                            onChange={(e) => setFormData({ ...formData, tickets_redeemable_credits_amount: e.target.value })}
+                            disabled={!formData.tickets_redeemable_credits_enabled}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                          />
+                        </div>
+                      </div>
                       {!formData.external_event && (
                         <div className="grid grid-cols-2 gap-4">
                           <div>
@@ -1825,6 +1970,7 @@ export default function EventManagementPage() {
                               value={formData.ticket_price}
                               onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
                               placeholder="20.00"
+                              disabled={formData.tickets_redeemable_credits_enabled}
                               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                           </div>

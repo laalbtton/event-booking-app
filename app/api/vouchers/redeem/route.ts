@@ -123,15 +123,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: auditError.message }, { status: 500 })
     }
 
+    const { data: attendeeProfile, error: attendeeProfileError } = await supabase
+      .from('profiles')
+      .select('credits')
+      .eq('id', voucher.user_id)
+      .single()
+
+    if (attendeeProfileError || !attendeeProfile) {
+      return NextResponse.json(
+        { error: attendeeProfileError?.message || 'Failed to load attendee profile for credit return' },
+        { status: 500 }
+      )
+    }
+
+    const redeemedCredits = Math.max(0, Math.ceil(Number(voucher.value_cents || 0) / 100))
+    if (redeemedCredits > 0) {
+      const { error: creditUpdateError } = await supabase
+        .from('profiles')
+        .update({
+          credits: Number(attendeeProfile.credits || 0) + redeemedCredits,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', voucher.user_id)
+
+      if (creditUpdateError) {
+        return NextResponse.json({ error: creditUpdateError.message }, { status: 500 })
+      }
+
+      const { error: txError } = await supabase
+        .from('credit_transactions')
+        .insert({
+          user_id: voucher.user_id,
+          amount: redeemedCredits,
+          transaction_type: 'food_coupon_redeemed_credit',
+          reference_id: voucher.id,
+          notes: `Food coupon redeemed for event ${voucher.event_id}`,
+          created_by: authData.user.id,
+        })
+
+      if (txError) {
+        return NextResponse.json({ error: txError.message }, { status: 500 })
+      }
+    }
+
     return NextResponse.json({
       success: true,
       voucherId: updatedVoucher.id,
       discountCents: updatedVoucher.value_cents,
+      redeemedCredits,
       status: updatedVoucher.status,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error redeeming voucher:', error)
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 

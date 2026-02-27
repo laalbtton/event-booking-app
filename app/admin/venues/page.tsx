@@ -14,6 +14,7 @@ import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider
 import { Trash2, Edit, MapPin, Car, Accessibility, UtensilsCrossed } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/lib/dateUtils'
+import { toast } from 'sonner'
 
 type Venue = {
   id: string
@@ -224,7 +225,7 @@ export default function AdminVenuesPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      alert('Failed to load venue staff: ' + error.message)
+      toast.error('Failed to load venue staff: ' + error.message)
       setStaffRows([])
     } else {
       setStaffRows((data || []) as any)
@@ -271,7 +272,7 @@ export default function AdminVenuesPage() {
       )
 
     if (error) {
-      alert('Failed to add staff: ' + error.message)
+      toast.error('Failed to add staff: ' + error.message)
     } else {
       await loadVenueStaff(staffVenue.id)
       setStaffQuery('')
@@ -288,7 +289,7 @@ export default function AdminVenuesPage() {
       .update(patch)
       .eq('id', rowId)
     if (error) {
-      alert('Failed to update staff: ' + error.message)
+      toast.error('Failed to update staff: ' + error.message)
     } else {
       await loadVenueStaff(staffVenue.id)
     }
@@ -325,13 +326,13 @@ export default function AdminVenuesPage() {
 
       if (error) throw error
 
-      alert('Venue created successfully!')
+      toast.success('Venue created successfully!')
       setShowCreateForm(false)
       resetFormData()
       loadVenues()
     } catch (error: any) {
       console.error('Error creating venue:', error)
-      alert('Error: ' + error.message)
+      toast.error('Error: ' + error.message)
     } finally {
       setSubmitting(false)
     }
@@ -372,14 +373,14 @@ export default function AdminVenuesPage() {
 
       if (error) throw error
 
-      alert('Venue updated successfully!')
+      toast.success('Venue updated successfully!')
       setShowEditForm(false)
       setEditingVenue(null)
       resetFormData()
       loadVenues()
     } catch (error: any) {
       console.error('Error updating venue:', error)
-      alert('Error: ' + error.message)
+      toast.error('Error: ' + error.message)
     } finally {
       setSubmitting(false)
     }
@@ -412,11 +413,11 @@ export default function AdminVenuesPage() {
 
       if (error) throw error
 
-      alert('Venue deleted successfully!')
+      toast.success('Venue deleted successfully!')
       loadVenues()
     } catch (error: any) {
       console.error('Error deleting venue:', error)
-      alert('Error: ' + error.message)
+      toast.error('Error: ' + error.message)
     }
   }
 

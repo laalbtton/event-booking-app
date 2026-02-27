@@ -86,11 +86,13 @@ export async function POST(request: NextRequest) {
         id,
         user_id,
         credits_used,
+        booking_scope,
         status,
         profiles (
           email,
           full_name,
-          credits
+          credits,
+          audience_free_passes_remaining
         )
       `)
       .eq('event_id', eventId)
@@ -106,8 +108,27 @@ export async function POST(request: NextRequest) {
     for (const booking of bookings || []) {
       const profileData = (booking as any).profiles
       const currentCredits = profileData?.credits || 0
+      const currentAudiencePasses = profileData?.audience_free_passes_remaining || 0
+      const isAudienceBooking = booking.booking_scope === 'audience'
 
-      if (booking.credits_used > 0) {
+      if (isAudienceBooking && booking.credits_used === 0) {
+        const { error: passRestoreError } = await supabase
+          .from('profiles')
+          .update({ audience_free_passes_remaining: currentAudiencePasses + 1 })
+          .eq('id', booking.user_id)
+
+        if (passRestoreError) {
+          return NextResponse.json({ error: passRestoreError.message }, { status: 500 })
+        }
+
+        transactions.push({
+          user_id: booking.user_id,
+          amount: 0,
+          transaction_type: 'audience_free_pass_restored',
+          reference_id: booking.id,
+          notes: `Audience free pass restored for cancelled event: ${event.title}`,
+        })
+      } else if (booking.credits_used > 0) {
         const { error: creditError } = await supabase
           .from('profiles')
           .update({ credits: currentCredits + booking.credits_used })
@@ -120,7 +141,7 @@ export async function POST(request: NextRequest) {
         transactions.push({
           user_id: booking.user_id,
           amount: booking.credits_used,
-          transaction_type: 'refund',
+          transaction_type: isAudienceBooking ? 'audience_deposit_return' : 'refund',
           reference_id: booking.id,
           notes: `Refund for cancelled event: ${event.title}`
         })

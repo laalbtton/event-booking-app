@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, event_id, user_id, credits_used, status')
+      .select('id, event_id, user_id, credits_used, status, booking_scope')
       .eq('id', bookingId)
       .single()
 
@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
     const hoursUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
     const cancellationWindow = event.cancellation_hours || 4
     const refundAllowed = booking.status === 'waitlist' || hoursUntilEvent >= cancellationWindow
+    const isAudienceBooking = booking.booking_scope === 'audience'
 
     let updateError: any = null
     const withDateUpdate = await supabase
@@ -107,10 +108,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    if (refundAllowed && booking.credits_used > 0) {
+    if (refundAllowed && (booking.credits_used > 0 || isAudienceBooking)) {
       const { data: attendeeProfile, error: attendeeError } = await supabase
         .from('profiles')
-        .select('credits')
+        .select('credits, audience_free_passes_remaining')
         .eq('id', booking.user_id)
         .single()
 
@@ -118,9 +119,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: attendeeError.message }, { status: 500 })
       }
 
+      const patch: Record<string, any> = {}
+      if (booking.credits_used > 0) {
+        patch.credits = (attendeeProfile?.credits || 0) + booking.credits_used
+      } else if (isAudienceBooking) {
+        patch.audience_free_passes_remaining = (attendeeProfile?.audience_free_passes_remaining || 0) + 1
+      }
+
       const { error: creditError } = await supabase
         .from('profiles')
-        .update({ credits: (attendeeProfile?.credits || 0) + booking.credits_used })
+        .update(patch)
         .eq('id', booking.user_id)
 
       if (creditError) {
@@ -129,8 +137,11 @@ export async function POST(request: NextRequest) {
 
       await supabase.from('credit_transactions').insert({
         user_id: booking.user_id,
-        amount: booking.credits_used,
-        transaction_type: 'refund',
+        amount: booking.credits_used > 0 ? booking.credits_used : 0,
+        transaction_type:
+          booking.credits_used > 0
+            ? (isAudienceBooking ? 'audience_deposit_return' : 'refund')
+            : 'audience_free_pass_restored',
         reference_id: booking.id,
         notes: `Refund for removed attendee: ${event.id}`,
         created_by: authData.user.id,

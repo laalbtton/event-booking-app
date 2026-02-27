@@ -8,6 +8,26 @@ export default function AuthCallbackPage() {
   const router = useRouter()
 
   useEffect(() => {
+    async function ensureRoleOnboardingFlag(user: { user_metadata?: Record<string, any> }) {
+      const pendingFromStorage = window.localStorage.getItem('pending_role_onboarding') === '1'
+      const pendingFromMetadata = !!user.user_metadata?.onboarding_role_pending
+      if (!pendingFromStorage || pendingFromMetadata) {
+        return pendingFromStorage || pendingFromMetadata
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        data: {
+          ...user.user_metadata,
+          onboarding_role_pending: true,
+        },
+      })
+
+      if (error) {
+        console.warn('Could not persist onboarding role flag:', error.message)
+      }
+      return true
+    }
+
     async function handleAuthCallback() {
       try {
         const url = new URL(window.location.href)
@@ -49,6 +69,14 @@ export default function AuthCallbackPage() {
         if (userError || !user) {
           console.error('Error getting user after OAuth:', userError)
           router.replace('/login?error=no_user')
+          return
+        }
+
+        const shouldShowRoleOnboarding = await ensureRoleOnboardingFlag(user)
+        window.localStorage.removeItem('pending_role_onboarding')
+
+        if (shouldShowRoleOnboarding) {
+          router.replace('/onboarding/role')
           return
         }
 

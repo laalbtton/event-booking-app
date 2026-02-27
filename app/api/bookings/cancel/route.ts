@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, user_id, event_id, credits_used, status')
+      .select('id, user_id, event_id, credits_used, status, booking_scope')
       .eq('id', bookingId)
       .single()
 
@@ -67,7 +67,8 @@ export async function POST(request: NextRequest) {
     const cancellationWindow = isBookedShow ? 0 : Number(event.cancellation_hours || 4)
     const refundEligible = booking.status === 'waitlist' || (!isBookedShow && hoursUntilEvent >= cancellationWindow)
 
-    const foodCouponEnabled = !!event.food_coupon_enabled
+    const isAudienceBooking = booking.booking_scope === 'audience'
+    const foodCouponEnabled = !isAudienceBooking && !!event.food_coupon_enabled
     const spotFeeCredits = Math.max(0, Number(event.spot_fee_credits || 0))
     const couponValueCents = Math.max(0, Number(event.food_coupon_value_cents || 0))
     const couponCreditsComponent = Math.ceil(couponValueCents / 100)
@@ -80,21 +81,30 @@ export async function POST(request: NextRequest) {
 
     let voucherRefunded = false
     let refundedCredits = 0
+    let restoredFreePass = false
 
-    if (refundEligible && booking.credits_used > 0) {
-      if (foodCouponEnabled) {
-        if (booking.status === 'waitlist') {
+    if (refundEligible) {
+      if (isAudienceBooking) {
+        if (booking.credits_used > 0) {
           refundedCredits = booking.credits_used
-          voucherRefunded = false
-        } else if (existingVoucher?.status === 'redeemed') {
-          refundedCredits = Math.min(booking.credits_used, spotFeeCredits)
-          voucherRefunded = false
+        } else {
+          restoredFreePass = true
+        }
+      } else if (booking.credits_used > 0) {
+        if (foodCouponEnabled) {
+          if (booking.status === 'waitlist') {
+            refundedCredits = booking.credits_used
+            voucherRefunded = false
+          } else if (existingVoucher?.status === 'redeemed') {
+            refundedCredits = Math.min(booking.credits_used, spotFeeCredits)
+            voucherRefunded = false
+          } else {
+            refundedCredits = booking.credits_used
+            voucherRefunded = couponCreditsComponent > 0
+          }
         } else {
           refundedCredits = booking.credits_used
-          voucherRefunded = couponCreditsComponent > 0
         }
-      } else {
-        refundedCredits = booking.credits_used
       }
     }
 
@@ -124,17 +134,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: cancelError.message }, { status: 500 })
     }
 
-    if (existingVoucher && existingVoucher.status === 'issued') {
+    if (!isAudienceBooking && existingVoucher && existingVoucher.status === 'issued') {
       await supabase
         .from('booking_vouchers')
         .update({ status: 'cancelled', updated_at: now.toISOString() })
         .eq('id', existingVoucher.id)
     }
 
-    if (refundedCredits > 0) {
+    if (refundedCredits > 0 || restoredFreePass) {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('credits')
+        .select('credits, audience_free_passes_remaining')
         .eq('id', authData.user.id)
         .single()
 
@@ -142,25 +152,44 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: profileError?.message || 'Profile not found' }, { status: 500 })
       }
 
+      const profilePatch: Record<string, any> = {
+        updated_at: now.toISOString(),
+      }
+      if (refundedCredits > 0) {
+        profilePatch.credits = Number(profile.credits || 0) + refundedCredits
+      }
+      if (restoredFreePass) {
+        profilePatch.audience_free_passes_remaining = Number(profile.audience_free_passes_remaining || 0) + 1
+      }
+
       const { error: refundError } = await supabase
         .from('profiles')
-        .update({
-          credits: Number(profile.credits || 0) + refundedCredits,
-          updated_at: now.toISOString(),
-        })
+        .update(profilePatch)
         .eq('id', authData.user.id)
 
       if (refundError) {
         return NextResponse.json({ error: refundError.message }, { status: 500 })
       }
 
-      await supabase.from('credit_transactions').insert({
-        user_id: authData.user.id,
-        amount: refundedCredits,
-        transaction_type: voucherRefunded ? 'food_coupon_refund' : 'refund',
-        reference_id: booking.id,
-        notes: `Refund for cancelled booking: ${event.title}`,
-      })
+      if (isAudienceBooking && restoredFreePass) {
+        await supabase.from('credit_transactions').insert({
+          user_id: authData.user.id,
+          amount: 0,
+          transaction_type: 'audience_free_pass_restored',
+          reference_id: booking.id,
+          notes: `Audience free pass restored: ${event.title}`,
+        })
+      } else {
+        await supabase.from('credit_transactions').insert({
+          user_id: authData.user.id,
+          amount: refundedCredits,
+          transaction_type: isAudienceBooking
+            ? 'audience_deposit_return'
+            : (voucherRefunded ? 'food_coupon_refund' : 'refund'),
+          reference_id: booking.id,
+          notes: `Refund for cancelled booking: ${event.title}`,
+        })
+      }
     } else {
       await supabase.from('credit_transactions').insert({
         user_id: authData.user.id,
@@ -181,6 +210,7 @@ export async function POST(request: NextRequest) {
       success: true,
       bookingId: booking.id,
       refundedCredits,
+      restoredFreePass,
       voucherRefunded,
     })
   } catch (error: any) {

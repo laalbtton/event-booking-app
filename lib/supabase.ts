@@ -14,7 +14,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 // Type definitions
 // User roles
-export type UserRole = 'performer' | 'event_creator' | 'admin'
+export type UserRole = 'performer' | 'audience' | 'event_creator' | 'admin'
 
 // Full profile (for own profile)
 export type Profile = {
@@ -23,6 +23,7 @@ export type Profile = {
   full_name: string | null
   avatar_url: string | null
   credits: number
+  audience_free_passes_remaining?: number
   role: UserRole
   stripe_customer_id?: string | null
   stripe_customer_mode?: 'test' | 'live' | null
@@ -73,6 +74,8 @@ export type Event = {
   max_attendees: number | null
   cancellation_hours: number
   registration_opens_at: string | null
+  audience_capacity?: number
+  audience_deposit_credits?: number
   host_user_id: string | null
   created_by: string | null
   created_at: string

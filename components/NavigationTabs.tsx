@@ -13,10 +13,13 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { MessageSquare, MoreHorizontal, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
+import { signOutAndCleanup } from '@/lib/authClient'
 
 export default function NavigationTabs() {
   const pathname = usePathname()
   const router = useRouter()
+  const { authResolved, user } = useAuthBootstrap()
   const [userRole, setUserRole] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isVenueStaff, setIsVenueStaff] = useState(false)
@@ -34,8 +37,18 @@ export default function NavigationTabs() {
   })
 
   useEffect(() => {
-    checkUserRole()
-  }, [])
+    if (!authResolved) return
+    if (!user) {
+      setUserRole(null)
+      setIsAdmin(false)
+      setIsVenueStaff(false)
+      setUserId(null)
+      setUserEmail('')
+      setUnreadCount(0)
+      return
+    }
+    void checkUserRole(user.id, user.email || '')
+  }, [authResolved, user])
 
   useEffect(() => {
     if (feedbackOpen && userEmail && !feedbackForm.email) {
@@ -49,7 +62,6 @@ export default function NavigationTabs() {
 
     async function setupNotifications() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
         // Load initial count
@@ -149,11 +161,10 @@ export default function NavigationTabs() {
         clearInterval(refreshInterval)
       }
     }
-  }, [])
+  }, [authResolved, user?.id])
 
   async function loadUnreadCount() {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         setUnreadCount(0)
         return
@@ -180,16 +191,14 @@ export default function NavigationTabs() {
     }
   }
 
-  async function checkUserRole() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    setUserId(user.id)
-    setUserEmail(user.email || '')
+  async function checkUserRole(userIdValue: string, userEmailValue: string) {
+    setUserId(userIdValue)
+    setUserEmail(userEmailValue)
 
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', user.id)
+      .eq('id', userIdValue)
       .single()
 
     if (profile) {
@@ -200,7 +209,7 @@ export default function NavigationTabs() {
       const { data: adminData } = await supabase
         .from('admin_users')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userIdValue)
         .single()
 
       setIsAdmin(!!adminData)
@@ -210,7 +219,7 @@ export default function NavigationTabs() {
     const { data: venueStaffRow } = await supabase
       .from('venue_staff')
       .select('id')
-      .eq('user_id', user.id)
+      .eq('user_id', userIdValue)
       .eq('active', true)
       .limit(1)
       .maybeSingle()
@@ -218,7 +227,7 @@ export default function NavigationTabs() {
   }
 
   async function handleSignOut() {
-    await supabase.auth.signOut()
+    await signOutAndCleanup()
     router.push('/')
   }
 

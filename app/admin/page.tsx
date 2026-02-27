@@ -190,7 +190,7 @@ export default function AdminUsersPage() {
                         value={user.role || 'performer'}
                         onChange={async (e) => {
                           try {
-                            const newRole = e.target.value as 'performer' | 'event_creator' | 'admin'
+                            const newRole = e.target.value as 'performer' | 'audience' | 'event_creator' | 'admin'
                             const { error } = await supabase
                               .from('profiles')
                               .update({ role: newRole, updated_at: new Date().toISOString() })
@@ -205,6 +205,7 @@ export default function AdminUsersPage() {
                         className="text-sm border border-input bg-background rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         <option value="performer">Performer</option>
+                        <option value="audience">Audience</option>
                         <option value="event_creator">Event Creator</option>
                         <option value="admin">Admin</option>
                       </select>

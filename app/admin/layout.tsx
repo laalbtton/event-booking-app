@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
 
@@ -13,26 +14,27 @@ export default function AdminLayout({
 }) {
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
+  const { authResolved, user } = useAuthBootstrap()
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
-    checkAdmin()
-  }, [])
-
-  async function checkAdmin() {
-    const { data: { user } } = await supabase.auth.getUser()
-
+    if (!authResolved) return
     if (!user) {
+      setLoading(false)
       router.push('/login')
       return
     }
+    setLoading(true)
+    void checkAdmin(user.id)
+  }, [authResolved, user, router])
 
+  async function checkAdmin(userId: string) {
     // Check user role - only admins can access admin panel
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single()
 
     if (profileError || !profile) {
@@ -40,7 +42,7 @@ export default function AdminLayout({
       const { data: adminData } = await supabase
         .from('admin_users')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .single()
 
       if (!adminData) {
@@ -57,7 +59,7 @@ export default function AdminLayout({
   }
 
 
-  if (loading) {
+  if (!authResolved || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-2xl">Loading...</div>

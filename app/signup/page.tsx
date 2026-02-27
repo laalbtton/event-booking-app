@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { cn } from '@/lib/utils'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -33,6 +32,7 @@ export default function SignupPage() {
         options: {
           data: {
             full_name: fullName,
+            onboarding_role_pending: true,
           },
         },
       })
@@ -50,7 +50,7 @@ export default function SignupPage() {
       // If email is already confirmed (shouldn't happen normally, but handle it)
       setSuccess(true)
       setTimeout(() => {
-        router.push('/dashboard')
+        router.push('/onboarding/role')
       }, 2000)
     } catch (error: any) {
       setError(error.message)
@@ -69,6 +69,10 @@ export default function SignupPage() {
       const redirectUrl = typeof window !== 'undefined' 
         ? `${window.location.origin}/auth/callback`
         : '/auth/callback'
+
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('pending_role_onboarding', '1')
+      }
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -98,10 +102,10 @@ export default function SignupPage() {
                 We've sent a verification email to <strong>{email}</strong>
               </p>
               <p className="text-sm text-muted-foreground mb-3">
-                Please click the link in the email to verify your account before you can access the dashboard.
+                Please click the link in the email to verify your account before you continue onboarding.
               </p>
               <p className="text-sm text-muted-foreground">
-                Once verified, you can log in and start booking events!
+                Once verified, you will choose whether you want to join as a performer or audience member.
               </p>
             </div>
             <div className="space-y-3">

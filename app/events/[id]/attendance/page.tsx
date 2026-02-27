@@ -4,20 +4,26 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
+import { createNotification } from '@/lib/notifications'
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
+import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { GripVertical, User, Copy, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type BookingWithProfile = {
   id: string
   user_id: string
+  credits_used?: number
   status: string
+  booking_scope?: 'performer' | 'audience'
   attendance_status: string | null
+  audience_checkin_code?: string | null
   booked_at: string
   waitlist_position?: number | null
   profiles: {
@@ -54,6 +60,12 @@ type RecentRedemption = {
   attendeeLabel: string
 }
 
+type HostSearchResult = {
+  id: string
+  full_name: string | null
+  email: string | null
+}
+
 type EventDetails = {
   id: string
   title: string
@@ -63,6 +75,21 @@ type EventDetails = {
   event_type: 'open_mic' | 'booked_show'
   max_attendees: number | null
   food_coupon_enabled?: boolean
+  audience_attendance_open_before_minutes?: number
+  audience_attendance_cutoff_hours?: number
+}
+
+type VoucherPreview = {
+  id: string
+  code: string
+  eventId: string
+  eventTitle: string
+  attendeeName: string
+  attendeeEmail: string | null
+  valueCents: number
+  status: string
+  expiresAt: string | null
+  canRedeem: boolean
 }
 
 type ScannerEngine = 'native' | 'html5' | null
@@ -77,13 +104,19 @@ function getInitials(name: string): string {
 }
 
 export default function AttendancePage() {
+  const { confirm } = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
   const eventId = params.id as string
 
   const [event, setEvent] = useState<EventDetails | null>(null)
   const [bookings, setBookings] = useState<BookingWithProfile[]>([])
+  const [audienceBookings, setAudienceBookings] = useState<BookingWithProfile[]>([])
   const [waitlistBookings, setWaitlistBookings] = useState<BookingWithProfile[]>([])
+  const [attendeeTab, setAttendeeTab] = useState<'performers' | 'audience'>('performers')
+  const [audienceFilter, setAudienceFilter] = useState<'all' | 'checked_in' | 'not_arrived'>('all')
+  const [audienceSearch, setAudienceSearch] = useState('')
+  const [audienceCheckinCodeInput, setAudienceCheckinCodeInput] = useState('')
   const [invites, setInvites] = useState<InviteWithProfile[]>([])
   const [inviteSearch, setInviteSearch] = useState('')
   const [inviteResults, setInviteResults] = useState<InviteWithProfile[]>([])
@@ -97,17 +130,31 @@ export default function AttendancePage() {
       .slice(0, 16)
   })
   const [showInviteAdvanced, setShowInviteAdvanced] = useState(false)
+  const [showRedeemTools, setShowRedeemTools] = useState(false)
+  const [showReplaceHostPanel, setShowReplaceHostPanel] = useState(false)
+  const [hostSearch, setHostSearch] = useState('')
+  const [hostSearchResults, setHostSearchResults] = useState<HostSearchResult[]>([])
+  const [hostSearchLoading, setHostSearchLoading] = useState(false)
   const [redeemCode, setRedeemCode] = useState('')
   const [redeemOrderTotal, setRedeemOrderTotal] = useState('')
   const [redeemNotes, setRedeemNotes] = useState('')
   const [redeemLoading, setRedeemLoading] = useState(false)
   const [redeemMessage, setRedeemMessage] = useState('')
   const [redeemError, setRedeemError] = useState('')
+  const [redeemPreview, setRedeemPreview] = useState<VoucherPreview | null>(null)
   const [recentRedemptions, setRecentRedemptions] = useState<RecentRedemption[]>([])
+  const [showRefundTools, setShowRefundTools] = useState(false)
+  const [refundMode, setRefundMode] = useState<'full' | 'specific'>('full')
+  const [refundAmount, setRefundAmount] = useState('1')
+  const [selectedRefundBookingIds, setSelectedRefundBookingIds] = useState<Set<string>>(new Set())
+  const [refundLoading, setRefundLoading] = useState(false)
+  const [refundMessage, setRefundMessage] = useState('')
+  const [refundError, setRefundError] = useState('')
   const [scannerActive, setScannerActive] = useState(false)
   const [scannerSupported, setScannerSupported] = useState(true)
   const [scannerMessage, setScannerMessage] = useState('')
   const [scannerEngine, setScannerEngine] = useState<ScannerEngine>(null)
+  const [scannerMode, setScannerMode] = useState<'coupon' | 'audience'>('coupon')
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
@@ -146,6 +193,47 @@ export default function AttendancePage() {
   }, [])
 
   const html5ScannerElementId = `coupon-qr-reader-${eventId}`
+
+  function applyScannedCode(value: string) {
+    if (scannerMode === 'audience') {
+      setAudienceCheckinCodeInput(value)
+      return
+    }
+    setRedeemCode(value)
+    void lookupVoucher(value)
+  }
+
+  async function lookupVoucher(inputCode?: string): Promise<VoucherPreview | null> {
+    const code = (inputCode || redeemCode).trim().toUpperCase()
+    if (!code) {
+      setRedeemPreview(null)
+      return null
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const params = new URLSearchParams({ code, eventId })
+      const response = await fetch(`/api/vouchers/lookup?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Failed to lookup coupon')
+
+      const preview = data.voucher as VoucherPreview
+      setRedeemPreview(preview)
+      setRedeemCode(preview.code)
+      setRedeemOrderTotal((Math.max(0, Number(preview.valueCents || 0)) / 100).toFixed(2))
+      return preview
+    } catch (error: any) {
+      setRedeemPreview(null)
+      setRedeemError(error.message || 'Failed to lookup coupon')
+      return null
+    }
+  }
 
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -211,13 +299,17 @@ export default function AttendancePage() {
       { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 },
       (decodedText: string) => {
         if (!decodedText) return
-        setRedeemCode(decodedText.trim())
-        setScannerMessage('QR code detected. Ready to redeem.')
+        applyScannedCode(decodedText.trim())
+        setScannerMessage(scannerMode === 'audience' ? 'Code detected. Ready to mark attendance.' : 'QR code detected. Ready to redeem.')
         stopScanner()
       },
       () => undefined
     )
-    setScannerMessage('Scanner is active. Point camera at coupon QR code.')
+    setScannerMessage(
+      scannerMode === 'audience'
+        ? 'Scanner is active. Point camera at attendee check-in code.'
+        : 'Scanner is active. Point camera at coupon QR code.'
+    )
   }
 
   async function startScanner() {
@@ -249,15 +341,19 @@ export default function AttendancePage() {
             if (!barcodes?.length) return
             const rawValue = barcodes[0]?.rawValue
             if (!rawValue) return
-            setRedeemCode(rawValue.trim())
-            setScannerMessage('QR code detected. Ready to redeem.')
+            applyScannedCode(rawValue.trim())
+            setScannerMessage(scannerMode === 'audience' ? 'Code detected. Ready to mark attendance.' : 'QR code detected. Ready to redeem.')
             stopScanner()
           } catch {
             // Keep polling frames.
           }
         }, 500)
 
-        setScannerMessage('Scanner is active. Point camera at coupon QR code.')
+        setScannerMessage(
+          scannerMode === 'audience'
+            ? 'Scanner is active. Point camera at attendee check-in code.'
+            : 'Scanner is active. Point camera at coupon QR code.'
+        )
         return
       } catch {
         stopScanner()
@@ -290,7 +386,7 @@ export default function AttendancePage() {
       // Load event
       const { data: eventData, error: eventError } = await supabase
         .from('events')
-        .select('id, title, date, host_user_id, created_by, event_type, max_attendees, food_coupon_enabled')
+        .select('id, title, date, host_user_id, created_by, event_type, max_attendees, food_coupon_enabled, audience_attendance_open_before_minutes, audience_attendance_cutoff_hours')
         .eq('id', eventId)
         .single()
 
@@ -334,8 +430,11 @@ export default function AttendancePage() {
         .select(`
           id,
           user_id,
+          credits_used,
           status,
+          booking_scope,
           attendance_status,
+          audience_checkin_code,
           booked_at,
           waitlist_position,
           profiles (
@@ -349,15 +448,21 @@ export default function AttendancePage() {
         .order('booked_at', { ascending: true })
 
       if (bookingsError) throw bookingsError
-      setBookings(bookingsData as any)
+      const performerBookings = (bookingsData || []).filter((b: any) => b.booking_scope !== 'audience')
+      const audienceRows = (bookingsData || []).filter((b: any) => b.booking_scope === 'audience')
+      setBookings(performerBookings as any)
+      setAudienceBookings(audienceRows as any)
 
       const { data: waitlistData, error: waitlistError } = await supabase
         .from('bookings')
         .select(`
           id,
           user_id,
+          credits_used,
           status,
+          booking_scope,
           attendance_status,
+          audience_checkin_code,
           booked_at,
           waitlist_position,
           profiles (
@@ -451,11 +556,11 @@ export default function AttendancePage() {
       }
 
       // Calculate stats
-      const total = bookingsData?.length || 0
-      const attended = bookingsData?.filter((b: any) => b.attendance_status === 'attended').length || 0
+      const total = performerBookings?.length || 0
+      const attended = performerBookings?.filter((b: any) => b.attendance_status === 'attended').length || 0
       const noShow = total - attended // All non-attended are no shows by default
-      const confirmed = bookingsData?.filter((b: any) => !b.attendance_status || b.attendance_status === 'confirmed').length || 0
-      const pending = bookingsData?.filter((b: any) => !b.attendance_status).length || 0
+      const confirmed = performerBookings?.filter((b: any) => !b.attendance_status || b.attendance_status === 'confirmed').length || 0
+      const pending = performerBookings?.filter((b: any) => !b.attendance_status).length || 0
 
       setStats({
         total,
@@ -489,6 +594,29 @@ export default function AttendancePage() {
     })
   }
 
+  function isAudienceAttendanceWindowOpen() {
+    if (!event?.date) return false
+    const eventStart = new Date(event.date)
+    const now = new Date()
+    const openBeforeMinutes = Math.max(0, Number(event.audience_attendance_open_before_minutes || 30))
+    const cutoffHours = Math.max(0, Number(event.audience_attendance_cutoff_hours || 2))
+    const windowOpenAt = new Date(eventStart.getTime() - openBeforeMinutes * 60 * 1000)
+    const windowClosesAt = new Date(eventStart.getTime() + cutoffHours * 60 * 60 * 1000)
+    return now >= windowOpenAt && now <= windowClosesAt
+  }
+
+  async function markAudienceByCode() {
+    const code = audienceCheckinCodeInput.trim().toUpperCase()
+    if (!code) return
+    const target = audienceBookings.find((booking) => (booking.audience_checkin_code || '').toUpperCase() === code)
+    if (!target) {
+      alert('No audience booking found for that check-in code.')
+      return
+    }
+    await updateAttendance(target.id, 'attended')
+    setAudienceCheckinCodeInput('')
+  }
+
   async function updateAttendance(bookingId: string, status: 'attended' | null) {
     setUpdating(bookingId)
     try {
@@ -518,6 +646,13 @@ export default function AttendancePage() {
         recalcStats(updated)
         return updated
       })
+      setAudienceBookings((prev) =>
+        prev.map((booking) =>
+          booking.id === bookingId
+            ? { ...booking, attendance_status: status }
+            : booking
+        )
+      )
     } catch (error: any) {
       console.error('Error updating attendance:', error)
       alert('Error updating attendance: ' + error.message)
@@ -713,6 +848,26 @@ export default function AttendancePage() {
         throw new Error('Order total must be a valid non-negative amount.')
       }
 
+      const preview = redeemPreview || (await lookupVoucher(redeemCode))
+      if (!preview) {
+        throw new Error('Please lookup a valid coupon first')
+      }
+      if (!preview.canRedeem) {
+        throw new Error('This coupon is not redeemable in its current state')
+      }
+
+      const amountText = `$${(Math.max(0, Number(preview.valueCents || 0)) / 100).toFixed(2)}`
+      const shouldRedeem = await confirm({
+        title: 'Confirm coupon redemption',
+        message: `Redeem ${amountText} for ${preview.attendeeName}?\n\nCoupon: ${preview.code}`,
+        confirmText: `Redeem ${amountText}`,
+        cancelText: 'Cancel',
+      })
+      if (!shouldRedeem) {
+        setRedeemLoading(false)
+        return
+      }
+
       const response = await fetch('/api/vouchers/redeem', {
         method: 'POST',
         headers: {
@@ -736,6 +891,7 @@ export default function AttendancePage() {
       setRedeemCode('')
       setRedeemOrderTotal('')
       setRedeemNotes('')
+      setRedeemPreview(null)
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         await loadData(user.id)
@@ -744,6 +900,73 @@ export default function AttendancePage() {
       setRedeemError(error.message || 'Failed to redeem coupon')
     } finally {
       setRedeemLoading(false)
+    }
+  }
+
+  async function submitBatchRefunds() {
+    const bookingIds = Array.from(selectedRefundBookingIds)
+    if (!event || bookingIds.length === 0) {
+      setRefundError('Select at least one attendee to refund.')
+      return
+    }
+
+    const parsedAmount = Number(refundAmount)
+    if (refundMode === 'specific' && (!Number.isFinite(parsedAmount) || parsedAmount <= 0)) {
+      setRefundError('Enter a valid specific refund amount.')
+      return
+    }
+
+    const shouldProceed = await confirm({
+      title: 'Issue batch refund?',
+      message:
+        refundMode === 'full'
+          ? `Refund full eligible balances for ${bookingIds.length} attendee(s)?`
+          : `Refund up to ${Math.floor(parsedAmount)} credits for ${bookingIds.length} attendee(s), capped by refundable balance?`,
+      confirmText: 'Issue refunds',
+      cancelText: 'Cancel',
+      variant: 'destructive',
+    })
+
+    if (!shouldProceed) return
+
+    setRefundLoading(true)
+    setRefundError('')
+    setRefundMessage('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/refunds/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          eventId,
+          bookingIds,
+          mode: refundMode,
+          specificAmount: refundMode === 'specific' ? Math.floor(parsedAmount) : undefined,
+        }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Failed to issue refunds')
+
+      setRefundMessage(
+        `Refunded ${data.refundedCount || 0} attendee(s), total ${data.refundedTotal || 0} credits. ${
+          (data.skippedCount || 0) > 0 ? `${data.skippedCount} skipped.` : ''
+        }`
+      )
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await loadData(user.id)
+      }
+      setSelectedRefundBookingIds(new Set())
+    } catch (error: any) {
+      setRefundError(error.message || 'Failed to issue refunds')
+    } finally {
+      setRefundLoading(false)
     }
   }
 
@@ -768,12 +991,35 @@ export default function AttendancePage() {
   async function setHost(userId: string | null) {
     setUpdating('host')
     try {
+      const previousHostId = event?.host_user_id ?? null
       const { error } = await supabase
         .from('events')
         .update({ host_user_id: userId })
         .eq('id', eventId)
 
       if (error) throw error
+
+      if (userId && userId !== previousHostId) {
+        await createNotification(
+          userId,
+          'general',
+          'Assigned as event host',
+          `You have been designated as host for "${event?.title || 'an event'}".`,
+          null,
+          eventId
+        )
+      }
+
+      if (previousHostId && previousHostId !== userId) {
+        await createNotification(
+          previousHostId,
+          'general',
+          'Host role updated',
+          `You are no longer the host for "${event?.title || 'an event'}".`,
+          null,
+          eventId
+        )
+      }
 
       await loadData((await supabase.auth.getUser()).data.user!.id)
     } catch (error: any) {
@@ -782,6 +1028,30 @@ export default function AttendancePage() {
     } finally {
       setUpdating(null)
     }
+  }
+
+  async function searchHostCandidates(query: string) {
+    setHostSearch(query)
+    const trimmed = query.trim()
+    if (!trimmed || trimmed.length < 2) {
+      setHostSearchResults([])
+      setHostSearchLoading(false)
+      return
+    }
+
+    setHostSearchLoading(true)
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
+      .limit(10)
+
+    if (!error && data) {
+      setHostSearchResults(data as HostSearchResult[])
+    } else {
+      setHostSearchResults([])
+    }
+    setHostSearchLoading(false)
   }
 
   async function reorderBookings(newOrder: BookingWithProfile[]) {
@@ -989,19 +1259,28 @@ export default function AttendancePage() {
                       </Avatar>
                       <div className="flex-1">
                         <p className="font-semibold text-indigo-900">{hostProfile.full_name}</p>
-                        <p className="text-sm text-indigo-700">Currently assigned as host</p>
+                        <p className="text-sm text-indigo-700">Host</p>
                       </div>
                       <Button
-                        onClick={() => setHost(null)}
+                        onClick={() => {
+                          if (showReplaceHostPanel) {
+                            setShowReplaceHostPanel(false)
+                            setHostSearch('')
+                            setHostSearchResults([])
+                            setHostSearchLoading(false)
+                            return
+                          }
+                          setShowReplaceHostPanel(true)
+                        }}
                         disabled={updating === 'host'}
-                        variant="destructive"
+                        variant="outline"
                         size="sm"
                       >
-                        {updating === 'host' ? 'Removing...' : 'Remove Host'}
+                        {showReplaceHostPanel ? 'Hide' : 'Replace Host'}
                       </Button>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-center h-full text-center">
+                    <div className="flex items-center justify-center h-full text-center min-h-[72px]">
                       <div>
                         <User className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                         <p className="text-gray-600 mb-1">No host assigned</p>
@@ -1010,6 +1289,79 @@ export default function AttendancePage() {
                     </div>
                   )}
                 </div>
+                {!hostProfile && (
+                  <div className="mt-3 flex justify-end">
+                    <Button
+                      onClick={() => {
+                        if (showReplaceHostPanel) {
+                          setShowReplaceHostPanel(false)
+                          setHostSearch('')
+                          setHostSearchResults([])
+                          setHostSearchLoading(false)
+                          return
+                        }
+                        setShowReplaceHostPanel(true)
+                      }}
+                      disabled={updating === 'host'}
+                      variant="outline"
+                      size="sm"
+                    >
+                      {showReplaceHostPanel ? 'Hide' : 'Replace Host'}
+                    </Button>
+                  </div>
+                )}
+                {showReplaceHostPanel && (
+                  <div className="mt-3 p-3 border rounded-lg bg-white space-y-2">
+                    <label className="block text-xs text-muted-foreground">Search user</label>
+                    <input
+                      type="text"
+                      value={hostSearch}
+                      onChange={(e) => searchHostCandidates(e.target.value)}
+                      placeholder="Search all users by name or email"
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Replacing host does not auto-add attendees and does not charge credits.
+                    </p>
+                    {hostSearch.trim().length < 2 ? (
+                      <p className="text-sm text-muted-foreground">Type at least 2 characters to search users.</p>
+                    ) : hostSearchLoading ? (
+                      <p className="text-sm text-muted-foreground">Searching users...</p>
+                    ) : hostSearchResults.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No users found.</p>
+                    ) : (
+                      <div className="max-h-52 overflow-auto space-y-1">
+                        {hostSearchResults.map((candidate) => {
+                          const isCurrentHost = hostProfile?.id === candidate.id
+                          return (
+                            <button
+                              key={candidate.id}
+                              type="button"
+                              className={cn(
+                                'w-full text-left px-3 py-2 rounded border text-sm transition-colors',
+                                isCurrentHost
+                                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                                  : 'hover:bg-gray-50'
+                              )}
+                              disabled={updating === 'host' || isCurrentHost}
+                              onClick={async () => {
+                                await setHost(candidate.id)
+                                setShowReplaceHostPanel(false)
+                                setHostSearch('')
+                                setHostSearchResults([])
+                              }}
+                            >
+                              <div className="font-medium truncate">{candidate.full_name || 'No name'}</div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {isCurrentHost ? 'Current host' : candidate.email || 'No email'}
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -1017,219 +1369,532 @@ export default function AttendancePage() {
 
         {/* Bookings List */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle>Confirmed Bookings ({bookings.length})</CardTitle>
-            <Button variant="outline" size="icon" onClick={copyAttendanceList} aria-label="Copy attendance list">
-              <Copy className="h-4 w-4" />
-            </Button>
-          </CardHeader>
-          <CardContent
-            onDragOver={handleConfirmedDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={() => handleDropToStatus('confirmed')}
-            className={cn(
-              isDraggingOverConfirmed && "rounded-lg bg-blue-50 border border-blue-200"
-            )}
-          >
-            {bookings.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">No confirmed bookings for this event</p>
-            ) : (
-              <div className="space-y-2">
-                {bookings.map((booking, index) => {
-                  const attendanceStatus = booking.attendance_status
-                  const isUpdating = updating === booking.id
-                  const isDragged = draggedItem === booking.id
-                  const isDragOver = dragOverIndex === index
-
-                  return (
-                    <div
-                      key={booking.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, booking.id)}
-                      onDragOver={(e) => handleDragOver(e, index)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                      onTouchStart={(e) => handleTouchStart(e, booking.id)}
-                      onTouchMove={(e) => handleTouchMove(e, booking.id)}
-                      onTouchEnd={() => handleTouchEnd(booking.id)}
-                      style={{ transform: `translateX(${swipeOffset[booking.id] || 0}px)` }}
-                      className={cn(
-                        "flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all cursor-move",
-                        isDragged && "opacity-50",
-                        isDragOver && "border-blue-400 bg-blue-50",
-                        !isDragged && !isDragOver && "hover:bg-gray-50"
-                      )}
-                    >
-                      <GripVertical className="w-5 h-5 text-gray-400 flex-shrink-0" />
-
-                      <div className="flex-1 min-w-0">
-                        <Link
-                          href={`/profile/${booking.profiles.id}`}
-                          className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {booking.profiles.full_name || 'No name'}
-                        </Link>
-                        <span className="hidden sm:inline text-xs text-muted-foreground">
-                          {formatDateTime(booking.booked_at)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <Switch
-                          checked={attendanceStatus === 'attended'}
-                          disabled={isUpdating}
-                          onCheckedChange={(checked) => updateAttendance(booking.id, checked ? 'attended' : null)}
-                          aria-label="Mark attended"
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            <div
-              className={cn("mt-6 rounded-lg", isDraggingOverWaitlist && "bg-blue-50 border border-blue-200")}
-              onDragOver={handleWaitlistDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={() => handleDropToStatus('waitlist')}
-            >
-              <h3 className="text-sm font-semibold text-muted-foreground mb-3">
-                Waitlist ({waitlistBookings.length})
-              </h3>
-              {waitlistBookings.length === 0 ? (
-                <p className="text-muted-foreground text-center py-6 text-sm">No waitlisted attendees</p>
-              ) : (
-                <div className="space-y-2">
-                  {waitlistBookings.map((booking) => {
-                    const isUpdating = updating === booking.id
-                    return (
-                      <div
-                        key={booking.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, booking.id)}
-                        className="flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all hover:bg-gray-50"
-                      >
-                        <span className="text-xs font-semibold text-muted-foreground w-6 text-center">
-                          {booking.waitlist_position ?? '-'}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <Link
-                            href={`/profile/${booking.profiles.id}`}
-                            className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
-                          >
-                            {booking.profiles.full_name || 'No name'}
-                          </Link>
-                        </div>
-                        {isUpdating && (
-                          <span className="text-xs text-muted-foreground">Updating...</span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+          <CardHeader className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>{attendeeTab === 'performers' ? `Confirmed Bookings (${bookings.length})` : `Audience (${audienceBookings.length})`}</CardTitle>
+              {attendeeTab === 'performers' && (
+                <Button variant="outline" size="icon" onClick={copyAttendanceList} aria-label="Copy attendance list">
+                  <Copy className="h-4 w-4" />
+                </Button>
               )}
             </div>
+            <Tabs value={attendeeTab} onValueChange={(value) => setAttendeeTab(value as 'performers' | 'audience')}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="performers">Performers</TabsTrigger>
+                <TabsTrigger value="audience">Audience</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </CardHeader>
+          <CardContent>
+            {attendeeTab === 'performers' ? (
+              <div
+                onDragOver={handleConfirmedDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={() => handleDropToStatus('confirmed')}
+                className={cn(
+                  isDraggingOverConfirmed && "rounded-lg bg-blue-50 border border-blue-200"
+                )}
+              >
+                {bookings.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No confirmed bookings for this event</p>
+                ) : (
+                  <div className="space-y-2">
+                    {bookings.map((booking, index) => {
+                      const attendanceStatus = booking.attendance_status
+                      const isUpdating = updating === booking.id
+                      const isDragged = draggedItem === booking.id
+                      const isDragOver = dragOverIndex === index
+
+                      return (
+                        <div
+                          key={booking.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, booking.id)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                          onTouchStart={(e) => handleTouchStart(e, booking.id)}
+                          onTouchMove={(e) => handleTouchMove(e, booking.id)}
+                          onTouchEnd={() => handleTouchEnd(booking.id)}
+                          style={{ transform: `translateX(${swipeOffset[booking.id] || 0}px)` }}
+                          className={cn(
+                            "flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all cursor-move",
+                            isDragged && "opacity-50",
+                            isDragOver && "border-blue-400 bg-blue-50",
+                            !isDragged && !isDragOver && "hover:bg-gray-50"
+                          )}
+                        >
+                          <GripVertical className="w-5 h-5 text-gray-400 flex-shrink-0" />
+
+                          <div className="flex-1 min-w-0">
+                            <Link
+                              href={`/profile/${booking.profiles.id}`}
+                              className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {booking.profiles.full_name || 'No name'}
+                            </Link>
+                            <span className="hidden sm:inline text-xs text-muted-foreground">
+                              {formatDateTime(booking.booked_at)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <Switch
+                              checked={attendanceStatus === 'attended'}
+                              disabled={isUpdating}
+                              onCheckedChange={(checked) => updateAttendance(booking.id, checked ? 'attended' : null)}
+                              aria-label="Mark attended"
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <div
+                  className={cn("mt-6 rounded-lg", isDraggingOverWaitlist && "bg-blue-50 border border-blue-200")}
+                  onDragOver={handleWaitlistDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={() => handleDropToStatus('waitlist')}
+                >
+                  <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+                    Waitlist ({waitlistBookings.length})
+                  </h3>
+                  {waitlistBookings.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-6 text-sm">No waitlisted attendees</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {waitlistBookings.map((booking) => {
+                        const isUpdating = updating === booking.id
+                        return (
+                          <div
+                            key={booking.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, booking.id)}
+                            className="flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all hover:bg-gray-50"
+                          >
+                            <span className="text-xs font-semibold text-muted-foreground w-6 text-center">
+                              {booking.waitlist_position ?? '-'}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <Link
+                                href={`/profile/${booking.profiles.id}`}
+                                className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
+                              >
+                                {booking.profiles.full_name || 'No name'}
+                              </Link>
+                            </div>
+                            {isUpdating && (
+                              <span className="text-xs text-muted-foreground">Updating...</span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {(() => {
+                  const canMarkAudience = isAudienceAttendanceWindowOpen()
+                  const filtered = audienceBookings
+                    .filter((booking) => {
+                      if (audienceFilter === 'checked_in') return booking.attendance_status === 'attended'
+                      if (audienceFilter === 'not_arrived') return booking.attendance_status !== 'attended'
+                      return true
+                    })
+                    .filter((booking) =>
+                      (booking.profiles.full_name || '')
+                        .toLowerCase()
+                        .includes(audienceSearch.trim().toLowerCase())
+                    )
+                  const checkedInCount = audienceBookings.filter((booking) => booking.attendance_status === 'attended').length
+
+                  return (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant={audienceFilter === 'all' ? 'default' : 'outline'} onClick={() => setAudienceFilter('all')}>
+                          All
+                        </Button>
+                        <Button size="sm" variant={audienceFilter === 'checked_in' ? 'default' : 'outline'} onClick={() => setAudienceFilter('checked_in')}>
+                          Checked In
+                        </Button>
+                        <Button size="sm" variant={audienceFilter === 'not_arrived' ? 'default' : 'outline'} onClick={() => setAudienceFilter('not_arrived')}>
+                          Not Yet Arrived
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <input
+                          type="text"
+                          value={audienceSearch}
+                          onChange={(e) => setAudienceSearch(e.target.value)}
+                          placeholder="Search audience by name"
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={audienceCheckinCodeInput}
+                            onChange={(e) => setAudienceCheckinCodeInput(e.target.value)}
+                            placeholder="Check-in code (AUD-XXXXXX)"
+                            className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() => {
+                              setScannerMode('audience')
+                              startScanner()
+                            }}
+                          >
+                            Scan
+                          </Button>
+                          <Button size="sm" onClick={markAudienceByCode}>
+                            Mark
+                          </Button>
+                        </div>
+                      </div>
+                      {scannerActive && scannerMode === 'audience' && (
+                        <div className="rounded-lg border p-2 bg-black/5">
+                          {scannerEngine === 'native' && (
+                            <video
+                              ref={scannerVideoRef}
+                              className="w-full rounded-md max-h-64 min-h-40 object-cover bg-black"
+                              playsInline
+                              muted
+                              autoPlay
+                            />
+                          )}
+                          {scannerEngine === 'html5' && (
+                            <div id={html5ScannerElementId} className="w-full" />
+                          )}
+                        </div>
+                      )}
+                      {scannerActive && scannerMode === 'audience' && (
+                        <div className="flex items-center gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={stopScanner}>
+                            Stop scanner
+                          </Button>
+                          {scannerMessage && <span className="text-xs text-muted-foreground">{scannerMessage}</span>}
+                        </div>
+                      )}
+
+                      <div className="text-sm text-muted-foreground">
+                        {checkedInCount} of {audienceBookings.length} checked in
+                        {!canMarkAudience && (
+                          <span className="ml-2 text-red-600">
+                            Attendance marking is closed right now.
+                          </span>
+                        )}
+                      </div>
+
+                      {filtered.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-8">No audience members match this filter.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {filtered.map((booking) => {
+                            const isUpdating = updating === booking.id
+                            return (
+                              <div key={booking.id} className="flex items-center gap-3 p-3 rounded-lg border">
+                                <div className="flex-1 min-w-0">
+                                  <Link
+                                    href={`/profile/${booking.profiles.id}`}
+                                    className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
+                                  >
+                                    {booking.profiles.full_name || 'No name'}
+                                  </Link>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {booking.audience_checkin_code || 'No check-in code'}
+                                  </p>
+                                </div>
+                                <Switch
+                                  checked={booking.attendance_status === 'attended'}
+                                  disabled={isUpdating || !canMarkAudience}
+                                  onCheckedChange={(checked) => updateAttendance(booking.id, checked ? 'attended' : null)}
+                                  aria-label="Mark audience attended"
+                                />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Issue Refunds</CardTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowRefundTools(!showRefundTools)}
+                aria-label={showRefundTools ? 'Hide refund tools' : 'Show refund tools'}
+              >
+                <ChevronDown className={cn('h-4 w-4 transition-transform', showRefundTools && 'rotate-180')} />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Select attendees and issue full or specific refunds (capped by refundable balance).
+            </p>
+            {showRefundTools && (
+              <>
+                {(() => {
+                  const refundCandidates = [...bookings, ...audienceBookings]
+                  const allSelected = refundCandidates.length > 0 && selectedRefundBookingIds.size === refundCandidates.length
+                  return (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant={refundMode === 'full' ? 'default' : 'outline'}
+                          onClick={() => setRefundMode('full')}
+                        >
+                          Refund full
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={refundMode === 'specific' ? 'default' : 'outline'}
+                          onClick={() => setRefundMode('specific')}
+                        >
+                          Refund specific
+                        </Button>
+                        {refundMode === 'specific' && (
+                          <input
+                            type="number"
+                            min="1"
+                            value={refundAmount}
+                            onChange={(e) => setRefundAmount(e.target.value)}
+                            className="w-28 px-3 py-1.5 border border-gray-300 rounded-md text-sm"
+                            placeholder="Credits"
+                          />
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedRefundBookingIds(new Set(refundCandidates.map((b) => b.id)))
+                              } else {
+                                setSelectedRefundBookingIds(new Set())
+                              }
+                            }}
+                          />
+                          Select all
+                        </label>
+                        <span className="text-xs text-muted-foreground">
+                          {selectedRefundBookingIds.size} selected
+                        </span>
+                      </div>
+
+                      <div className="max-h-64 overflow-auto space-y-2 pr-1">
+                        {refundCandidates.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No attendees available.</p>
+                        ) : (
+                          refundCandidates.map((booking) => (
+                            <label key={booking.id} className="flex items-center justify-between gap-2 p-2 border rounded-md">
+                              <span className="flex items-center gap-2 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedRefundBookingIds.has(booking.id)}
+                                  onChange={(e) => {
+                                    const next = new Set(selectedRefundBookingIds)
+                                    if (e.target.checked) {
+                                      next.add(booking.id)
+                                    } else {
+                                      next.delete(booking.id)
+                                    }
+                                    setSelectedRefundBookingIds(next)
+                                  }}
+                                />
+                                <span className="text-sm truncate">{booking.profiles.full_name || booking.profiles.email || 'Attendee'}</span>
+                              </span>
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                Paid: {Number(booking.credits_used || 0)} cr
+                              </span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <Button onClick={submitBatchRefunds} disabled={refundLoading || selectedRefundBookingIds.size === 0}>
+                          {refundLoading ? 'Processing...' : 'Issue refunds'}
+                        </Button>
+                        {refundMessage && <span className="text-sm text-green-700">{refundMessage}</span>}
+                        {refundError && <span className="text-sm text-red-600">{refundError}</span>}
+                      </div>
+                    </>
+                  )
+                })()}
+              </>
+            )}
           </CardContent>
         </Card>
 
         {event.food_coupon_enabled && (
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle className="text-lg">Redeem Coupon</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Redeem Coupon</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    if (showRedeemTools && scannerActive) {
+                      stopScanner()
+                    }
+                    setShowRedeemTools(!showRedeemTools)
+                  }}
+                  aria-label={showRedeemTools ? 'Hide redeem tools' : 'Show redeem tools'}
+                >
+                  <ChevronDown className={cn('h-4 w-4 transition-transform', showRedeemTools && 'rotate-180')} />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Coupon code</label>
-                <input
-                  type="text"
-                  value={redeemCode}
-                  onChange={(e) => setRedeemCode(e.target.value)}
-                  placeholder="LB-XXXXXXXX"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                {!scannerActive ? (
-                  <Button type="button" variant="outline" size="sm" onClick={startScanner}>
-                    Scan QR with camera
-                  </Button>
-                ) : (
-                  <Button type="button" variant="outline" size="sm" onClick={stopScanner}>
-                    Stop scanner
-                  </Button>
-                )}
-                {!scannerSupported && (
-                  <span className="text-xs text-muted-foreground">QR scanning unavailable on this browser</span>
-                )}
-              </div>
-              {scannerActive && (
-                <div className="rounded-lg border p-2 bg-black/5">
-                  {scannerEngine === 'native' && (
-                    <video
-                      ref={scannerVideoRef}
-                      className="w-full rounded-md max-h-64 min-h-40 object-cover bg-black"
-                      playsInline
-                      muted
-                      autoPlay
-                    />
-                  )}
-                  {scannerEngine === 'html5' && (
-                    <div id={html5ScannerElementId} className="w-full" />
-                  )}
-                </div>
-              )}
-              {scannerMessage && <p className="text-xs text-muted-foreground">{scannerMessage}</p>}
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Order total (CAD, optional)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={redeemOrderTotal}
-                  onChange={(e) => setRedeemOrderTotal(e.target.value)}
-                  placeholder="e.g. 24.50"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Notes (optional)</label>
-                <input
-                  type="text"
-                  value={redeemNotes}
-                  onChange={(e) => setRedeemNotes(e.target.value)}
-                  placeholder="Optional note for redemption log"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <Button onClick={redeemCoupon} disabled={redeemLoading}>
-                  {redeemLoading ? 'Redeeming...' : 'Redeem coupon'}
-                </Button>
-                {redeemMessage && <span className="text-sm text-green-700">{redeemMessage}</span>}
-                {redeemError && <span className="text-sm text-red-600">{redeemError}</span>}
-              </div>
-
-              <div className="pt-2 border-t">
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Recent redemptions</p>
-                {recentRedemptions.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No coupons redeemed yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {recentRedemptions.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-3 p-2 border rounded-lg">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{item.attendeeLabel}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {item.code} • {formatDateTime(item.redeemedAt)}
-                          </p>
-                        </div>
-                        <span className="text-sm font-medium">${(item.valueCents / 100).toFixed(2)}</span>
-                      </div>
-                    ))}
+              <p className="text-xs text-muted-foreground">
+                {recentRedemptions.length} recent redemption{recentRedemptions.length === 1 ? '' : 's'}
+              </p>
+              {showRedeemTools && (
+                <>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Coupon code</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={redeemCode}
+                        onChange={(e) => {
+                          setRedeemCode(e.target.value)
+                          setRedeemPreview(null)
+                        }}
+                        placeholder="LB-XXXXXXXX"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <Button type="button" variant="outline" onClick={() => lookupVoucher()} disabled={!redeemCode.trim()}>
+                        Lookup
+                      </Button>
+                    </div>
                   </div>
-                )}
-              </div>
+                  {redeemPreview && (
+                    <div className="rounded-md border p-3 text-sm bg-muted/30">
+                      <p className="font-medium">{redeemPreview.attendeeName}</p>
+                      <p className="text-xs text-muted-foreground">{redeemPreview.code}</p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <Badge variant="outline">${(redeemPreview.valueCents / 100).toFixed(2)}</Badge>
+                        <Badge variant={redeemPreview.canRedeem ? 'secondary' : 'destructive'}>
+                          {redeemPreview.canRedeem ? 'Ready to redeem' : redeemPreview.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    {!scannerActive ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setScannerMode('coupon')
+                          startScanner()
+                        }}
+                      >
+                        Scan QR with camera
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="outline" size="sm" onClick={stopScanner}>
+                        Stop scanner
+                      </Button>
+                    )}
+                    {!scannerSupported && (
+                      <span className="text-xs text-muted-foreground">QR scanning unavailable on this browser</span>
+                    )}
+                  </div>
+                  {scannerActive && (
+                    <div className="rounded-lg border p-2 bg-black/5">
+                      {scannerEngine === 'native' && (
+                        <video
+                          ref={scannerVideoRef}
+                          className="w-full rounded-md max-h-64 min-h-40 object-cover bg-black"
+                          playsInline
+                          muted
+                          autoPlay
+                        />
+                      )}
+                      {scannerEngine === 'html5' && (
+                        <div id={html5ScannerElementId} className="w-full" />
+                      )}
+                    </div>
+                  )}
+                  {scannerMessage && <p className="text-xs text-muted-foreground">{scannerMessage}</p>}
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Coupon amount (auto-filled)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={redeemOrderTotal}
+                      onChange={(e) => setRedeemOrderTotal(e.target.value)}
+                      placeholder="e.g. 24.50"
+                      disabled
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Notes (optional)</label>
+                    <input
+                      type="text"
+                      value={redeemNotes}
+                      onChange={(e) => setRedeemNotes(e.target.value)}
+                      placeholder="Optional note for redemption log"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button onClick={redeemCoupon} disabled={redeemLoading}>
+                      {redeemLoading ? 'Redeeming...' : 'Redeem coupon'}
+                    </Button>
+                    {redeemMessage && <span className="text-sm text-green-700">{redeemMessage}</span>}
+                    {redeemError && <span className="text-sm text-red-600">{redeemError}</span>}
+                  </div>
+
+                  <div className="pt-2 border-t">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2">Recent redemptions</p>
+                    {recentRedemptions.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No coupons redeemed yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {recentRedemptions.map((item) => (
+                          <div key={item.id} className="flex items-center justify-between gap-3 p-2 border rounded-lg">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{item.attendeeLabel}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {item.code} • {formatDateTime(item.redeemedAt)}
+                              </p>
+                            </div>
+                            <span className="text-sm font-medium">${(item.valueCents / 100).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         )}
