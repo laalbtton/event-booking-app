@@ -1,6 +1,37 @@
+ 'use client'
+
+import { useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 
 export default function Home() {
+  const router = useRouter()
+  const { authResolved, user } = useAuthBootstrap()
+
+  useEffect(() => {
+    if (!authResolved) return
+    if (user) {
+      router.replace('/dashboard')
+    }
+  }, [authResolved, user, router])
+
+  if (!authResolved) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700 px-4">
+        <p className="text-white text-lg">Loading...</p>
+      </div>
+    )
+  }
+
+  if (user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700 px-4">
+        <p className="text-white text-lg">Redirecting...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700 px-4">
       <div className="text-center text-white max-w-2xl">

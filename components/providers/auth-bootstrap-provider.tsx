@@ -13,6 +13,7 @@ type AuthBootstrapContextValue = {
 const AuthBootstrapContext = createContext<AuthBootstrapContextValue | null>(null)
 
 export function AuthBootstrapProvider({ children }: { children: React.ReactNode }) {
+  const authDebugEnabled = process.env.NEXT_PUBLIC_AUTH_DEBUG_PANEL === 'true'
   const [authResolved, setAuthResolved] = useState(false)
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -49,6 +50,7 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
     }
 
     const pushDebug = (label: string, payload: unknown) => {
+      if (!authDebugEnabled) return
       const rendered = `${label}: ${JSON.stringify(payload)}`
       console.info(`[auth-bootstrap] ${label}`, payload)
       setDebugLines((prev) => [...prev.slice(-11), rendered])
@@ -101,7 +103,7 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
       window.clearTimeout(fallbackTimer)
       subscription.unsubscribe()
     }
-  }, [])
+  }, [authDebugEnabled])
 
   const value = useMemo(
     () => ({ authResolved, session, user }),
@@ -111,50 +113,52 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
   return (
     <AuthBootstrapContext.Provider value={value}>
       {children}
-      <div className="fixed bottom-24 right-3 z-[9999] max-w-[90vw]">
-        {!debugOpen ? (
-          <button
-            type="button"
-            onClick={() => setDebugOpen(true)}
-            className="rounded-md bg-black/80 px-3 py-1.5 text-xs text-white"
-          >
-            Auth debug
-          </button>
-        ) : (
-          <div className="w-[360px] max-w-[90vw] rounded-md border bg-black/90 p-2 text-[11px] text-white shadow-lg">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="font-semibold">Auth Bootstrap Debug</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDebugLines([])}
-                  className="rounded bg-white/20 px-2 py-0.5"
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDebugOpen(false)}
-                  className="rounded bg-white/20 px-2 py-0.5"
-                >
-                  Hide
-                </button>
+      {authDebugEnabled && (
+        <div className="fixed bottom-24 right-3 z-[9999] max-w-[90vw]">
+          {!debugOpen ? (
+            <button
+              type="button"
+              onClick={() => setDebugOpen(true)}
+              className="rounded-md bg-black/80 px-3 py-1.5 text-xs text-white"
+            >
+              Auth debug
+            </button>
+          ) : (
+            <div className="w-[360px] max-w-[90vw] rounded-md border bg-black/90 p-2 text-[11px] text-white shadow-lg">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-semibold">Auth Bootstrap Debug</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDebugLines([])}
+                    className="rounded bg-white/20 px-2 py-0.5"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDebugOpen(false)}
+                    className="rounded bg-white/20 px-2 py-0.5"
+                  >
+                    Hide
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-56 space-y-1 overflow-auto pr-1">
+                {debugLines.length === 0 ? (
+                  <div className="text-white/70">No events logged yet.</div>
+                ) : (
+                  debugLines.map((line, index) => (
+                    <pre key={`${index}-${line.slice(0, 24)}`} className="whitespace-pre-wrap break-words text-[10px]">
+                      {line}
+                    </pre>
+                  ))
+                )}
               </div>
             </div>
-            <div className="max-h-56 space-y-1 overflow-auto pr-1">
-              {debugLines.length === 0 ? (
-                <div className="text-white/70">No events logged yet.</div>
-              ) : (
-                debugLines.map((line, index) => (
-                  <pre key={`${index}-${line.slice(0, 24)}`} className="whitespace-pre-wrap break-words text-[10px]">
-                    {line}
-                  </pre>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </AuthBootstrapContext.Provider>
   )
 }
