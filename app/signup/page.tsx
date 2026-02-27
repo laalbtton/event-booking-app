@@ -127,7 +127,9 @@ export default function SignupPage() {
       <Card className="max-w-md w-full shadow-lg">
         <CardHeader className="space-y-2 pb-6">
           <CardTitle className="text-3xl font-bold text-center tracking-tight">Sign Up</CardTitle>
-          <CardDescription className="text-center text-base">Create your account</CardDescription>
+          <CardDescription className="text-center text-base">
+            Join to perform on stage or attend live performance events
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {error && (

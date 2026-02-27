@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { isStandaloneMode } from '@/lib/installPromptClient'
 
 export default function RoleOnboardingPage() {
   const router = useRouter()
@@ -78,7 +79,11 @@ export default function RoleOnboardingPage() {
       })
 
       window.localStorage.removeItem('pending_role_onboarding')
-      router.replace('/dashboard')
+      if (isStandaloneMode()) {
+        router.replace('/dashboard')
+      } else {
+        router.replace('/onboarding/install')
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to save your role')
     } finally {

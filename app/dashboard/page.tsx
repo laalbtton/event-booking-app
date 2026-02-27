@@ -17,11 +17,21 @@ import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { cn } from '@/lib/utils'
 import { QRCodeSVG } from 'qrcode.react'
-import { Copy, ChevronDown } from 'lucide-react'
+import { Copy, ChevronDown, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { PushPermissionPrePrompt } from '@/components/notifications/push-permission-preprompt'
 import { getPushClientState, subscribeCurrentUserToPush } from '@/lib/pushClient'
+import {
+  getInstallBannerDismissedKey,
+  getInstallPlatform,
+  hasDeferredInstallPrompt,
+  initInstallPromptCapture,
+  isStandaloneMode,
+  subscribeToInstallPromptChanges,
+  triggerDeferredInstallPrompt,
+  type InstallPlatform,
+} from '@/lib/installPromptClient'
 
 type MyCoupon = {
   id: string
@@ -70,6 +80,11 @@ export default function Dashboard() {
   const [pushPrefs, setPushPrefs] = useState<PushNotificationPrefs | null>(null)
   const [showPushPrePrompt, setShowPushPrePrompt] = useState(false)
   const [pushActionLoading, setPushActionLoading] = useState(false)
+  const [showInstallBanner, setShowInstallBanner] = useState(false)
+  const [installPlatform, setInstallPlatform] = useState<InstallPlatform>('other')
+  const [installPromptAvailable, setInstallPromptAvailable] = useState(false)
+  const [showInstallHelp, setShowInstallHelp] = useState(false)
+  const [installActionLoading, setInstallActionLoading] = useState(false)
   const router = useRouter()
   const PREPROMPT_SNOOZE_DAYS = 7
 
@@ -398,6 +413,26 @@ export default function Dashboard() {
       setEventTab('attend')
     }
   }, [userRole])
+
+  useEffect(() => {
+    if (!authResolved || !user) return
+
+    initInstallPromptCapture()
+    setInstallPlatform(getInstallPlatform())
+    setInstallPromptAvailable(hasDeferredInstallPrompt())
+
+    const standalone = isStandaloneMode()
+    const dismissed = window.localStorage.getItem(getInstallBannerDismissedKey(user.id)) === '1'
+    setShowInstallBanner(!standalone && !dismissed)
+
+    const unsubscribe = subscribeToInstallPromptChanges(() => {
+      setInstallPromptAvailable(hasDeferredInstallPrompt())
+    })
+
+    return () => {
+      unsubscribe()
+    }
+  }, [authResolved, user])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1019,6 +1054,29 @@ export default function Dashboard() {
     router.push('/')
   }
 
+  function dismissInstallBanner() {
+    if (!user) return
+    window.localStorage.setItem(getInstallBannerDismissedKey(user.id), '1')
+    setShowInstallBanner(false)
+  }
+
+  async function handleInstallFromBanner() {
+    if (installPlatform === 'android' && installPromptAvailable) {
+      setInstallActionLoading(true)
+      try {
+        const result = await triggerDeferredInstallPrompt()
+        if (result.outcome === 'accepted') {
+          setShowInstallBanner(false)
+          return
+        }
+      } finally {
+        setInstallActionLoading(false)
+      }
+    } else {
+      setShowInstallHelp((prev) => !prev)
+    }
+  }
+
   if (!authResolved || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -1089,6 +1147,43 @@ export default function Dashboard() {
               </Card>
             )}
           </div>
+        )}
+
+        {showInstallBanner && (
+          <Card className="mb-6 border-blue-200 bg-blue-50/50 shadow-sm">
+            <CardContent className="p-4 sm:p-5 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base sm:text-lg font-semibold text-blue-900">Install app for quicker access</CardTitle>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Add Laal Button to your home screen so it opens like a native app.
+                  </p>
+                </div>
+                <Download className="h-5 w-5 text-blue-700 shrink-0 mt-0.5" />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleInstallFromBanner} disabled={installActionLoading}>
+                  {installActionLoading ? 'Opening...' : 'Install App'}
+                </Button>
+                <Button variant="outline" onClick={dismissInstallBanner}>
+                  Not now
+                </Button>
+              </div>
+              {showInstallHelp && (
+                <div className="rounded-md border border-blue-200 bg-white p-3 text-sm text-blue-900">
+                  {installPlatform === 'ios' ? (
+                    <p>
+                      On iPhone: open Safari Share menu, tap <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.
+                    </p>
+                  ) : (
+                    <p>
+                      Use your browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {/* Credits Card */}

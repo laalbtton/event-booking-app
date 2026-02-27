@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { createNotification } from '@/lib/notifications'
 import { getRegistrationOpeningEmail, sendEmail } from '@/lib/email'
 import { formatDateTime } from '@/lib/dateUtils'
+import { sendPushToUser } from '@/lib/server/push'
 
 export async function GET(request: NextRequest) {
   try {
@@ -98,6 +99,17 @@ export async function GET(request: NextRequest) {
 
           if (!emailSent) {
             console.error(`Failed to send email to ${profile.email} for event ${event.id}`)
+          }
+
+          try {
+            await sendPushToUser(supabase as any, alert.user_id, {
+              title: 'Registration Now Open',
+              body: `Registration for "${event.title}" is now open.`,
+              data: { url: `/events/${event.id}` },
+            })
+          } catch (pushError) {
+            // Push should not block in-app/email delivery.
+            console.warn(`Push send failed for user ${alert.user_id}:`, pushError)
           }
 
           // Mark alert as notified

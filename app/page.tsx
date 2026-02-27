@@ -35,8 +35,8 @@ export default function Home() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700 px-4">
       <div className="text-center text-white max-w-2xl">
-        <h1 className="text-5xl md:text-6xl font-bold mb-4 drop-shadow-lg">Event Booking App</h1>
-        <p className="text-xl md:text-2xl mb-8 drop-shadow">Book events with credits</p>
+        <h1 className="text-5xl md:text-6xl font-bold mb-4 drop-shadow-lg">Laal Button</h1>
+        <p className="text-xl md:text-2xl mb-8 drop-shadow">Perform or attend live comedy and performance arts events</p>
         
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link 

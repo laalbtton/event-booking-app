@@ -163,7 +163,7 @@ export default function LoginPage() {
       <Card className="max-w-md w-full shadow-lg">
         <CardHeader className="space-y-2 pb-6">
           <CardTitle className="text-3xl font-bold text-center tracking-tight">Login</CardTitle>
-          <CardDescription className="text-center text-base">Sign in to your account</CardDescription>
+          <CardDescription className="text-center text-base">Sign in to manage your performances and event bookings</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {error && (

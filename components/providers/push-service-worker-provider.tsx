@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect } from 'react'
+import { initInstallPromptCapture } from '@/lib/installPromptClient'
 
 export function PushServiceWorkerProvider() {
   useEffect(() => {
     if (typeof window === 'undefined') return
+    initInstallPromptCapture()
     if (!('serviceWorker' in navigator)) return
     if (!window.isSecureContext) return
 

@@ -17,12 +17,21 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { LogOut } from 'lucide-react'
+import { Download, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { getPushClientState, subscribeCurrentUserToPush, unsubscribeCurrentUserFromPush } from '@/lib/pushClient'
 import { toast } from 'sonner'
+import {
+  getInstallPlatform,
+  hasDeferredInstallPrompt,
+  initInstallPromptCapture,
+  isStandaloneMode,
+  subscribeToInstallPromptChanges,
+  triggerDeferredInstallPrompt,
+  type InstallPlatform,
+} from '@/lib/installPromptClient'
 
 type EventBooking = {
   id: string
@@ -52,11 +61,14 @@ type InviteItem = {
 
 type PushNotificationPrefs = {
   user_id: string
+  preprompt_dismissed_at: string | null
+  preprompt_dismissed_until: string | null
   native_permission_denied_at: string | null
   subscribed_at: string | null
 }
 
 export default function ProfilePage() {
+  const PUSH_REMINDER_SNOOZE_DAYS = 7
   const { authResolved, user } = useAuthBootstrap()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [eventBookings, setEventBookings] = useState<EventBooking[]>([])
@@ -80,6 +92,11 @@ export default function ProfilePage() {
   const [pushSupported, setPushSupported] = useState(false)
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported')
   const [pushActionLoading, setPushActionLoading] = useState(false)
+  const [installPlatform, setInstallPlatform] = useState<InstallPlatform>('other')
+  const [installPromptAvailable, setInstallPromptAvailable] = useState(false)
+  const [showInstallHelp, setShowInstallHelp] = useState(false)
+  const [installActionLoading, setInstallActionLoading] = useState(false)
+  const [isStandalone, setIsStandalone] = useState(false)
   const touchStartX = useRef<Record<string, number>>({})
   const touchStartY = useRef<Record<string, number>>({})
   const router = useRouter()
@@ -112,6 +129,22 @@ export default function ProfilePage() {
     const state = getPushClientState()
     setPushSupported(state.supported)
     setPushPermission(state.permission)
+  }, [])
+
+  useEffect(() => {
+    initInstallPromptCapture()
+    setInstallPlatform(getInstallPlatform())
+    setInstallPromptAvailable(hasDeferredInstallPrompt())
+    setIsStandalone(isStandaloneMode())
+
+    const unsubscribe = subscribeToInstallPromptChanges(() => {
+      setInstallPromptAvailable(hasDeferredInstallPrompt())
+      setIsStandalone(isStandaloneMode())
+    })
+
+    return () => {
+      unsubscribe()
+    }
   }, [])
 
   // Generate initials from name
@@ -238,7 +271,7 @@ export default function ProfilePage() {
 
       const { data: pushPrefsData } = await supabase
         .from('push_notification_prefs')
-        .select('user_id, native_permission_denied_at, subscribed_at')
+        .select('user_id, preprompt_dismissed_at, preprompt_dismissed_until, native_permission_denied_at, subscribed_at')
         .eq('user_id', userId)
         .maybeSingle()
 
@@ -442,6 +475,8 @@ export default function ProfilePage() {
         )
         setPushPrefs((prev) => ({
           user_id: profile.id,
+          preprompt_dismissed_at: prev?.preprompt_dismissed_at || null,
+          preprompt_dismissed_until: prev?.preprompt_dismissed_until || null,
           native_permission_denied_at: nowIso,
           subscribed_at: prev?.subscribed_at || null,
         }))
@@ -454,6 +489,8 @@ export default function ProfilePage() {
           {
             user_id: profile.id,
             subscribed_at: nowIso,
+            preprompt_dismissed_at: null,
+            preprompt_dismissed_until: null,
             native_permission_denied_at: null,
             updated_at: nowIso,
           },
@@ -461,6 +498,8 @@ export default function ProfilePage() {
         )
         setPushPrefs({
           user_id: profile.id,
+          preprompt_dismissed_at: null,
+          preprompt_dismissed_until: null,
           native_permission_denied_at: null,
           subscribed_at: nowIso,
         })
@@ -494,6 +533,8 @@ export default function ProfilePage() {
 
       setPushPrefs((prev) => ({
         user_id: profile.id,
+        preprompt_dismissed_at: prev?.preprompt_dismissed_at || null,
+        preprompt_dismissed_until: prev?.preprompt_dismissed_until || null,
         native_permission_denied_at: prev?.native_permission_denied_at || null,
         subscribed_at: null,
       }))
@@ -503,6 +544,56 @@ export default function ProfilePage() {
     } finally {
       setPushActionLoading(false)
     }
+  }
+
+  async function handleDismissPushReminder() {
+    if (!profile) return
+    const now = new Date()
+    const snoozeUntil = new Date(now.getTime() + PUSH_REMINDER_SNOOZE_DAYS * 24 * 60 * 60 * 1000)
+    const nowIso = now.toISOString()
+    const snoozeIso = snoozeUntil.toISOString()
+
+    try {
+      await supabase.from('push_notification_prefs').upsert(
+        {
+          user_id: profile.id,
+          preprompt_dismissed_at: nowIso,
+          preprompt_dismissed_until: snoozeIso,
+          updated_at: nowIso,
+        },
+        { onConflict: 'user_id' }
+      )
+
+      setPushPrefs((prev) => ({
+        user_id: profile.id,
+        preprompt_dismissed_at: nowIso,
+        preprompt_dismissed_until: snoozeIso,
+        native_permission_denied_at: prev?.native_permission_denied_at || null,
+        subscribed_at: prev?.subscribed_at || null,
+      }))
+      toast.success(`Reminder hidden for ${PUSH_REMINDER_SNOOZE_DAYS} days`)
+    } catch (error) {
+      console.warn('Failed to dismiss push reminder:', error)
+    }
+  }
+
+  async function handleInstallFromProfile() {
+    if (installPlatform === 'android' && installPromptAvailable) {
+      setInstallActionLoading(true)
+      try {
+        const result = await triggerDeferredInstallPrompt()
+        if (result.outcome === 'accepted') {
+          setIsStandalone(true)
+          toast.success('App installed successfully')
+          return
+        }
+      } finally {
+        setInstallActionLoading(false)
+      }
+      return
+    }
+
+    setShowInstallHelp((prev) => !prev)
   }
 
   function handleTouchStart(e: React.TouchEvent, rowId: string) {
@@ -598,6 +689,16 @@ export default function ProfilePage() {
       </div>
     )
   }
+
+  const pushEnabled = !!pushPrefs?.subscribed_at || pushPermission === 'granted'
+  const pushReminderSnoozed =
+    !!pushPrefs?.preprompt_dismissed_until &&
+    new Date(pushPrefs.preprompt_dismissed_until).getTime() > Date.now()
+  const shouldShowPushReminder =
+    pushSupported &&
+    !pushEnabled &&
+    pushPermission !== 'denied' &&
+    !pushReminderSnoozed
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -843,6 +944,27 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
+        {shouldShowPushReminder && (
+          <Card className="shadow-sm mb-6 border-blue-200">
+            <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Turn on push notifications</p>
+                <p className="text-xs text-muted-foreground">
+                  Get reminders, waitlist promotions, and booking updates instantly.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleEnablePushNotifications} disabled={pushActionLoading}>
+                  Enable
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleDismissPushReminder} disabled={pushActionLoading}>
+                  Not now
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="shadow-sm mb-6">
           <CardHeader>
             <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">Push Notifications</CardTitle>
@@ -883,6 +1005,32 @@ export default function ProfilePage() {
             )}
           </CardContent>
         </Card>
+
+        {!isStandalone && (
+          <Card className="shadow-sm mb-6 border-blue-200">
+            <CardHeader>
+              <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+                <Download className="h-5 w-5 text-blue-600" />
+                Add to Home Screen
+              </CardTitle>
+              <CardDescription>
+                Install Laal Button so you can launch it like an app from your home screen.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button onClick={handleInstallFromProfile} disabled={installActionLoading}>
+                {installActionLoading ? 'Opening...' : 'Install App'}
+              </Button>
+              {showInstallHelp && (
+                <p className="text-xs text-muted-foreground">
+                  {installPlatform === 'ios'
+                    ? 'Open Safari Share menu, choose Add to Home Screen, then tap Add.'
+                    : 'Open your browser menu and choose Install app or Add to Home screen.'}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Event Bookings */}
         {(eventBookings.length > 0 || invites.length > 0) ? (
