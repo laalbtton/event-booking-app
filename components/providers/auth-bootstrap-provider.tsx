@@ -20,6 +20,33 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     let mounted = true
     let resolved = false
+    let firstAuthEventLogged = false
+
+    const summarizeSession = (currentSession: Session | null) => ({
+      hasSession: !!currentSession,
+      userId: currentSession?.user?.id || null,
+      expiresAt: currentSession?.expires_at || null,
+    })
+
+    const getSupabaseStorageSnapshot = () => {
+      if (typeof window === 'undefined') return []
+      const allKeys = Object.keys(window.localStorage)
+      const keys = Object.keys(window.localStorage).filter((key) => key.startsWith('sb-'))
+      const supabaseKeys = keys.map((key) => {
+        const raw = window.localStorage.getItem(key) || ''
+        return {
+          key,
+          valueLength: raw.length,
+          hasAccessTokenText: raw.includes('access_token'),
+        }
+      })
+      return {
+        allLocalStorageKeys: allKeys,
+        supabaseKeys,
+      }
+    }
+
+    console.info('[auth-bootstrap] cold-start localStorage snapshot', getSupabaseStorageSnapshot())
 
     const resolveOnce = () => {
       if (resolved || !mounted) return
@@ -27,8 +54,15 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
       setAuthResolved(true)
     }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mounted) return
+      if (!firstAuthEventLogged) {
+        firstAuthEventLogged = true
+        console.info('[auth-bootstrap] first onAuthStateChange event', {
+          event,
+          ...summarizeSession(nextSession ?? null),
+        })
+      }
       setSession(nextSession ?? null)
       setUser(nextSession?.user ?? null)
       resolveOnce()
@@ -36,6 +70,10 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
 
     void supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return
+      console.info('[auth-bootstrap] getSession() initial result', {
+        beforeFirstAuthEvent: !firstAuthEventLogged,
+        ...summarizeSession(data.session ?? null),
+      })
       setSession(data.session ?? null)
       setUser(data.session?.user ?? null)
     })
@@ -44,6 +82,7 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
       if (!mounted || resolved) return
       const { data } = await supabase.auth.getSession()
       if (!mounted) return
+      console.info('[auth-bootstrap] fallback getSession() result', summarizeSession(data.session ?? null))
       setSession(data.session ?? null)
       setUser(data.session?.user ?? null)
       resolveOnce()
