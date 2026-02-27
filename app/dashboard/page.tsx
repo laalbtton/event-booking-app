@@ -20,6 +20,8 @@ import { QRCodeSVG } from 'qrcode.react'
 import { Copy, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
+import { PushPermissionPrePrompt } from '@/components/notifications/push-permission-preprompt'
+import { getPushClientState, subscribeCurrentUserToPush } from '@/lib/pushClient'
 
 type MyCoupon = {
   id: string
@@ -29,6 +31,16 @@ type MyCoupon = {
   valueCents: number
   status: 'issued' | 'redeemed' | 'cancelled' | 'expired'
   expiresAt: string | null
+}
+
+type PushNotificationPrefs = {
+  user_id: string
+  preprompt_dismissed_at: string | null
+  preprompt_dismissed_until: string | null
+  native_permission_denied_at: string | null
+  last_prompted_at: string | null
+  subscribed_at: string | null
+  updated_at: string
 }
 
 export default function Dashboard() {
@@ -55,7 +67,11 @@ export default function Dashboard() {
   const [alertSet, setAlertSet] = useState<Set<string>>(new Set())
   const [expandedPosterActions, setExpandedPosterActions] = useState<Set<string>>(new Set())
   const [showRedeemedCoupons, setShowRedeemedCoupons] = useState(false)
+  const [pushPrefs, setPushPrefs] = useState<PushNotificationPrefs | null>(null)
+  const [showPushPrePrompt, setShowPushPrePrompt] = useState(false)
+  const [pushActionLoading, setPushActionLoading] = useState(false)
   const router = useRouter()
+  const PREPROMPT_SNOOZE_DAYS = 7
 
   function formatLocationValue(value: unknown): string {
     if (!value) return 'TBD'
@@ -232,6 +248,135 @@ export default function Dashboard() {
     )
   }
 
+  async function loadPushPrefs(userId: string) {
+    const { data, error } = await supabase
+      .from('push_notification_prefs')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (error) {
+      console.warn('Failed to load push preferences:', error.message)
+      return
+    }
+    setPushPrefs((data || null) as PushNotificationPrefs | null)
+  }
+
+  async function upsertPushPrefs(patch: Partial<PushNotificationPrefs>) {
+    if (!profile) return
+    const nowIso = new Date().toISOString()
+    const payload = {
+      user_id: profile.id,
+      updated_at: nowIso,
+      ...patch,
+    }
+
+    const { error } = await supabase
+      .from('push_notification_prefs')
+      .upsert(payload, { onConflict: 'user_id' })
+
+    if (error) {
+      console.warn('Failed to update push preferences:', error.message)
+      return
+    }
+
+    setPushPrefs((prev) => ({
+      user_id: profile.id,
+      preprompt_dismissed_at: prev?.preprompt_dismissed_at || null,
+      preprompt_dismissed_until: prev?.preprompt_dismissed_until || null,
+      native_permission_denied_at: prev?.native_permission_denied_at || null,
+      last_prompted_at: prev?.last_prompted_at || null,
+      subscribed_at: prev?.subscribed_at || null,
+      updated_at: nowIso,
+      ...prev,
+      ...patch,
+    }))
+  }
+
+  async function maybeShowPushPrePromptAfterBooking() {
+    const pushState = getPushClientState()
+    if (!pushState.supported) return
+
+    if (pushState.permission === 'granted') return
+    if (pushState.permission === 'denied') {
+      if (!pushPrefs?.native_permission_denied_at) {
+        await upsertPushPrefs({ native_permission_denied_at: new Date().toISOString() })
+      }
+      return
+    }
+
+    if (pushPrefs?.native_permission_denied_at) return
+
+    if (pushPrefs?.preprompt_dismissed_until) {
+      const dismissedUntil = new Date(pushPrefs.preprompt_dismissed_until).getTime()
+      if (Date.now() < dismissedUntil) return
+    }
+
+    setShowPushPrePrompt(true)
+  }
+
+  async function handlePrePromptNotNow() {
+    const now = new Date()
+    const dismissedUntil = new Date(now.getTime() + PREPROMPT_SNOOZE_DAYS * 24 * 60 * 60 * 1000)
+    await upsertPushPrefs({
+      preprompt_dismissed_at: now.toISOString(),
+      preprompt_dismissed_until: dismissedUntil.toISOString(),
+    })
+    setShowPushPrePrompt(false)
+  }
+
+  async function handleEnablePushFromPrePrompt() {
+    if (!profile) return
+    setPushActionLoading(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      const result = await subscribeCurrentUserToPush(token)
+      const nowIso = new Date().toISOString()
+
+      if (result.permission === 'denied') {
+        await upsertPushPrefs({
+          native_permission_denied_at: nowIso,
+          last_prompted_at: nowIso,
+        })
+        toast.info('Notifications are blocked in browser settings.')
+        setShowPushPrePrompt(false)
+        return
+      }
+
+      if (result.subscribed) {
+        await upsertPushPrefs({
+          last_prompted_at: nowIso,
+          subscribed_at: nowIso,
+          native_permission_denied_at: null,
+          preprompt_dismissed_at: null,
+          preprompt_dismissed_until: null,
+        })
+        setShowPushPrePrompt(false)
+        toast.success('Push notifications enabled')
+
+        await fetch('/api/push/test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: 'Notifications are on',
+            body: 'You will receive key booking and reminder updates.',
+            url: '/dashboard',
+          }),
+        })
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to enable notifications')
+    } finally {
+      setPushActionLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!authResolved) return
     if (!user) {
@@ -313,6 +458,26 @@ export default function Dashboard() {
               console.log('Notification created for waitlist promotion')
             } catch (notifError) {
               console.error('Failed to create waitlist promotion notification:', notifError)
+            }
+
+            try {
+              const { data: sessionData } = await supabase.auth.getSession()
+              const token = sessionData.session?.access_token
+              if (token) {
+                await fetch('/api/push/notify-self', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({
+                    type: 'waitlist_promoted',
+                    url: '/dashboard',
+                  }),
+                })
+              }
+            } catch (pushError) {
+              console.warn('Failed to send waitlist promoted push notification:', pushError)
             }
             
             // Send waitlist promotion email (non-blocking)
@@ -604,6 +769,7 @@ export default function Dashboard() {
       }
 
       await loadMyCoupons(userId)
+      await loadPushPrefs(userId)
 
     } catch (error: any) {
       setError(error.message)
@@ -741,6 +907,8 @@ export default function Dashboard() {
         toast.success('Event booked successfully!')
       }
 
+      await maybeShowPushPrePromptAfterBooking()
+
     } catch (error: any) {
       setError(error.message)
       
@@ -868,6 +1036,12 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      <PushPermissionPrePrompt
+        open={showPushPrePrompt}
+        onEnable={handleEnablePushFromPrePrompt}
+        onNotNow={handlePrePromptNotNow}
+        loading={pushActionLoading}
+      />
       {/* Navigation Tabs */}
       <NavigationTabs />
 

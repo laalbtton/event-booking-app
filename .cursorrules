@@ -798,6 +798,11 @@ RESEND_API_KEY=re_...
 # Cron Security
 CRON_SECRET=random_secret_key
 
+# PWA Push Notifications (Web Push / VAPID)
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:you@example.com
+
 # Google OAuth (via Supabase)
 # Configured in Supabase dashboard, no .env needed
 

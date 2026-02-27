@@ -21,6 +21,8 @@ import { LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { signOutAndCleanup } from '@/lib/authClient'
+import { getPushClientState, subscribeCurrentUserToPush, unsubscribeCurrentUserFromPush } from '@/lib/pushClient'
+import { toast } from 'sonner'
 
 type EventBooking = {
   id: string
@@ -48,6 +50,12 @@ type InviteItem = {
   }
 }
 
+type PushNotificationPrefs = {
+  user_id: string
+  native_permission_denied_at: string | null
+  subscribed_at: string | null
+}
+
 export default function ProfilePage() {
   const { authResolved, user } = useAuthBootstrap()
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -68,6 +76,10 @@ export default function ProfilePage() {
   const [globalAutoPostEnabled, setGlobalAutoPostEnabled] = useState(false)
   const [autopostLoading, setAutopostLoading] = useState(false)
   const [autopostJobs, setAutopostJobs] = useState<any[]>([])
+  const [pushPrefs, setPushPrefs] = useState<PushNotificationPrefs | null>(null)
+  const [pushSupported, setPushSupported] = useState(false)
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported')
+  const [pushActionLoading, setPushActionLoading] = useState(false)
   const touchStartX = useRef<Record<string, number>>({})
   const touchStartY = useRef<Record<string, number>>({})
   const router = useRouter()
@@ -95,6 +107,12 @@ export default function ProfilePage() {
     setLoading(true)
     void loadProfile(user.id)
   }, [authResolved, user, router])
+
+  useEffect(() => {
+    const state = getPushClientState()
+    setPushSupported(state.supported)
+    setPushPermission(state.permission)
+  }, [])
 
   // Generate initials from name
   function getInitials(name: string | null | undefined): string {
@@ -217,6 +235,14 @@ export default function ProfilePage() {
       if (!invitesError) {
         setInvites(invitesData as any)
       }
+
+      const { data: pushPrefsData } = await supabase
+        .from('push_notification_prefs')
+        .select('user_id, native_permission_denied_at, subscribed_at')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      setPushPrefs((pushPrefsData || null) as PushNotificationPrefs | null)
 
       await loadPosterAutomationState(userId)
 
@@ -390,6 +416,92 @@ export default function ProfilePage() {
       alert('Error responding to invite: ' + error.message)
     } finally {
       setRespondingInvite(null)
+    }
+  }
+
+  async function handleEnablePushNotifications() {
+    if (!profile) return
+    setPushActionLoading(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      const result = await subscribeCurrentUserToPush(token)
+      const nowIso = new Date().toISOString()
+      setPushPermission(result.permission)
+
+      if (result.permission === 'denied') {
+        await supabase.from('push_notification_prefs').upsert(
+          {
+            user_id: profile.id,
+            native_permission_denied_at: nowIso,
+            updated_at: nowIso,
+          },
+          { onConflict: 'user_id' }
+        )
+        setPushPrefs((prev) => ({
+          user_id: profile.id,
+          native_permission_denied_at: nowIso,
+          subscribed_at: prev?.subscribed_at || null,
+        }))
+        toast.info('Notifications are blocked in browser settings for this app.')
+        return
+      }
+
+      if (result.subscribed) {
+        await supabase.from('push_notification_prefs').upsert(
+          {
+            user_id: profile.id,
+            subscribed_at: nowIso,
+            native_permission_denied_at: null,
+            updated_at: nowIso,
+          },
+          { onConflict: 'user_id' }
+        )
+        setPushPrefs({
+          user_id: profile.id,
+          native_permission_denied_at: null,
+          subscribed_at: nowIso,
+        })
+        toast.success('Push notifications enabled')
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to enable push notifications')
+    } finally {
+      setPushActionLoading(false)
+    }
+  }
+
+  async function handleDisablePushNotifications() {
+    if (!profile) return
+    setPushActionLoading(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      await unsubscribeCurrentUserFromPush(token)
+      const nowIso = new Date().toISOString()
+      await supabase.from('push_notification_prefs').upsert(
+        {
+          user_id: profile.id,
+          subscribed_at: null,
+          updated_at: nowIso,
+        },
+        { onConflict: 'user_id' }
+      )
+
+      setPushPrefs((prev) => ({
+        user_id: profile.id,
+        native_permission_denied_at: prev?.native_permission_denied_at || null,
+        subscribed_at: null,
+      }))
+      toast.success('Push notifications disabled')
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to disable push notifications')
+    } finally {
+      setPushActionLoading(false)
     }
   }
 
@@ -728,6 +840,47 @@ export default function ProfilePage() {
               </div>
             </form>
           )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">Push Notifications</CardTitle>
+            <CardDescription>
+              Get waitlist promotions, booking updates, and reminder alerts on your device.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Status:{' '}
+              {!pushSupported
+                ? 'Not supported on this browser/device'
+                : pushPermission === 'granted'
+                ? 'Enabled'
+                : pushPermission === 'denied'
+                ? 'Blocked by browser settings'
+                : 'Not enabled'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={handleEnablePushNotifications}
+                disabled={!pushSupported || pushActionLoading || pushPermission === 'granted'}
+              >
+                {pushActionLoading ? 'Please wait...' : 'Enable Notifications'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleDisablePushNotifications}
+                disabled={!pushSupported || pushActionLoading || !pushPrefs?.subscribed_at}
+              >
+                Disable Notifications
+              </Button>
+            </div>
+            {pushPermission === 'denied' && (
+              <p className="text-xs text-muted-foreground">
+                Notifications were denied by the browser. To re-enable, allow notifications in browser/site settings.
+              </p>
+            )}
           </CardContent>
         </Card>
 

@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/notifications'
 import { sendEventReminderEmail } from '@/lib/emailService'
 import { formatDateTime } from '@/lib/dateUtils'
+import { sendPushToUser } from '@/lib/server/push'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -115,6 +116,12 @@ export async function GET(request: NextRequest) {
               event.id,
               timeString
             )
+
+            await sendPushToUser(supabase, booking.user_id, {
+              title: 'Event Reminder',
+              body: `${event.title} is happening in ${timeString}!`,
+              data: { url: `/events/${event.id}` },
+            })
 
             remindersSent++
           }

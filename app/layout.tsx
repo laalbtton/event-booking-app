@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ConfirmDialogProvider } from '@/components/providers/confirm-dialog-provider'
 import { GlobalAlertsProvider } from '@/components/providers/global-alerts-provider'
 import { AuthBootstrapProvider } from '@/components/providers/auth-bootstrap-provider'
+import { PushServiceWorkerProvider } from '@/components/providers/push-service-worker-provider'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,6 +53,7 @@ export default function RootLayout({
       >
         <ConfirmDialogProvider>
           <AuthBootstrapProvider>
+            <PushServiceWorkerProvider />
             <GlobalAlertsProvider />
             {/* Main content area */}
             <main className="flex-1">
