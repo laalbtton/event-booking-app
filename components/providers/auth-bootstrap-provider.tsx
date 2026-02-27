@@ -16,6 +16,8 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
   const [authResolved, setAuthResolved] = useState(false)
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
+  const [debugOpen, setDebugOpen] = useState(false)
+  const [debugLines, setDebugLines] = useState<string[]>([])
 
   useEffect(() => {
     let mounted = true
@@ -46,7 +48,13 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
       }
     }
 
-    console.info('[auth-bootstrap] cold-start localStorage snapshot', getSupabaseStorageSnapshot())
+    const pushDebug = (label: string, payload: unknown) => {
+      const rendered = `${label}: ${JSON.stringify(payload)}`
+      console.info(`[auth-bootstrap] ${label}`, payload)
+      setDebugLines((prev) => [...prev.slice(-11), rendered])
+    }
+
+    pushDebug('cold-start localStorage snapshot', getSupabaseStorageSnapshot())
 
     const resolveOnce = () => {
       if (resolved || !mounted) return
@@ -58,7 +66,7 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
       if (!mounted) return
       if (!firstAuthEventLogged) {
         firstAuthEventLogged = true
-        console.info('[auth-bootstrap] first onAuthStateChange event', {
+        pushDebug('first onAuthStateChange event', {
           event,
           ...summarizeSession(nextSession ?? null),
         })
@@ -70,7 +78,7 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
 
     void supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return
-      console.info('[auth-bootstrap] getSession() initial result', {
+      pushDebug('getSession() initial result', {
         beforeFirstAuthEvent: !firstAuthEventLogged,
         ...summarizeSession(data.session ?? null),
       })
@@ -82,7 +90,7 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
       if (!mounted || resolved) return
       const { data } = await supabase.auth.getSession()
       if (!mounted) return
-      console.info('[auth-bootstrap] fallback getSession() result', summarizeSession(data.session ?? null))
+      pushDebug('fallback getSession() result', summarizeSession(data.session ?? null))
       setSession(data.session ?? null)
       setUser(data.session?.user ?? null)
       resolveOnce()
@@ -100,7 +108,55 @@ export function AuthBootstrapProvider({ children }: { children: React.ReactNode 
     [authResolved, session, user]
   )
 
-  return <AuthBootstrapContext.Provider value={value}>{children}</AuthBootstrapContext.Provider>
+  return (
+    <AuthBootstrapContext.Provider value={value}>
+      {children}
+      <div className="fixed bottom-24 right-3 z-[9999] max-w-[90vw]">
+        {!debugOpen ? (
+          <button
+            type="button"
+            onClick={() => setDebugOpen(true)}
+            className="rounded-md bg-black/80 px-3 py-1.5 text-xs text-white"
+          >
+            Auth debug
+          </button>
+        ) : (
+          <div className="w-[360px] max-w-[90vw] rounded-md border bg-black/90 p-2 text-[11px] text-white shadow-lg">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="font-semibold">Auth Bootstrap Debug</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDebugLines([])}
+                  className="rounded bg-white/20 px-2 py-0.5"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDebugOpen(false)}
+                  className="rounded bg-white/20 px-2 py-0.5"
+                >
+                  Hide
+                </button>
+              </div>
+            </div>
+            <div className="max-h-56 space-y-1 overflow-auto pr-1">
+              {debugLines.length === 0 ? (
+                <div className="text-white/70">No events logged yet.</div>
+              ) : (
+                debugLines.map((line, index) => (
+                  <pre key={`${index}-${line.slice(0, 24)}`} className="whitespace-pre-wrap break-words text-[10px]">
+                    {line}
+                  </pre>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </AuthBootstrapContext.Provider>
+  )
 }
 
 export function useAuthBootstrap() {
