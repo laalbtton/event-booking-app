@@ -57,6 +57,9 @@ export type Event = {
   rating: string | null
   status?: string | null
   event_type: 'open_mic' | 'booked_show'
+  open_mic_type?: 'comedy_open_mic' | 'variety_arts_open_mic' | null
+  is_multilingual?: boolean
+  languages?: string[]
   tickets_enabled: boolean
   external_event: boolean
   external_ticket_url: string | null
@@ -86,11 +89,26 @@ export type Booking = {
   id: string
   user_id: string
   event_id: string
+  event_art_type_id?: string | null
   credits_used: number
   booked_at: string
   status: string
+  booking_scope?: 'performer' | 'audience'
   waitlist_position: number | null
   attendance_status: string | null // 'attended', 'no_show', or null (confirmed)
+  attendance_marked_at?: string | null
+  audience_checkin_code?: string | null
+  audience_deposit_returned_at?: string | null
+  cancellation_date?: string | null
+}
+
+export type EventArtType = {
+  id: string
+  event_id: string
+  art_type_name: string
+  slot_capacity: number
+  created_at: string
+  updated_at: string
 }
 
 export type EventInvite = {

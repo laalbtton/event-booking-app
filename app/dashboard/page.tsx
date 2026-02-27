@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { cn } from '@/lib/utils'
@@ -53,6 +54,14 @@ type PushNotificationPrefs = {
   updated_at: string
 }
 
+type VarietyArtOption = {
+  id: string
+  name: string
+  capacity: number
+  confirmedCount: number
+  waitlistCount: number
+}
+
 export default function Dashboard() {
   const { confirm } = useConfirmDialog()
   const { authResolved, user } = useAuthBootstrap()
@@ -85,6 +94,10 @@ export default function Dashboard() {
   const [installPromptAvailable, setInstallPromptAvailable] = useState(false)
   const [showInstallHelp, setShowInstallHelp] = useState(false)
   const [installActionLoading, setInstallActionLoading] = useState(false)
+  const [varietyDialogOpen, setVarietyDialogOpen] = useState(false)
+  const [varietyDialogEvent, setVarietyDialogEvent] = useState<Event | null>(null)
+  const [varietyOptions, setVarietyOptions] = useState<VarietyArtOption[]>([])
+  const [selectedVarietyOptionId, setSelectedVarietyOptionId] = useState<string>('')
   const router = useRouter()
   const PREPROMPT_SNOOZE_DAYS = 7
 
@@ -115,6 +128,63 @@ export default function Dashboard() {
     const spotFee = Math.max(0, Number(event.spot_fee_credits || 0))
     const couponCredits = Math.ceil(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100)
     return spotFee + couponCredits
+  }
+
+  function formatEventLanguages(event: Event): string {
+    const langs = Array.isArray((event as any).languages) ? (event as any).languages.filter(Boolean) : ['English']
+    const resolved = langs.length > 0 ? langs : ['English']
+    const isMulti = !!(event as any).is_multilingual || resolved.length > 1
+    if (!isMulti) return resolved[0] || 'English'
+    return `Multilingual: ${resolved.join(', ')}`
+  }
+
+  function getOpenMicSubtypeLabel(event: Event): string | null {
+    if (event.event_type !== 'open_mic') return null
+    const subtype = (event as any).open_mic_type || 'comedy_open_mic'
+    return subtype === 'variety_arts_open_mic' ? 'Variety Arts Open Mic' : 'Comedy Open Mic'
+  }
+
+  async function openVarietyPicker(event: Event) {
+    const { data: artRows, error: artError } = await supabase
+      .from('event_art_types')
+      .select('id, art_type_name, slot_capacity')
+      .eq('event_id', event.id)
+      .order('created_at', { ascending: true })
+
+    if (artError) throw new Error(artError.message)
+    if (!artRows || artRows.length === 0) {
+      throw new Error('This variety event has no configured art type slots.')
+    }
+
+    const { data: bookingRows, error: bookingError } = await supabase
+      .from('bookings')
+      .select('event_art_type_id, status, booking_scope')
+      .eq('event_id', event.id)
+      .eq('booking_scope', 'performer')
+      .in('status', ['confirmed', 'waitlist'])
+
+    if (bookingError) throw new Error(bookingError.message)
+
+    const options = (artRows || []).map((row: any) => {
+      const confirmedCount = (bookingRows || []).filter(
+        (booking: any) => booking.status === 'confirmed' && booking.event_art_type_id === row.id
+      ).length
+      const waitlistCount = (bookingRows || []).filter(
+        (booking: any) => booking.status === 'waitlist' && booking.event_art_type_id === row.id
+      ).length
+      return {
+        id: row.id,
+        name: row.art_type_name,
+        capacity: Number(row.slot_capacity || 0),
+        confirmedCount,
+        waitlistCount,
+      } satisfies VarietyArtOption
+    })
+
+    setVarietyDialogEvent(event)
+    setVarietyOptions(options)
+    setSelectedVarietyOptionId(options[0]?.id || '')
+    setVarietyDialogOpen(true)
   }
 
   function formatCouponStatus(status: MyCoupon['status']) {
@@ -839,7 +909,7 @@ export default function Dashboard() {
     }
   }
 
-  async function handleBookEvent(event: Event) {
+  async function handleBookEvent(event: Event, selectedArtTypeId?: string) {
     if (!profile) return
 
     setBookingLoading(event.id)
@@ -854,6 +924,16 @@ export default function Dashboard() {
       }
       if (event.status === 'cancelled') {
         throw new Error('This event has been cancelled')
+      }
+      if (
+        userRole !== 'audience' &&
+        event.event_type === 'open_mic' &&
+        (event as any).open_mic_type === 'variety_arts_open_mic' &&
+        !selectedArtTypeId
+      ) {
+        setBookingLoading(null)
+        await openVarietyPicker(event)
+        return
       }
 
       // Check if registration is open
@@ -918,7 +998,7 @@ export default function Dashboard() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ eventId: event.id }),
+        body: JSON.stringify({ eventId: event.id, eventArtTypeId: selectedArtTypeId || null }),
       })
 
       const result = await response.json().catch(() => ({}))
@@ -1094,6 +1174,55 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Dialog open={varietyDialogOpen} onOpenChange={setVarietyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select your art type</DialogTitle>
+            <DialogDescription>
+              Choose which performance type you want to book for this variety arts open mic.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {varietyOptions.map((option) => {
+              const spotsLeft = Math.max(0, option.capacity - option.confirmedCount)
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setSelectedVarietyOptionId(option.id)}
+                  className={cn(
+                    'w-full rounded-md border px-3 py-2 text-left',
+                    selectedVarietyOptionId === option.id && 'border-primary bg-primary/5'
+                  )}
+                >
+                  <div className="font-medium">{option.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {option.confirmedCount}/{option.capacity} confirmed
+                    {spotsLeft === 0 ? ' (full, joins waitlist)' : ` (${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left)`} ·
+                    {' '}{option.waitlistCount} waitlisted
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              onClick={async () => {
+                if (!varietyDialogEvent || !selectedVarietyOptionId) return
+                setVarietyDialogOpen(false)
+                await handleBookEvent(varietyDialogEvent, selectedVarietyOptionId)
+              }}
+              disabled={!selectedVarietyOptionId}
+            >
+              Continue Booking
+            </Button>
+            <Button variant="outline" className="flex-1" onClick={() => setVarietyDialogOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <PushPermissionPrePrompt
         open={showPushPrePrompt}
         onEnable={handleEnablePushFromPrePrompt}
@@ -1652,6 +1781,8 @@ export default function Dashboard() {
                     ? (audienceHasFreePass ? 0 : audienceDepositCredits)
                     : effectiveCreditsRequired
                   const hasRedeemableCredits = event.tickets_enabled && Number((event as any).audience_deposit_credits || 0) > 0
+                  const openMicSubtype = getOpenMicSubtypeLabel(event)
+                  const languageSummary = formatEventLanguages(event)
                   const canAfford = (profile?.credits || 0) >= creditsRequiredForCard
                   const isBooking = bookingLoading === event.id
                   const now = new Date()
@@ -1700,6 +1831,11 @@ export default function Dashboard() {
                                   Redeemable Credits
                                 </Badge>
                               )}
+                              {openMicSubtype && (
+                                <Badge variant="outline" className="whitespace-nowrap">
+                                  {openMicSubtype}
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </CardHeader>
@@ -1727,6 +1863,11 @@ export default function Dashboard() {
                               </div>
                               <div className="whitespace-nowrap">
                                 {event.theme ? `🎨 ${event.theme}` : ''}
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="text-xs text-muted-foreground truncate">
+                                🗣️ {languageSummary}
                               </div>
                             </div>
                             <div className="flex items-center justify-between gap-2">

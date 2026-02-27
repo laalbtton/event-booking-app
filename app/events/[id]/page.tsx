@@ -27,6 +27,9 @@ type EventDetails = {
   rating: string | null
   status?: string | null
   event_type: 'open_mic' | 'booked_show'
+  open_mic_type?: 'comedy_open_mic' | 'variety_arts_open_mic' | null
+  is_multilingual?: boolean
+  languages?: string[]
   tickets_enabled: boolean
   external_event: boolean
   external_ticket_url: string | null
@@ -69,6 +72,14 @@ type AttendeeBooking = {
   }
 }
 
+type VarietyArtOption = {
+  id: string
+  name: string
+  capacity: number
+  confirmedCount: number
+  waitlistCount: number
+}
+
 export default function EventDetailsPage() {
   const { confirm } = useConfirmDialog()
   const params = useParams()
@@ -94,6 +105,9 @@ export default function EventDetailsPage() {
   const [venueOpen, setVenueOpen] = useState(false)
   const [eventAutoPostEnabled, setEventAutoPostEnabled] = useState(false)
   const [prefLoading, setPrefLoading] = useState(false)
+  const [varietyDialogOpen, setVarietyDialogOpen] = useState(false)
+  const [varietyOptions, setVarietyOptions] = useState<VarietyArtOption[]>([])
+  const [selectedVarietyOptionId, setSelectedVarietyOptionId] = useState('')
 
 
   function copyPublicLink() {
@@ -123,6 +137,19 @@ export default function EventDetailsPage() {
     if (!event?.poster_url) return
     navigator.clipboard.writeText(event.poster_url)
     toast.success('Poster link copied!')
+  }
+
+  function formatEventLanguages() {
+    const langs = Array.isArray((event as any)?.languages) ? (event as any).languages.filter(Boolean) : ['English']
+    const resolved = langs.length > 0 ? langs : ['English']
+    const isMulti = !!(event as any)?.is_multilingual || resolved.length > 1
+    return isMulti ? `Multilingual: ${resolved.join(', ')}` : (resolved[0] || 'English')
+  }
+
+  function openMicSubtypeLabel() {
+    if (!event || event.event_type !== 'open_mic') return null
+    const subtype = (event as any).open_mic_type || 'comedy_open_mic'
+    return subtype === 'variety_arts_open_mic' ? 'Variety Arts Open Mic' : 'Comedy Open Mic'
   }
 
   async function sharePoster() {
@@ -274,6 +301,7 @@ export default function EventDetailsPage() {
           id,
           status,
           booking_scope,
+          event_art_type_id,
           waitlist_position,
           profiles (id, full_name, email)
         `)
@@ -292,6 +320,7 @@ export default function EventDetailsPage() {
           id,
           status,
           booking_scope,
+          event_art_type_id,
           waitlist_position,
           profiles (id, full_name, email)
         `)
@@ -302,6 +331,38 @@ export default function EventDetailsPage() {
       if (waitlistError) throw waitlistError
       const performerWaitlist = (waitlistData || []).filter((booking: any) => booking.booking_scope !== 'audience')
       setWaitlistBookings(performerWaitlist as any)
+
+      if (
+        eventData.event_type === 'open_mic' &&
+        (eventData as any).open_mic_type === 'variety_arts_open_mic'
+      ) {
+        const { data: artRows } = await supabase
+          .from('event_art_types')
+          .select('id, art_type_name, slot_capacity')
+          .eq('event_id', eventId)
+          .order('created_at', { ascending: true })
+
+        const options = (artRows || []).map((row: any) => {
+          const confirmedCount = (confirmedData || []).filter(
+            (booking: any) => booking.booking_scope !== 'audience' && booking.event_art_type_id === row.id
+          ).length
+          const waitlistCount = (waitlistData || []).filter(
+            (booking: any) => booking.booking_scope !== 'audience' && booking.event_art_type_id === row.id
+          ).length
+          return {
+            id: row.id,
+            name: row.art_type_name,
+            capacity: Number(row.slot_capacity || 0),
+            confirmedCount,
+            waitlistCount,
+          } satisfies VarietyArtOption
+        })
+        setVarietyOptions(options)
+        setSelectedVarietyOptionId(options[0]?.id || '')
+      } else {
+        setVarietyOptions([])
+        setSelectedVarietyOptionId('')
+      }
 
       const { count: audienceCount } = await supabase
         .from('bookings')
@@ -345,7 +406,7 @@ export default function EventDetailsPage() {
     }
   }
 
-  async function handleBookEvent(eventData: EventDetails) {
+  async function handleBookEvent(eventData: EventDetails, selectedArtTypeId?: string) {
     if (!profile) return
 
     setBookingLoading(true)
@@ -372,6 +433,19 @@ export default function EventDetailsPage() {
 
       if (userBooking) {
         throw new Error('You have already booked this event')
+      }
+
+      if (
+        profile?.role !== 'audience' &&
+        eventData.event_type === 'open_mic' &&
+        (eventData as any).open_mic_type === 'variety_arts_open_mic' &&
+        !selectedArtTypeId
+      ) {
+        if (!varietyOptions.length) {
+          throw new Error('This variety event has no configured art type slots.')
+        }
+        setVarietyDialogOpen(true)
+        return
       }
 
       const now = new Date()
@@ -419,7 +493,7 @@ export default function EventDetailsPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ eventId: eventData.id }),
+        body: JSON.stringify({ eventId: eventData.id, eventArtTypeId: selectedArtTypeId || null }),
       })
 
       const result = await response.json().catch(() => ({}))
@@ -488,6 +562,55 @@ export default function EventDetailsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      <Dialog open={varietyDialogOpen} onOpenChange={setVarietyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select your art type</DialogTitle>
+            <DialogDescription>
+              Choose the performance bucket you want to book for this variety arts open mic.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {varietyOptions.map((option) => {
+              const spotsLeft = Math.max(0, option.capacity - option.confirmedCount)
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setSelectedVarietyOptionId(option.id)}
+                  className={cn(
+                    'w-full rounded-md border px-3 py-2 text-left',
+                    selectedVarietyOptionId === option.id && 'border-primary bg-primary/5'
+                  )}
+                >
+                  <div className="font-medium">{option.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {option.confirmedCount}/{option.capacity} confirmed
+                    {spotsLeft === 0 ? ' (full, joins waitlist)' : ` (${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left)`} ·
+                    {' '}{option.waitlistCount} waitlisted
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              disabled={!selectedVarietyOptionId}
+              onClick={async () => {
+                if (!event || !selectedVarietyOptionId) return
+                setVarietyDialogOpen(false)
+                await handleBookEvent(event, selectedVarietyOptionId)
+              }}
+            >
+              Continue Booking
+            </Button>
+            <Button className="flex-1" variant="outline" onClick={() => setVarietyDialogOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
         {/* Header */}
         <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
@@ -519,6 +642,14 @@ export default function EventDetailsPage() {
                   🎨 Theme: {event.theme}
                 </Badge>
               )}
+              {openMicSubtypeLabel() && (
+                <Badge variant="outline">
+                  {openMicSubtypeLabel()}
+                </Badge>
+              )}
+              <Badge variant="outline">
+                🗣️ {formatEventLanguages()}
+              </Badge>
               {isInProgress && (
                 <Badge variant="outline" className="text-blue-600 border-blue-600">
                   In Progress
@@ -610,6 +741,17 @@ export default function EventDetailsPage() {
                   <div className="flex items-center text-sm md:text-base text-gray-900">
                     <span className="mr-2">🧑‍🤝‍🧑</span>
                     <span>Expected audience: {audienceExpectedCount}</span>
+                  </div>
+                )}
+
+                {event.event_type === 'open_mic' && (event as any).open_mic_type === 'variety_arts_open_mic' && varietyOptions.length > 0 && (
+                  <div className="text-sm md:text-base text-gray-900">
+                    <span className="mr-2">🎭</span>
+                    <span>
+                      {varietyOptions
+                        .map((option) => `${option.name}: ${Math.max(0, option.capacity - option.confirmedCount)} left`)
+                        .join(' · ')}
+                    </span>
                   </div>
                 )}
 

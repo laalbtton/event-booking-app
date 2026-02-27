@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, event_id, status, waitlist_position')
+      .select('id, event_id, status, waitlist_position, booking_scope, event_art_type_id')
       .eq('id', bookingId)
       .single()
 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, max_attendees, created_by, host_user_id, event_type')
+      .select('id, max_attendees, audience_capacity, created_by, host_user_id, event_type, open_mic_type')
       .eq('id', booking.event_id)
       .single()
 
@@ -76,23 +76,57 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    if (status === 'confirmed' && event.max_attendees !== null && event.event_type !== 'booked_show') {
-      const { count, error: countError } = await supabase
+    const bookingScope = booking.booking_scope === 'audience' ? 'audience' : 'performer'
+    const isVarietyPerformer =
+      bookingScope === 'performer' &&
+      event.event_type === 'open_mic' &&
+      (event as any).open_mic_type === 'variety_arts_open_mic'
+
+    if (status === 'confirmed' && event.event_type !== 'booked_show') {
+      let capacity: number | null =
+        bookingScope === 'audience'
+          ? Math.max(0, Number((event as any).audience_capacity || 0))
+          : event.max_attendees
+
+      let countQuery = supabase
         .from('bookings')
         .select('id', { count: 'exact', head: true })
         .eq('event_id', booking.event_id)
         .eq('status', 'confirmed')
+        .eq('booking_scope', bookingScope)
+
+      if (isVarietyPerformer && booking.event_art_type_id) {
+        const { data: artTypeRow, error: artTypeError } = await supabase
+          .from('event_art_types')
+          .select('slot_capacity')
+          .eq('id', booking.event_art_type_id)
+          .eq('event_id', booking.event_id)
+          .maybeSingle()
+        if (artTypeError || !artTypeRow) {
+          return NextResponse.json({ error: 'Invalid art type bucket for this booking' }, { status: 400 })
+        }
+        capacity = Number(artTypeRow.slot_capacity || 0)
+        countQuery = countQuery.eq('event_art_type_id', booking.event_art_type_id)
+      } else {
+        countQuery = countQuery.is('event_art_type_id', null)
+      }
+
+      const { count, error: countError } = await countQuery
 
       if (countError) {
         return NextResponse.json({ error: countError.message }, { status: 500 })
       }
 
       const confirmedCount = count ?? 0
-      if (confirmedCount >= event.max_attendees) {
-        await supabase
-          .from('events')
-          .update({ max_attendees: confirmedCount + 1 })
-          .eq('id', booking.event_id)
+      if (capacity !== null && confirmedCount >= capacity) {
+        if (bookingScope === 'performer' && !isVarietyPerformer && event.max_attendees !== null) {
+          await supabase
+            .from('events')
+            .update({ max_attendees: confirmedCount + 1 })
+            .eq('id', booking.event_id)
+        } else {
+          return NextResponse.json({ error: 'No capacity available for the selected booking bucket' }, { status: 400 })
+        }
       }
     }
 
@@ -113,7 +147,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
-    await supabase.rpc('update_waitlist_positions', { event_uuid: booking.event_id })
+    await supabase.rpc('update_waitlist_positions_scoped', {
+      event_uuid: booking.event_id,
+      booking_scope_filter: bookingScope,
+      event_art_type_uuid: isVarietyPerformer ? booking.event_art_type_id : null,
+    })
 
     if (event.event_type === 'booked_show') {
       const { count: confirmedCount } = await supabase
@@ -121,6 +159,7 @@ export async function POST(request: NextRequest) {
         .select('id', { count: 'exact', head: true })
         .eq('event_id', booking.event_id)
         .eq('status', 'confirmed')
+        .eq('booking_scope', 'performer')
 
       if (event.max_attendees !== null) {
         await supabase

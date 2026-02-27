@@ -21,6 +21,9 @@ type EventDetails = {
   rating: string | null
   status?: string | null
   event_type: 'open_mic' | 'booked_show'
+  open_mic_type?: 'comedy_open_mic' | 'variety_arts_open_mic' | null
+  is_multilingual?: boolean
+  languages?: string[]
   tickets_enabled: boolean
   external_event: boolean
   external_ticket_url: string | null
@@ -51,6 +54,13 @@ type AttendeeBooking = {
   }
 }
 
+type VarietyArtOption = {
+  id: string
+  name: string
+  capacity: number
+  confirmedCount: number
+}
+
 export default function PublicEventPage() {
   const params = useParams()
   const eventId = params.id as string
@@ -62,6 +72,7 @@ export default function PublicEventPage() {
   const [loading, setLoading] = useState(true)
   const [isUnavailable, setIsUnavailable] = useState(false)
   const [hostProfile, setHostProfile] = useState<{ full_name: string } | null>(null)
+  const [varietyOptions, setVarietyOptions] = useState<VarietyArtOption[]>([])
 
   useEffect(() => {
     loadEventDetails()
@@ -109,6 +120,7 @@ export default function PublicEventPage() {
           id,
           status,
           booking_scope,
+          event_art_type_id,
           waitlist_position,
           profiles (id, full_name)
         `)
@@ -127,6 +139,7 @@ export default function PublicEventPage() {
           id,
           status,
           booking_scope,
+          event_art_type_id,
           waitlist_position,
           profiles (id, full_name)
         `)
@@ -137,6 +150,30 @@ export default function PublicEventPage() {
       if (waitlistError) throw waitlistError
       const performerWaitlist = (waitlistData || []).filter((booking: any) => booking.booking_scope !== 'audience')
       setWaitlistBookings(performerWaitlist as any)
+
+      if (
+        eventData.event_type === 'open_mic' &&
+        (eventData as any).open_mic_type === 'variety_arts_open_mic'
+      ) {
+        const { data: artRows } = await supabase
+          .from('event_art_types')
+          .select('id, art_type_name, slot_capacity')
+          .eq('event_id', eventId)
+          .order('created_at', { ascending: true })
+
+        setVarietyOptions(
+          (artRows || []).map((row: any) => ({
+            id: row.id,
+            name: row.art_type_name,
+            capacity: Number(row.slot_capacity || 0),
+            confirmedCount: (confirmedData || []).filter(
+              (booking: any) => booking.booking_scope !== 'audience' && booking.event_art_type_id === row.id
+            ).length,
+          }))
+        )
+      } else {
+        setVarietyOptions([])
+      }
 
       const { count: audienceCount } = await supabase
         .from('bookings')
@@ -218,6 +255,16 @@ export default function PublicEventPage() {
     : new Date(new Date(event.date).getTime() + 2 * 60 * 60 * 1000)
   const isPastEvent = eventDate < now
   const isInProgress = eventDate <= now && now < endTime
+  const languages = Array.isArray((event as any).languages) && (event as any).languages.length > 0
+    ? (event as any).languages
+    : ['English']
+  const languageSummary = ((event as any).is_multilingual || languages.length > 1)
+    ? `Multilingual: ${languages.join(', ')}`
+    : (languages[0] || 'English')
+  const openMicSubtype =
+    event.event_type === 'open_mic'
+      ? ((event as any).open_mic_type === 'variety_arts_open_mic' ? 'Variety Arts Open Mic' : 'Comedy Open Mic')
+      : null
 
   return (
     <div className="min-h-screen bg-background">
@@ -258,6 +305,8 @@ export default function PublicEventPage() {
                   🎨 Theme: {event.theme}
                 </Badge>
               )}
+              {openMicSubtype && <Badge variant="outline">{openMicSubtype}</Badge>}
+              <Badge variant="outline">🗣️ {languageSummary}</Badge>
 
               {hostProfile && (
                 <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
@@ -332,6 +381,17 @@ export default function PublicEventPage() {
                 <div className="flex items-center text-sm md:text-base">
                   <span className="mr-2">👥</span>
                   <span>{confirmedBookings.length} registered</span>
+                </div>
+              )}
+
+              {event.event_type === 'open_mic' && (event as any).open_mic_type === 'variety_arts_open_mic' && varietyOptions.length > 0 && (
+                <div className="flex items-center text-sm md:text-base">
+                  <span className="mr-2">🎭</span>
+                  <span>
+                    {varietyOptions
+                      .map((option) => `${option.name}: ${Math.max(0, option.capacity - option.confirmedCount)} left`)
+                      .join(' · ')}
+                  </span>
                 </div>
               )}
 

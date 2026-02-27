@@ -23,6 +23,7 @@ type BookingWithProfile = {
   credits_used?: number
   status: string
   booking_scope?: 'performer' | 'audience'
+  event_art_type_id?: string | null
   attendance_status: string | null
   audience_checkin_code?: string | null
   booked_at: string
@@ -32,6 +33,10 @@ type BookingWithProfile = {
     full_name: string
     email: string
   }
+  event_art_types?: {
+    id: string
+    art_type_name: string
+  } | null
 }
 
 type InviteWithProfile = {
@@ -434,10 +439,15 @@ export default function AttendancePage() {
           credits_used,
           status,
           booking_scope,
+          event_art_type_id,
           attendance_status,
           audience_checkin_code,
           booked_at,
           waitlist_position,
+          event_art_types:event_art_type_id (
+            id,
+            art_type_name
+          ),
           profiles (
             id,
             full_name,
@@ -462,10 +472,15 @@ export default function AttendancePage() {
           credits_used,
           status,
           booking_scope,
+          event_art_type_id,
           attendance_status,
           audience_checkin_code,
           booked_at,
           waitlist_position,
+          event_art_types:event_art_type_id (
+            id,
+            art_type_name
+          ),
           profiles (
             id,
             full_name,
@@ -478,7 +493,8 @@ export default function AttendancePage() {
         .order('booked_at', { ascending: true })
 
       if (waitlistError) throw waitlistError
-      setWaitlistBookings(waitlistData as any)
+      const performerWaitlist = (waitlistData || []).filter((b: any) => b.booking_scope !== 'audience')
+      setWaitlistBookings(performerWaitlist as any)
 
       if (eventData.food_coupon_enabled) {
         const { data: redeemedVouchers, error: redeemedError } = await supabase
@@ -593,6 +609,20 @@ export default function AttendancePage() {
       noShow,
       pending
     })
+  }
+
+  function getArtTypeLabel(booking: BookingWithProfile): string {
+    return booking.event_art_types?.art_type_name || 'General'
+  }
+
+  function groupBookingsByArtType(list: BookingWithProfile[]) {
+    const grouped = new Map<string, BookingWithProfile[]>()
+    for (const booking of list) {
+      const key = getArtTypeLabel(booking)
+      if (!grouped.has(key)) grouped.set(key, [])
+      grouped.get(key)!.push(booking)
+    }
+    return Array.from(grouped.entries())
   }
 
   function isAudienceAttendanceWindowOpen() {
@@ -975,15 +1005,18 @@ export default function AttendancePage() {
     const attended = bookings.filter((booking) => booking.attendance_status === 'attended')
     const noShow = bookings.filter((booking) => booking.attendance_status !== 'attended')
 
-    const attendedLines = attended.map((booking, index) =>
-      `${index + 1}. ${booking.profiles.full_name || 'No name'}`
-    )
-    const noShowLines = noShow.map((booking, index) =>
-      `${index + 1}. ${booking.profiles.full_name || 'No name'}`
-    )
+    const buildSection = (label: string, rows: BookingWithProfile[]) => {
+      const grouped = groupBookingsByArtType(rows)
+      if (grouped.length === 0) return `${label} (0)\nNone`
+      const parts = grouped.map(([artType, artRows]) => {
+        const lines = artRows.map((booking, index) => `${index + 1}. ${booking.profiles.full_name || 'No name'}`)
+        return `${artType} (${artRows.length})\n${lines.join('\n')}`
+      })
+      return `${label} (${rows.length})\n${parts.join('\n\n')}`
+    }
 
-    let text = `Attending (${attendedLines.length})\n${attendedLines.join('\n') || 'None'}`
-    text += `\n\nNo Show (${noShowLines.length})\n${noShowLines.join('\n') || 'None'}`
+    let text = buildSection('Attending', attended)
+    text += `\n\n${buildSection('No Show', noShow)}`
 
     navigator.clipboard.writeText(text)
     alert('Attendance list copied!')
@@ -1400,57 +1433,64 @@ export default function AttendancePage() {
                   <p className="text-muted-foreground text-center py-8">No confirmed bookings for this event</p>
                 ) : (
                   <div className="space-y-2">
-                    {bookings.map((booking, index) => {
-                      const attendanceStatus = booking.attendance_status
-                      const isUpdating = updating === booking.id
-                      const isDragged = draggedItem === booking.id
-                      const isDragOver = dragOverIndex === index
+                    {groupBookingsByArtType(bookings).map(([artType, artTypeBookings]) => (
+                      <div key={artType} className="space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          {artType} ({artTypeBookings.length})
+                        </p>
+                        {artTypeBookings.map((booking, index) => {
+                          const attendanceStatus = booking.attendance_status
+                          const isUpdating = updating === booking.id
+                          const isDragged = draggedItem === booking.id
+                          const isDragOver = dragOverIndex === index
 
-                      return (
-                        <div
-                          key={booking.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, booking.id)}
-                          onDragOver={(e) => handleDragOver(e, index)}
-                          onDragLeave={handleDragLeave}
-                          onDrop={handleDrop}
-                          onTouchStart={(e) => handleTouchStart(e, booking.id)}
-                          onTouchMove={(e) => handleTouchMove(e, booking.id)}
-                          onTouchEnd={() => handleTouchEnd(booking.id)}
-                          style={{ transform: `translateX(${swipeOffset[booking.id] || 0}px)` }}
-                          className={cn(
-                            "flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all cursor-move",
-                            isDragged && "opacity-50",
-                            isDragOver && "border-blue-400 bg-blue-50",
-                            !isDragged && !isDragOver && "hover:bg-gray-50"
-                          )}
-                        >
-                          <GripVertical className="w-5 h-5 text-gray-400 flex-shrink-0" />
-
-                          <div className="flex-1 min-w-0">
-                            <Link
-                              href={`/profile/${booking.profiles.id}`}
-                              className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
-                              onClick={(e) => e.stopPropagation()}
+                          return (
+                            <div
+                              key={booking.id}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, booking.id)}
+                              onDragOver={(e) => handleDragOver(e, index)}
+                              onDragLeave={handleDragLeave}
+                              onDrop={handleDrop}
+                              onTouchStart={(e) => handleTouchStart(e, booking.id)}
+                              onTouchMove={(e) => handleTouchMove(e, booking.id)}
+                              onTouchEnd={() => handleTouchEnd(booking.id)}
+                              style={{ transform: `translateX(${swipeOffset[booking.id] || 0}px)` }}
+                              className={cn(
+                                "flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all cursor-move",
+                                isDragged && "opacity-50",
+                                isDragOver && "border-blue-400 bg-blue-50",
+                                !isDragged && !isDragOver && "hover:bg-gray-50"
+                              )}
                             >
-                              {booking.profiles.full_name || 'No name'}
-                            </Link>
-                            <span className="hidden sm:inline text-xs text-muted-foreground">
-                              {formatDateTime(booking.booked_at)}
-                            </span>
-                          </div>
+                              <GripVertical className="w-5 h-5 text-gray-400 flex-shrink-0" />
 
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <Switch
-                              checked={attendanceStatus === 'attended'}
-                              disabled={isUpdating}
-                              onCheckedChange={(checked) => updateAttendance(booking.id, checked ? 'attended' : null)}
-                              aria-label="Mark attended"
-                            />
-                          </div>
-                        </div>
-                      )
-                    })}
+                              <div className="flex-1 min-w-0">
+                                <Link
+                                  href={`/profile/${booking.profiles.id}`}
+                                  className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {booking.profiles.full_name || 'No name'}
+                                </Link>
+                                <span className="hidden sm:inline text-xs text-muted-foreground">
+                                  {formatDateTime(booking.booked_at)}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <Switch
+                                  checked={attendanceStatus === 'attended'}
+                                  disabled={isUpdating}
+                                  onCheckedChange={(checked) => updateAttendance(booking.id, checked ? 'attended' : null)}
+                                  aria-label="Mark attended"
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))}
                   </div>
                 )}
                 <div
@@ -1466,32 +1506,39 @@ export default function AttendancePage() {
                     <p className="text-muted-foreground text-center py-6 text-sm">No waitlisted attendees</p>
                   ) : (
                     <div className="space-y-2">
-                      {waitlistBookings.map((booking) => {
-                        const isUpdating = updating === booking.id
-                        return (
-                          <div
-                            key={booking.id}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, booking.id)}
-                            className="flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all hover:bg-gray-50"
-                          >
-                            <span className="text-xs font-semibold text-muted-foreground w-6 text-center">
-                              {booking.waitlist_position ?? '-'}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <Link
-                                href={`/profile/${booking.profiles.id}`}
-                                className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
+                      {groupBookingsByArtType(waitlistBookings).map(([artType, artTypeBookings]) => (
+                        <div key={`waitlist-${artType}`} className="space-y-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            {artType} ({artTypeBookings.length})
+                          </p>
+                          {artTypeBookings.map((booking) => {
+                            const isUpdating = updating === booking.id
+                            return (
+                              <div
+                                key={booking.id}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, booking.id)}
+                                className="flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all hover:bg-gray-50"
                               >
-                                {booking.profiles.full_name || 'No name'}
-                              </Link>
-                            </div>
-                            {isUpdating && (
-                              <span className="text-xs text-muted-foreground">Updating...</span>
-                            )}
-                          </div>
-                        )
-                      })}
+                                <span className="text-xs font-semibold text-muted-foreground w-6 text-center">
+                                  {booking.waitlist_position ?? '-'}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <Link
+                                    href={`/profile/${booking.profiles.id}`}
+                                    className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
+                                  >
+                                    {booking.profiles.full_name || 'No name'}
+                                  </Link>
+                                </div>
+                                {isUpdating && (
+                                  <span className="text-xs text-muted-foreground">Updating...</span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

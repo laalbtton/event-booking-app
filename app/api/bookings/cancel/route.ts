@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, user_id, event_id, credits_used, status, booking_scope')
+      .select('id, user_id, event_id, credits_used, status, booking_scope, event_art_type_id')
       .eq('id', bookingId)
       .single()
 
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const { data: event, error: eventError } = await supabase
       .from('events')
       .select(
-        'id, title, date, cancellation_hours, event_type, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents'
+        'id, title, date, cancellation_hours, event_type, open_mic_type, max_attendees, audience_capacity, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents'
       )
       .eq('id', booking.event_id)
       .single()
@@ -200,10 +200,40 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    const bookingScopeFilter = booking.booking_scope === 'audience' ? 'audience' : 'performer'
+    let scopedCapacity: number | null =
+      booking.booking_scope === 'audience'
+        ? Math.max(0, Number((event as any).audience_capacity || 0))
+        : event.max_attendees
+
+    const isVarietyPerformer =
+      booking.booking_scope !== 'audience' &&
+      event.event_type === 'open_mic' &&
+      (event as any).open_mic_type === 'variety_arts_open_mic'
+
+    if (isVarietyPerformer && booking.event_art_type_id) {
+      const { data: artTypeRow } = await supabase
+        .from('event_art_types')
+        .select('slot_capacity')
+        .eq('id', booking.event_art_type_id)
+        .eq('event_id', booking.event_id)
+        .maybeSingle()
+      scopedCapacity = Number(artTypeRow?.slot_capacity || 0)
+    }
+
     if (booking.status === 'confirmed') {
-      await supabase.rpc('promote_waitlist_and_update_positions', { event_uuid: booking.event_id })
+      await supabase.rpc('promote_waitlist_and_update_positions_scoped', {
+        event_uuid: booking.event_id,
+        booking_scope_filter: bookingScopeFilter,
+        event_art_type_uuid: isVarietyPerformer ? booking.event_art_type_id : null,
+        capacity_limit: scopedCapacity,
+      })
     } else {
-      await supabase.rpc('update_waitlist_positions', { event_uuid: booking.event_id })
+      await supabase.rpc('update_waitlist_positions_scoped', {
+        event_uuid: booking.event_id,
+        booking_scope_filter: bookingScopeFilter,
+        event_art_type_uuid: isVarietyPerformer ? booking.event_art_type_id : null,
+      })
     }
 
     return NextResponse.json({

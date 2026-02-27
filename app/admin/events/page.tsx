@@ -35,7 +35,10 @@ export default function AdminEventsPage() {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [venues, setVenues] = useState<Venue[]>([])
-  const [createStep, setCreateStep] = useState<'details' | 'tickets'>('details')
+  const [createStep, setCreateStep] = useState<'details' | 'tickets' | 'variety'>('details')
+  const [editVarietyOpen, setEditVarietyOpen] = useState(false)
+  const [languageInput, setLanguageInput] = useState('')
+  const [varietyArtTypes, setVarietyArtTypes] = useState<Array<{ id?: string; art_type_name: string; slot_capacity: string }>>([])
   const [posterUploadingId, setPosterUploadingId] = useState<string | null>(null)
   const [posterJobSummary, setPosterJobSummary] = useState<Record<string, { posted: number; failed: number; pending: number; skipped: number }>>({})
   const [posterPublishMeta, setPosterPublishMeta] = useState<Record<string, { count: number; lastPublishedAt: string | null }>>({})
@@ -46,6 +49,9 @@ export default function AdminEventsPage() {
     theme: '',
     rating: '18+',
     event_type: 'open_mic',
+    open_mic_type: 'comedy_open_mic',
+    is_multilingual: false,
+    languages: ['English'] as string[],
     tickets_enabled: false,
     external_event: false,
     external_ticket_url: '',
@@ -100,6 +106,97 @@ export default function AdminEventsPage() {
     const hours = parseFloat(hoursValue)
     if (Number.isNaN(hours) || hours <= 0) return 120
     return Math.round(hours * 60)
+  }
+
+  function sanitizeLanguage(input: string): string {
+    const trimmed = input.trim()
+    if (!trimmed) return ''
+    return trimmed.replace(/\s+/g, ' ')
+  }
+
+  function addLanguageTag() {
+    const next = sanitizeLanguage(languageInput)
+    if (!next) return
+    const exists = formData.languages.some((lang) => lang.toLowerCase() === next.toLowerCase())
+    if (exists) {
+      setLanguageInput('')
+      return
+    }
+    setFormData((prev) => ({ ...prev, languages: [...prev.languages, next] }))
+    setLanguageInput('')
+  }
+
+  function removeLanguageTag(tag: string) {
+    if (tag.toLowerCase() === 'english') return
+    setFormData((prev) => ({ ...prev, languages: prev.languages.filter((lang) => lang !== tag) }))
+  }
+
+  function normalizeLanguages(): string[] {
+    const deduped = formData.languages
+      .map((lang) => sanitizeLanguage(lang))
+      .filter(Boolean)
+      .filter((lang, idx, arr) => arr.findIndex((l) => l.toLowerCase() === lang.toLowerCase()) === idx)
+    if (!deduped.some((lang) => lang.toLowerCase() === 'english')) {
+      deduped.unshift('English')
+    }
+    return deduped
+  }
+
+  function addVarietyArtType() {
+    if (varietyArtTypes.length >= 5) return
+    setVarietyArtTypes((prev) => [...prev, { art_type_name: '', slot_capacity: '1' }])
+  }
+
+  function updateVarietyArtType(index: number, patch: Partial<{ art_type_name: string; slot_capacity: string }>) {
+    setVarietyArtTypes((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, ...patch } : item))
+    )
+  }
+
+  function removeVarietyArtType(index: number) {
+    setVarietyArtTypes((prev) => prev.filter((_, idx) => idx !== index))
+  }
+
+  function validateVarietyTypes(): { ok: boolean; error?: string } {
+    const normalized = varietyArtTypes
+      .map((item) => ({
+        name: item.art_type_name.trim(),
+        slots: Number(item.slot_capacity || 0),
+      }))
+      .filter((item) => item.name.length > 0)
+    if (normalized.length === 0) return { ok: false, error: 'Add at least one art type for variety open mic.' }
+    if (normalized.length > 5) return { ok: false, error: 'You can add up to 5 art types.' }
+    if (normalized.some((item) => !Number.isFinite(item.slots) || item.slots < 1)) {
+      return { ok: false, error: 'Each art type needs at least 1 slot.' }
+    }
+    const names = normalized.map((item) => item.name.toLowerCase())
+    if (new Set(names).size !== names.length) return { ok: false, error: 'Art type names must be unique.' }
+    return { ok: true }
+  }
+
+  async function saveEventArtTypes(eventId: string): Promise<Error | null> {
+    const isVarietyOpenMic =
+      formData.event_type === 'open_mic' && formData.open_mic_type === 'variety_arts_open_mic'
+    if (!isVarietyOpenMic) {
+      const { error } = await supabase.from('event_art_types').delete().eq('event_id', eventId)
+      return error ? new Error(error.message) : null
+    }
+    const cleaned = varietyArtTypes
+      .map((item) => ({
+        art_type_name: item.art_type_name.trim(),
+        slot_capacity: Math.max(1, Number(item.slot_capacity || 1)),
+      }))
+      .filter((item) => item.art_type_name.length > 0)
+      .slice(0, 5)
+    const { error: deleteError } = await supabase.from('event_art_types').delete().eq('event_id', eventId)
+    if (deleteError) return new Error(deleteError.message)
+    if (cleaned.length > 0) {
+      const { error: insertError } = await supabase.from('event_art_types').insert(
+        cleaned.map((item) => ({ event_id: eventId, ...item }))
+      )
+      if (insertError) return new Error(insertError.message)
+    }
+    return null
   }
 
   useEffect(() => {
@@ -224,12 +321,18 @@ export default function AdminEventsPage() {
         }
       }
 
-      if (formData.tickets_enabled && !formData.external_event) {
-        const priceValue = parseFloat(formData.ticket_price)
-        const quantityValue = parseInt(formData.ticket_quantity)
-        const minAllowedPrice = formData.tickets_redeemable_credits_enabled ? 0 : 0.01
-        if (!Number.isFinite(priceValue) || priceValue < minAllowedPrice || !Number.isFinite(quantityValue) || quantityValue <= 0) {
-          toast.error('Please provide a valid ticket price and quantity')
+      if (formData.is_multilingual && normalizeLanguages().length < 2) {
+        toast.error('Add at least one additional language for multilingual events.')
+        setSubmitting(false)
+        return
+      }
+
+      const isVarietyOpenMic =
+        formData.event_type === 'open_mic' && formData.open_mic_type === 'variety_arts_open_mic'
+      if (isVarietyOpenMic) {
+        const validity = validateVarietyTypes()
+        if (!validity.ok) {
+          toast.error(validity.error || 'Please fix variety slot configuration')
           setSubmitting(false)
           return
         }
@@ -241,12 +344,16 @@ export default function AdminEventsPage() {
 
       const isBookedShow = formData.event_type === 'booked_show'
       const isTicketed = formData.tickets_enabled
+      const normalizedLanguages = normalizeLanguages()
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
         rating: formData.rating || '18+',
         event_type: formData.event_type || 'open_mic',
+        open_mic_type: formData.event_type === 'open_mic' ? (formData.open_mic_type || 'comedy_open_mic') : null,
+        is_multilingual: !!formData.is_multilingual,
+        languages: normalizedLanguages,
         tickets_enabled: !!formData.tickets_enabled,
         external_event: !!formData.external_event,
         external_ticket_url: formData.tickets_enabled && formData.external_event
@@ -283,6 +390,11 @@ export default function AdminEventsPage() {
       if (error) {
         console.error('Error creating event:', error)
         throw error
+      }
+
+      const artTypeError = await saveEventArtTypes(data.id)
+      if (artTypeError) {
+        throw artTypeError
       }
 
       if (formData.tickets_enabled && !formData.external_event) {
@@ -337,12 +449,23 @@ export default function AdminEventsPage() {
       .eq('event_id', event.id)
       .maybeSingle()
 
+    const { data: artTypeData } = await supabase
+      .from('event_art_types')
+      .select('id, art_type_name, slot_capacity')
+      .eq('event_id', event.id)
+      .order('created_at', { ascending: true })
+
     setFormData({
       title: event.title,
       description: event.description || '',
       theme: event.theme || '',
       rating: (event as any).rating || '18+',
       event_type: (event as any).event_type || 'open_mic',
+      open_mic_type: (event as any).open_mic_type || 'comedy_open_mic',
+      is_multilingual: !!(event as any).is_multilingual,
+      languages: Array.isArray((event as any).languages) && (event as any).languages.length > 0
+        ? (event as any).languages
+        : ['English'],
       tickets_enabled: !!(event as any).tickets_enabled,
       external_event: !!(event as any).external_event,
       external_ticket_url: (event as any).external_ticket_url || '',
@@ -365,6 +488,14 @@ export default function AdminEventsPage() {
       open_registration_now: !event.registration_opens_at,
       registration_opens_at: regOpensAt
     })
+    setVarietyArtTypes(
+      (artTypeData || []).map((item: any) => ({
+        id: item.id,
+        art_type_name: item.art_type_name,
+        slot_capacity: String(item.slot_capacity),
+      }))
+    )
+    setEditVarietyOpen(false)
     setShowEditForm(true)
   }
 
@@ -390,6 +521,23 @@ export default function AdminEventsPage() {
         return
       }
 
+      if (formData.is_multilingual && normalizeLanguages().length < 2) {
+        toast.error('Add at least one additional language for multilingual events.')
+        setSubmitting(false)
+        return
+      }
+
+      const isVarietyOpenMic =
+        formData.event_type === 'open_mic' && formData.open_mic_type === 'variety_arts_open_mic'
+      if (isVarietyOpenMic) {
+        const validity = validateVarietyTypes()
+        if (!validity.ok) {
+          toast.error(validity.error || 'Please fix variety slot configuration')
+          setSubmitting(false)
+          return
+        }
+      }
+
       const previousMax = editingEvent.max_attendees ?? null
       const nextMax = formData.max_attendees ? parseInt(formData.max_attendees) : null
 
@@ -399,12 +547,16 @@ export default function AdminEventsPage() {
 
       const isBookedShow = formData.event_type === 'booked_show'
       const isTicketed = formData.tickets_enabled
+      const normalizedLanguages = normalizeLanguages()
       const eventData = {
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
         rating: formData.rating || '18+',
         event_type: formData.event_type || 'open_mic',
+        open_mic_type: formData.event_type === 'open_mic' ? (formData.open_mic_type || 'comedy_open_mic') : null,
+        is_multilingual: !!formData.is_multilingual,
+        languages: normalizedLanguages,
         tickets_enabled: !!formData.tickets_enabled,
         external_event: !!formData.external_event,
         external_ticket_url: formData.tickets_enabled && formData.external_event
@@ -442,6 +594,11 @@ export default function AdminEventsPage() {
         throw error
       }
 
+      const artTypeError = await saveEventArtTypes(editingEvent.id)
+      if (artTypeError) {
+        throw artTypeError
+      }
+
       if (formData.tickets_enabled && !formData.external_event) {
         const ticketPrice = Math.round(parseFloat(formData.ticket_price) * 100)
         const ticketQuantity = parseInt(formData.ticket_quantity)
@@ -453,11 +610,14 @@ export default function AdminEventsPage() {
         })
       }
 
-      if (previousMax !== null && nextMax !== null && nextMax > previousMax) {
+      if (!(formData.event_type === 'open_mic' && formData.open_mic_type === 'variety_arts_open_mic') && previousMax !== null && nextMax !== null && nextMax > previousMax) {
         const promotionsNeeded = nextMax - previousMax
         for (let i = 0; i < promotionsNeeded; i += 1) {
-          const { data: promoteResult } = await supabase.rpc('promote_waitlist_and_update_positions', {
-            event_uuid: editingEvent.id
+          const { data: promoteResult } = await supabase.rpc('promote_waitlist_and_update_positions_scoped', {
+            event_uuid: editingEvent.id,
+            booking_scope_filter: 'performer',
+            event_art_type_uuid: null,
+            capacity_limit: nextMax,
           })
           if (!promoteResult || !promoteResult.promoted) {
             break
@@ -485,6 +645,9 @@ export default function AdminEventsPage() {
       theme: '',
       rating: '18+',
       event_type: 'open_mic',
+      open_mic_type: 'comedy_open_mic',
+      is_multilingual: false,
+      languages: ['English'],
       tickets_enabled: false,
       external_event: false,
       external_ticket_url: '',
@@ -507,6 +670,9 @@ export default function AdminEventsPage() {
       open_registration_now: true,
       registration_opens_at: ''
     })
+    setLanguageInput('')
+    setVarietyArtTypes([])
+    setEditVarietyOpen(false)
   }
 
   async function handleCancelEvent(eventId: string, eventTitle: string) {
@@ -888,6 +1054,7 @@ export default function AdminEventsPage() {
                           setFormData({
                             ...formData,
                             event_type: nextType,
+                            open_mic_type: nextType === 'open_mic' ? (formData.open_mic_type || 'comedy_open_mic') : null as any,
                             credits_required: nextType === 'booked_show' ? '0' : formData.credits_required || '5',
                             cancellation_hours: nextType === 'booked_show' ? '0' : formData.cancellation_hours || '4',
                           })
@@ -899,6 +1066,110 @@ export default function AdminEventsPage() {
                 ))}
               </div>
             </div>
+
+            {formData.event_type === 'open_mic' && (
+              <div>
+                <Label>Open Mic Type</Label>
+                <div className="flex items-center gap-4">
+                  {[
+                    { value: 'comedy_open_mic', label: 'Comedy Open Mic' },
+                    { value: 'variety_arts_open_mic', label: 'Variety Arts Open Mic' },
+                  ].map((option) => (
+                    <label key={option.value} className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="radio"
+                        name="edit-open-mic-type"
+                        value={option.value}
+                        checked={formData.open_mic_type === option.value}
+                        onChange={(e) => setFormData({ ...formData, open_mic_type: e.target.value as any })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2 rounded-lg border p-3">
+              <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={formData.is_multilingual}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      is_multilingual: e.target.checked,
+                      languages: e.target.checked ? formData.languages : ['English'],
+                    })
+                  }
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                />
+                Multilingual event
+              </Label>
+              {formData.is_multilingual && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      value={languageInput}
+                      onChange={(e) => setLanguageInput(e.target.value)}
+                      placeholder="Add language (free text)"
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={addLanguageTag}>
+                      Add
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.languages.map((lang) => (
+                      <span key={lang} className="inline-flex items-center gap-2 rounded-full border px-2 py-1 text-xs">
+                        {lang}
+                        {lang.toLowerCase() !== 'english' && (
+                          <button type="button" onClick={() => removeLanguageTag(lang)} aria-label={`Remove ${lang}`}>
+                            ×
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {formData.event_type === 'open_mic' && formData.open_mic_type === 'variety_arts_open_mic' && (
+              <div className="border rounded-lg p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Variety performance types</p>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setEditVarietyOpen((prev) => !prev)}>
+                    {editVarietyOpen ? 'Hide' : 'Configure variety slots'}
+                  </Button>
+                </div>
+                {editVarietyOpen && (
+                  <div className="space-y-2">
+                    {varietyArtTypes.map((item, index) => (
+                      <div key={`${item.id || 'edit'}-${index}`} className="grid grid-cols-[1fr_140px_auto] gap-2">
+                        <Input
+                          value={item.art_type_name}
+                          onChange={(e) => updateVarietyArtType(index, { art_type_name: e.target.value })}
+                          placeholder="Art type"
+                        />
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.slot_capacity}
+                          onChange={(e) => updateVarietyArtType(index, { slot_capacity: e.target.value })}
+                        />
+                        <Button type="button" variant="outline" size="sm" onClick={() => removeVarietyArtType(index)}>
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                    <Button type="button" variant="outline" onClick={addVarietyArtType} disabled={varietyArtTypes.length >= 5}>
+                      Add Art Type
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div>
               <Label htmlFor="edit-date">Date & Time *</Label>
@@ -1318,6 +1589,7 @@ export default function AdminEventsPage() {
                           setFormData({
                             ...formData,
                             event_type: nextType,
+                            open_mic_type: nextType === 'open_mic' ? (formData.open_mic_type || 'comedy_open_mic') : null as any,
                             credits_required: nextType === 'booked_show' ? '0' : formData.credits_required || '5',
                             cancellation_hours: nextType === 'booked_show' ? '0' : formData.cancellation_hours || '4',
                           })
@@ -1328,6 +1600,74 @@ export default function AdminEventsPage() {
                   </label>
                 ))}
               </div>
+            </div>
+
+            {formData.event_type === 'open_mic' && (
+              <div>
+                <Label>Open Mic Type</Label>
+                <div className="flex items-center gap-4">
+                  {[
+                    { value: 'comedy_open_mic', label: 'Comedy Open Mic' },
+                    { value: 'variety_arts_open_mic', label: 'Variety Arts Open Mic' },
+                  ].map((option) => (
+                    <label key={option.value} className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="radio"
+                        name="create-open-mic-type"
+                        value={option.value}
+                        checked={formData.open_mic_type === option.value}
+                        onChange={(e) => setFormData({ ...formData, open_mic_type: e.target.value as any })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2 rounded-lg border p-3">
+              <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={formData.is_multilingual}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      is_multilingual: e.target.checked,
+                      languages: e.target.checked ? formData.languages : ['English'],
+                    })
+                  }
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                />
+                Multilingual event
+              </Label>
+              {formData.is_multilingual && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      value={languageInput}
+                      onChange={(e) => setLanguageInput(e.target.value)}
+                      placeholder="Add language (free text)"
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={addLanguageTag}>
+                      Add
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.languages.map((lang) => (
+                      <span key={lang} className="inline-flex items-center gap-2 rounded-full border px-2 py-1 text-xs">
+                        {lang}
+                        {lang.toLowerCase() !== 'english' && (
+                          <button type="button" onClick={() => removeLanguageTag(lang)} aria-label={`Remove ${lang}`}>
+                            ×
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between gap-3">
@@ -1346,6 +1686,15 @@ export default function AdminEventsPage() {
                 </Button>
               )}
             </div>
+
+            {formData.event_type === 'open_mic' && formData.open_mic_type === 'variety_arts_open_mic' && (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">Set art performance types and slot capacities.</p>
+                <Button type="button" size="sm" variant="outline" onClick={() => setCreateStep('variety')}>
+                  Configure variety slots
+                </Button>
+              </div>
+            )}
 
             <div>
               <Label htmlFor="create-date">Date & Time *</Label>
@@ -1642,6 +1991,41 @@ export default function AdminEventsPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {createStep === 'variety' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-semibold">Variety Performance Types</h4>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCreateStep('details')}>
+                    Back
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">Add up to 5 art types with slot counts.</p>
+                <div className="space-y-2">
+                  {varietyArtTypes.map((item, index) => (
+                    <div key={`${item.id || 'new'}-${index}`} className="grid grid-cols-[1fr_140px_auto] gap-2">
+                      <Input
+                        value={item.art_type_name}
+                        onChange={(e) => updateVarietyArtType(index, { art_type_name: e.target.value })}
+                        placeholder="Art type (e.g. Spoken Word)"
+                      />
+                      <Input
+                        type="number"
+                        min="1"
+                        value={item.slot_capacity}
+                        onChange={(e) => updateVarietyArtType(index, { slot_capacity: e.target.value })}
+                      />
+                      <Button type="button" variant="outline" size="sm" onClick={() => removeVarietyArtType(index)}>
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <Button type="button" variant="outline" onClick={addVarietyArtType} disabled={varietyArtTypes.length >= 5}>
+                  Add Art Type
+                </Button>
               </div>
             )}
 
