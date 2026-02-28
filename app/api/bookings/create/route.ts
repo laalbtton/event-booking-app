@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     const { data: event, error: eventError } = await supabase
       .from('events')
       .select(
-        'id, title, status, event_type, open_mic_type, tickets_enabled, audience_enabled, audience_capacity, audience_deposit_credits, max_attendees, registration_opens_at, venue_id, credits_required, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents, food_coupon_expires_hours, date, end_time'
+        'id, title, status, event_type, open_mic_type, variety_use_max_attendees, tickets_enabled, audience_enabled, audience_capacity, audience_deposit_credits, max_attendees, registration_opens_at, venue_id, credits_required, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents, food_coupon_expires_hours, date, end_time'
       )
       .eq('id', eventId)
       .single()
@@ -144,7 +144,11 @@ export async function POST(request: NextRequest) {
       selectedArtTypeCapacity = Number(artTypeRow.slot_capacity || 0)
     }
 
-    const performerCapacity = selectedArtTypeCapacity ?? event.max_attendees
+    const useGlobalVarietyCapacity =
+      requiresArtTypeSelection && !!(event as any).variety_use_max_attendees
+    const performerCapacity = useGlobalVarietyCapacity
+      ? event.max_attendees
+      : (selectedArtTypeCapacity ?? event.max_attendees)
     const audienceCapacity = Math.max(0, Number((event as any).audience_capacity || 15))
     const capacityField = isAudienceBooking ? audienceCapacity : performerCapacity
     const capacityScope = isAudienceBooking ? 'audience' : 'performer'
@@ -157,9 +161,9 @@ export async function POST(request: NextRequest) {
       .eq('booking_scope', capacityScope)
 
     if (!isAudienceBooking) {
-      if (selectedArtTypeId) {
+      if (selectedArtTypeId && !useGlobalVarietyCapacity) {
         confirmedCountQuery = confirmedCountQuery.eq('event_art_type_id', selectedArtTypeId)
-      } else {
+      } else if (!selectedArtTypeId) {
         confirmedCountQuery = confirmedCountQuery.is('event_art_type_id', null)
       }
     }
@@ -236,7 +240,8 @@ export async function POST(request: NextRequest) {
       await supabase.rpc('update_waitlist_positions_scoped', {
         event_uuid: event.id,
         booking_scope_filter: capacityScope,
-        event_art_type_uuid: isAudienceBooking ? null : selectedArtTypeId,
+        event_art_type_uuid: isAudienceBooking || useGlobalVarietyCapacity ? null : selectedArtTypeId,
+        include_all_art_types: useGlobalVarietyCapacity,
       })
     }
 

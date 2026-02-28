@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, date, cancellation_hours, event_type, open_mic_type, max_attendees, audience_capacity, created_by, host_user_id')
+      .select('id, date, cancellation_hours, event_type, open_mic_type, variety_use_max_attendees, max_attendees, audience_capacity, created_by, host_user_id')
       .eq('id', booking.event_id)
       .single()
 
@@ -158,8 +158,9 @@ export async function POST(request: NextRequest) {
       booking.booking_scope !== 'audience' &&
       event.event_type === 'open_mic' &&
       (event as any).open_mic_type === 'variety_arts_open_mic'
+    const useGlobalVarietyCapacity = isVarietyPerformer && !!(event as any).variety_use_max_attendees
 
-    if (isVarietyPerformer && booking.event_art_type_id) {
+    if (isVarietyPerformer && booking.event_art_type_id && !useGlobalVarietyCapacity) {
       const { data: artTypeRow } = await supabase
         .from('event_art_types')
         .select('slot_capacity')
@@ -173,14 +174,16 @@ export async function POST(request: NextRequest) {
       await supabase.rpc('promote_waitlist_and_update_positions_scoped', {
         event_uuid: booking.event_id,
         booking_scope_filter: bookingScopeFilter,
-        event_art_type_uuid: isVarietyPerformer ? booking.event_art_type_id : null,
+        event_art_type_uuid: isVarietyPerformer && !useGlobalVarietyCapacity ? booking.event_art_type_id : null,
         capacity_limit: scopedCapacity,
+        include_all_art_types: useGlobalVarietyCapacity,
       })
     } else if (booking.status === 'waitlist') {
       await supabase.rpc('update_waitlist_positions_scoped', {
         event_uuid: booking.event_id,
         booking_scope_filter: bookingScopeFilter,
-        event_art_type_uuid: isVarietyPerformer ? booking.event_art_type_id : null,
+        event_art_type_uuid: isVarietyPerformer && !useGlobalVarietyCapacity ? booking.event_art_type_id : null,
+        include_all_art_types: useGlobalVarietyCapacity,
       })
     }
 

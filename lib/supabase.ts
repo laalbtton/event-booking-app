@@ -58,6 +58,7 @@ export type Event = {
   status?: string | null
   event_type: 'open_mic' | 'booked_show'
   open_mic_type?: 'comedy_open_mic' | 'variety_arts_open_mic' | null
+  variety_use_max_attendees?: boolean
   is_multilingual?: boolean
   languages?: string[]
   tickets_enabled: boolean

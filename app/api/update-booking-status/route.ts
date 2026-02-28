@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, max_attendees, audience_capacity, created_by, host_user_id, event_type, open_mic_type')
+      .select('id, max_attendees, audience_capacity, created_by, host_user_id, event_type, open_mic_type, variety_use_max_attendees')
       .eq('id', booking.event_id)
       .single()
 
@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
       bookingScope === 'performer' &&
       event.event_type === 'open_mic' &&
       (event as any).open_mic_type === 'variety_arts_open_mic'
+    const useGlobalVarietyCapacity = isVarietyPerformer && !!(event as any).variety_use_max_attendees
 
     if (status === 'confirmed' && event.event_type !== 'booked_show') {
       let capacity: number | null =
@@ -95,7 +96,7 @@ export async function POST(request: NextRequest) {
         .eq('status', 'confirmed')
         .eq('booking_scope', bookingScope)
 
-      if (isVarietyPerformer && booking.event_art_type_id) {
+      if (isVarietyPerformer && booking.event_art_type_id && !useGlobalVarietyCapacity) {
         const { data: artTypeRow, error: artTypeError } = await supabase
           .from('event_art_types')
           .select('slot_capacity')
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
         }
         capacity = Number(artTypeRow.slot_capacity || 0)
         countQuery = countQuery.eq('event_art_type_id', booking.event_art_type_id)
-      } else {
+      } else if (!isVarietyPerformer) {
         countQuery = countQuery.is('event_art_type_id', null)
       }
 
@@ -150,7 +151,8 @@ export async function POST(request: NextRequest) {
     await supabase.rpc('update_waitlist_positions_scoped', {
       event_uuid: booking.event_id,
       booking_scope_filter: bookingScope,
-      event_art_type_uuid: isVarietyPerformer ? booking.event_art_type_id : null,
+      event_art_type_uuid: isVarietyPerformer && !useGlobalVarietyCapacity ? booking.event_art_type_id : null,
+      include_all_art_types: useGlobalVarietyCapacity,
     })
 
     if (event.event_type === 'booked_show') {
