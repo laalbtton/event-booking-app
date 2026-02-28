@@ -131,11 +131,17 @@ export default function Dashboard() {
   }
 
   function formatEventLanguages(event: Event): string {
-    const langs = Array.isArray((event as any).languages) ? (event as any).languages.filter(Boolean) : ['English']
-    const resolved = langs.length > 0 ? langs : ['English']
-    const isMulti = !!(event as any).is_multilingual || resolved.length > 1
-    if (!isMulti) return resolved[0] || 'English'
-    return `Multilingual: ${resolved.join(', ')}`
+    const langs = Array.isArray((event as any).languages) ? (event as any).languages : ['English']
+    const cleaned = langs
+      .map((lang: string) => String(lang || '').trim())
+      .filter(Boolean)
+      .filter((lang: string, idx: number, arr: string[]) => arr.findIndex((l) => l.toLowerCase() === lang.toLowerCase()) === idx)
+
+    const withEnglish = cleaned.some((lang: string) => lang.toLowerCase() === 'english')
+      ? cleaned
+      : [...cleaned, 'English']
+    const nonEnglish = withEnglish.filter((lang: string) => lang.toLowerCase() !== 'english')
+    return [...nonEnglish, 'English'].join(', ')
   }
 
   function getOpenMicSubtypeLabel(event: Event): string | null {
@@ -1185,6 +1191,11 @@ export default function Dashboard() {
           <div className="space-y-2">
             {varietyOptions.map((option) => {
               const spotsLeft = Math.max(0, option.capacity - option.confirmedCount)
+              const useGlobalVarietyCapacity =
+                !!varietyDialogEvent &&
+                varietyDialogEvent.event_type === 'open_mic' &&
+                (varietyDialogEvent as any).open_mic_type === 'variety_arts_open_mic' &&
+                !!(varietyDialogEvent as any).variety_use_max_attendees
               return (
                 <button
                   key={option.id}
@@ -1197,9 +1208,9 @@ export default function Dashboard() {
                 >
                   <div className="font-medium">{option.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    {option.confirmedCount}/{option.capacity} confirmed
-                    {spotsLeft === 0 ? ' (full, joins waitlist)' : ` (${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left)`} ·
-                    {' '}{option.waitlistCount} waitlisted
+                    {useGlobalVarietyCapacity
+                      ? 'Category available'
+                      : `${option.confirmedCount}/${option.capacity} confirmed${spotsLeft === 0 ? ' (full, joins waitlist)' : ` (${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left)`} · ${option.waitlistCount} waitlisted`}
                   </div>
                 </button>
               )
@@ -1831,15 +1842,15 @@ export default function Dashboard() {
                                   Redeemable Credits
                                 </Badge>
                               )}
-                              {openMicSubtype && (
-                                <Badge variant="outline" className="whitespace-nowrap">
-                                  {openMicSubtype}
-                                </Badge>
-                              )}
                             </div>
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-2">
+                          {openMicSubtype && (
+                            <div className="text-xs text-muted-foreground">
+                              🎭 {openMicSubtype}
+                            </div>
+                          )}
                           <p className="text-xs text-muted-foreground line-clamp-1 break-words whitespace-normal">
                             {event.description}
                           </p>

@@ -28,6 +28,7 @@ type EventDetails = {
   status?: string | null
   event_type: 'open_mic' | 'booked_show'
   open_mic_type?: 'comedy_open_mic' | 'variety_arts_open_mic' | null
+  variety_use_max_attendees?: boolean
   is_multilingual?: boolean
   languages?: string[]
   tickets_enabled: boolean
@@ -65,6 +66,7 @@ type AttendeeBooking = {
   id: string
   status: string
   waitlist_position: number | null
+  event_art_type_id?: string | null
   profiles: {
     id: string
     full_name: string
@@ -118,10 +120,10 @@ export default function EventDetailsPage() {
 
   function copyAttendeeList() {
     const confirmed = confirmedBookings.map((booking, index) =>
-      `${index + 1}. ${booking.profiles.full_name || 'No name'}`
+      `${index + 1}. ${booking.profiles.full_name || 'No name'}${getBookingArtTypeLabel(booking) ? ` (${getBookingArtTypeLabel(booking)})` : ''}`
     )
     const waitlist = waitlistBookings.map((booking, index) =>
-      `${index + 1}. ${booking.profiles.full_name || 'No name'}`
+      `${index + 1}. ${booking.profiles.full_name || 'No name'}${getBookingArtTypeLabel(booking) ? ` (${getBookingArtTypeLabel(booking)})` : ''}`
     )
 
     let text = `Confirmed Attendees (${confirmed.length})\n${confirmed.join('\n') || 'None'}`
@@ -150,6 +152,13 @@ export default function EventDetailsPage() {
     if (!event || event.event_type !== 'open_mic') return null
     const subtype = (event as any).open_mic_type || 'comedy_open_mic'
     return subtype === 'variety_arts_open_mic' ? 'Variety Arts Open Mic' : 'Comedy Open Mic'
+  }
+
+  function getBookingArtTypeLabel(booking: AttendeeBooking): string | null {
+    if (!event || event.event_type !== 'open_mic' || (event as any).open_mic_type !== 'variety_arts_open_mic') return null
+    if (!booking.event_art_type_id) return null
+    const match = varietyOptions.find((option) => option.id === booking.event_art_type_id)
+    return match?.name || null
   }
 
   async function sharePoster() {
@@ -413,7 +422,7 @@ export default function EventDetailsPage() {
     setError('')
 
     try {
-      if (eventData.tickets_enabled) {
+      if (eventData.tickets_enabled && eventData.event_type !== 'open_mic') {
         throw new Error('This event uses external tickets')
       }
       if (eventData.event_type === 'booked_show') {
@@ -472,12 +481,17 @@ export default function EventDetailsPage() {
         }
       }
 
-      const effectiveCreditsRequired = eventData.food_coupon_enabled
-        ? Math.max(0, Number(eventData.spot_fee_credits || 0)) +
-          Math.ceil(Math.max(0, Number(eventData.food_coupon_value_cents || 0)) / 100)
-        : eventData.credits_required
+      const isAudienceUser = profile.role === 'audience'
+      const audienceDepositCredits = Math.max(0, Number((eventData as any).audience_deposit_credits || 1))
+      const audienceHasFreePass = Number(profile.audience_free_passes_remaining || 0) > 0
+      const effectiveCreditsRequired = isAudienceUser
+        ? (audienceHasFreePass ? 0 : audienceDepositCredits)
+        : (eventData.food_coupon_enabled
+          ? Math.max(0, Number(eventData.spot_fee_credits || 0)) +
+            Math.ceil(Math.max(0, Number(eventData.food_coupon_value_cents || 0)) / 100)
+          : eventData.credits_required)
 
-      if (profile.credits < effectiveCreditsRequired) {
+      if (Number(profile.credits || 0) < effectiveCreditsRequired) {
         throw new Error('Insufficient credits')
       }
 
@@ -552,13 +566,27 @@ export default function EventDetailsPage() {
   const isFull = event.max_attendees !== null && confirmedBookings.length >= event.max_attendees
   const isAlreadyBooked =
     !!userBooking && (userBooking.status === 'confirmed' || userBooking.status === 'waitlist')
-  const bookingLabel = isFull ? 'Join Waitlist' : 'Book Event'
+  const isAudienceUser = profile?.role === 'audience'
+  const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 1))
+  const audienceHasFreePass = Number(profile?.audience_free_passes_remaining || 0) > 0
+  const creditsRequiredForButton = isAudienceUser
+    ? (audienceHasFreePass ? 0 : audienceDepositCredits)
+    : (event.food_coupon_enabled
+      ? Math.max(0, Number(event.spot_fee_credits || 0)) +
+        Math.ceil(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100)
+      : event.credits_required)
+  const canAfford = Number(profile?.credits || 0) >= creditsRequiredForButton
+  const bookingLabel = isFull ? 'Join Waitlist' : isAudienceUser ? 'Reserve Spot' : 'Book Event'
   const now = new Date()
   const startTime = new Date(event.date)
   const endTime = event.end_time
     ? new Date(event.end_time)
     : new Date(new Date(event.date).getTime() + 2 * 60 * 60 * 1000)
   const isInProgress = startTime <= now && now < endTime
+  const useGlobalVarietyCapacity =
+    event.event_type === 'open_mic' &&
+    (event as any).open_mic_type === 'variety_arts_open_mic' &&
+    !!(event as any).variety_use_max_attendees
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -585,9 +613,9 @@ export default function EventDetailsPage() {
                 >
                   <div className="font-medium">{option.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    {option.confirmedCount}/{option.capacity} confirmed
-                    {spotsLeft === 0 ? ' (full, joins waitlist)' : ` (${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left)`} ·
-                    {' '}{option.waitlistCount} waitlisted
+                    {useGlobalVarietyCapacity
+                      ? 'Category available'
+                      : `${option.confirmedCount}/${option.capacity} confirmed${spotsLeft === 0 ? ' (full, joins waitlist)' : ` (${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left)`} · ${option.waitlistCount} waitlisted`}
                   </div>
                 </button>
               )
@@ -748,9 +776,9 @@ export default function EventDetailsPage() {
                   <div className="text-sm md:text-base text-gray-900">
                     <span className="mr-2">🎭</span>
                     <span>
-                      {varietyOptions
-                        .map((option) => `${option.name}: ${Math.max(0, option.capacity - option.confirmedCount)} left`)
-                        .join(' · ')}
+                      {useGlobalVarietyCapacity
+                        ? varietyOptions.map((option) => option.name).join(' · ')
+                        : varietyOptions.map((option) => `${option.name}: ${Math.max(0, option.capacity - option.confirmedCount)} left`).join(' · ')}
                     </span>
                   </div>
                 )}
@@ -811,7 +839,7 @@ export default function EventDetailsPage() {
                 ) : (
                   <Button
                     onClick={() => handleBookEvent(event)}
-                    disabled={bookingLoading || isAlreadyBooked}
+                    disabled={bookingLoading || isAlreadyBooked || !canAfford}
                     size="sm"
                   >
                     {bookingLoading
@@ -820,6 +848,8 @@ export default function EventDetailsPage() {
                         ? userBooking?.status === 'waitlist'
                           ? 'On Waitlist'
                           : 'Booked'
+                        : !canAfford
+                          ? 'Not enough credits'
                         : bookingLabel}
                   </Button>
                 )
@@ -899,6 +929,11 @@ export default function EventDetailsPage() {
                       <p className="text-xs md:text-sm font-medium truncate hover:text-primary transition-colors">
                         {booking.profiles.full_name}
                       </p>
+                      {getBookingArtTypeLabel(booking) && (
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {getBookingArtTypeLabel(booking)}
+                        </p>
+                      )}
                     </div>
                   </Link>
                 ))}
@@ -932,6 +967,11 @@ export default function EventDetailsPage() {
                       <p className="text-xs md:text-sm font-medium truncate hover:text-primary transition-colors">
                         {booking.profiles.full_name}
                       </p>
+                      {getBookingArtTypeLabel(booking) && (
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {getBookingArtTypeLabel(booking)}
+                        </p>
+                      )}
                     </div>
                   </Link>
                 ))}

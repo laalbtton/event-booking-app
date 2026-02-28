@@ -22,6 +22,7 @@ type EventDetails = {
   status?: string | null
   event_type: 'open_mic' | 'booked_show'
   open_mic_type?: 'comedy_open_mic' | 'variety_arts_open_mic' | null
+  variety_use_max_attendees?: boolean
   is_multilingual?: boolean
   languages?: string[]
   tickets_enabled: boolean
@@ -48,6 +49,7 @@ type AttendeeBooking = {
   id: string
   status: string
   waitlist_position: number | null
+  event_art_type_id?: string | null
   profiles: {
     id: string
     full_name: string
@@ -73,6 +75,13 @@ export default function PublicEventPage() {
   const [isUnavailable, setIsUnavailable] = useState(false)
   const [hostProfile, setHostProfile] = useState<{ full_name: string } | null>(null)
   const [varietyOptions, setVarietyOptions] = useState<VarietyArtOption[]>([])
+
+  function getBookingArtTypeLabel(booking: AttendeeBooking): string | null {
+    if (!event || event.event_type !== 'open_mic' || (event as any).open_mic_type !== 'variety_arts_open_mic') return null
+    if (!booking.event_art_type_id) return null
+    const match = varietyOptions.find((option) => option.id === booking.event_art_type_id)
+    return match?.name || null
+  }
 
   useEffect(() => {
     loadEventDetails()
@@ -247,6 +256,10 @@ export default function PublicEventPage() {
   const spotsAvailable = event.max_attendees 
     ? event.max_attendees - confirmedBookings.length 
     : null
+  const useGlobalVarietyCapacity =
+    event.event_type === 'open_mic' &&
+    (event as any).open_mic_type === 'variety_arts_open_mic' &&
+    !!(event as any).variety_use_max_attendees
 
   const eventDate = new Date(event.date)
   const now = new Date()
@@ -388,9 +401,9 @@ export default function PublicEventPage() {
                 <div className="flex items-center text-sm md:text-base">
                   <span className="mr-2">🎭</span>
                   <span>
-                    {varietyOptions
-                      .map((option) => `${option.name}: ${Math.max(0, option.capacity - option.confirmedCount)} left`)
-                      .join(' · ')}
+                    {useGlobalVarietyCapacity
+                      ? varietyOptions.map((option) => option.name).join(' · ')
+                      : varietyOptions.map((option) => `${option.name}: ${Math.max(0, option.capacity - option.confirmedCount)} left`).join(' · ')}
                   </span>
                 </div>
               )}
@@ -439,6 +452,11 @@ export default function PublicEventPage() {
                       <p className="text-xs md:text-sm font-medium truncate hover:text-primary transition-colors">
                         {booking.profiles.full_name}
                       </p>
+                      {getBookingArtTypeLabel(booking) && (
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {getBookingArtTypeLabel(booking)}
+                        </p>
+                      )}
                     </div>
                   </Link>
                 ))}
@@ -472,6 +490,11 @@ export default function PublicEventPage() {
                       <p className="text-xs md:text-sm font-medium truncate hover:text-primary transition-colors">
                         {booking.profiles.full_name}
                       </p>
+                      {getBookingArtTypeLabel(booking) && (
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {getBookingArtTypeLabel(booking)}
+                        </p>
+                      )}
                     </div>
                   </Link>
                 ))}
