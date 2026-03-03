@@ -274,10 +274,8 @@ export default function PublicEventPage() {
   const languageSummary = ((event as any).is_multilingual || languages.length > 1)
     ? `Multilingual: ${languages.join(', ')}`
     : (languages[0] || 'English')
-  const openMicSubtype =
-    event.event_type === 'open_mic'
-      ? ((event as any).open_mic_type === 'variety_arts_open_mic' ? 'Variety Arts Open Mic' : 'Comedy Open Mic')
-      : null
+  const ratingLabel = String(event.rating || '18+').trim()
+  const ratingDisplay = `${ratingLabel.toLowerCase().includes('all') ? '👨‍👩‍👧‍👦' : '🔞'} ${ratingLabel}`
 
   return (
     <div className="min-h-screen bg-background">
@@ -296,7 +294,7 @@ export default function PublicEventPage() {
               <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">{event.title}</CardTitle>
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="text-xs">
-                  Rating: {event.rating || '18+'}
+                  {ratingDisplay}
                 </Badge>
                 {isInProgress && (
                   <Badge variant="outline" className="text-blue-600 border-blue-600">
@@ -318,7 +316,6 @@ export default function PublicEventPage() {
                   🎨 Theme: {event.theme}
                 </Badge>
               )}
-              {openMicSubtype && <Badge variant="outline">{openMicSubtype}</Badge>}
               <Badge variant="outline">🗣️ {languageSummary}</Badge>
 
               {hostProfile && (

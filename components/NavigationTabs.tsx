@@ -477,6 +477,14 @@ export default function NavigationTabs() {
           </DialogHeader>
           <div className="space-y-2">
             <Button
+              asChild
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => setMoreOpen(false)}
+            >
+              <Link href="/settings">Settings</Link>
+            </Button>
+            <Button
               variant="destructive"
               className="w-full justify-start"
               onClick={handleSignOut}

@@ -944,93 +944,24 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {shouldShowPushReminder && (
-          <Card className="shadow-sm mb-6 border-blue-200">
-            <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Turn on push notifications</p>
-                <p className="text-xs text-muted-foreground">
-                  Get reminders, waitlist promotions, and booking updates instantly.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleEnablePushNotifications} disabled={pushActionLoading}>
-                  Enable
-                </Button>
-                <Button size="sm" variant="outline" onClick={handleDismissPushReminder} disabled={pushActionLoading}>
-                  Not now
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card className="shadow-sm mb-6">
+        <Card className="shadow-sm mb-6 border-blue-200">
           <CardHeader>
-            <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">Push Notifications</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">Settings</CardTitle>
             <CardDescription>
-              Get waitlist promotions, booking updates, and reminder alerts on your device.
+              Push notifications, Instagram auto-post, and install options are now in one place.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Status:{' '}
-              {!pushSupported
-                ? 'Not supported on this browser/device'
-                : pushPermission === 'granted'
-                ? 'Enabled'
-                : pushPermission === 'denied'
-                ? 'Blocked by browser settings'
-                : 'Not enabled'}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={handleEnablePushNotifications}
-                disabled={!pushSupported || pushActionLoading || pushPermission === 'granted'}
-              >
-                {pushActionLoading ? 'Please wait...' : 'Enable Notifications'}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleDisablePushNotifications}
-                disabled={!pushSupported || pushActionLoading || !pushPrefs?.subscribed_at}
-              >
-                Disable Notifications
-              </Button>
-            </div>
-            {pushPermission === 'denied' && (
-              <p className="text-xs text-muted-foreground">
-                Notifications were denied by the browser. To re-enable, allow notifications in browser/site settings.
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href="/settings">Open Settings</Link>
+            </Button>
+            {shouldShowPushReminder && (
+              <p className="text-xs text-muted-foreground mt-3">
+                Notifications are not enabled yet. You can enable them from Settings.
               </p>
             )}
           </CardContent>
         </Card>
-
-        {!isStandalone && (
-          <Card className="shadow-sm mb-6 border-blue-200">
-            <CardHeader>
-              <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
-                <Download className="h-5 w-5 text-blue-600" />
-                Add to Home Screen
-              </CardTitle>
-              <CardDescription>
-                Install Laal Button so you can launch it like an app from your home screen.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button onClick={handleInstallFromProfile} disabled={installActionLoading}>
-                {installActionLoading ? 'Opening...' : 'Install App'}
-              </Button>
-              {showInstallHelp && (
-                <p className="text-xs text-muted-foreground">
-                  {installPlatform === 'ios'
-                    ? 'Open Safari Share menu, choose Add to Home Screen, then tap Add.'
-                    : 'Open your browser menu and choose Install app or Add to Home screen.'}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* Event Bookings */}
         {(eventBookings.length > 0 || invites.length > 0) ? (
@@ -1200,61 +1131,6 @@ export default function ProfilePage() {
           </Card>
         )}
 
-        <Card className="shadow-sm mt-6">
-          <CardHeader>
-            <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">Poster Auto-Post</CardTitle>
-            <CardDescription>Connect Instagram and control poster auto-post behavior.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-lg">
-              <div>
-                <p className="text-sm font-medium">
-                  Instagram {instagramConnected ? `connected${instagramUsername ? ` as @${instagramUsername}` : ''}` : 'not connected'}
-                </p>
-                <p className="text-xs text-muted-foreground">Only Instagram Business/Creator accounts are supported.</p>
-              </div>
-              {instagramConnected ? (
-                <Button variant="outline" onClick={handleDisconnectInstagram} disabled={autopostLoading}>
-                  Disconnect
-                </Button>
-              ) : (
-                <Button onClick={handleConnectInstagram} disabled={autopostLoading}>
-                  Connect Instagram
-                </Button>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div>
-                <p className="text-sm font-medium">Enable auto-post by default</p>
-                <p className="text-xs text-muted-foreground">Applied to new event posters unless you override per event.</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={globalAutoPostEnabled}
-                disabled={!instagramConnected || autopostLoading}
-                onChange={(e) => updateGlobalAutoPost(e.target.checked)}
-                className="h-4 w-4"
-              />
-            </div>
-
-            <div>
-              <p className="text-sm font-medium mb-2">Recent auto-post activity</p>
-              {autopostJobs.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No poster jobs yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {autopostJobs.map((job) => (
-                    <div key={job.id} className="flex items-center justify-between text-xs p-2 border rounded">
-                      <span className="text-muted-foreground">{new Date(job.created_at).toLocaleString()}</span>
-                      <Badge variant="outline">{job.status}</Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )

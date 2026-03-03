@@ -144,10 +144,10 @@ export default function Dashboard() {
     return [...nonEnglish, 'English'].join(', ')
   }
 
-  function getOpenMicSubtypeLabel(event: Event): string | null {
-    if (event.event_type !== 'open_mic') return null
-    const subtype = (event as any).open_mic_type || 'comedy_open_mic'
-    return subtype === 'variety_arts_open_mic' ? 'Variety Arts Open Mic' : 'Comedy Open Mic'
+  function getRatingDisplay(rating: string | null | undefined): string {
+    const normalized = String(rating || '18+').trim()
+    const isAllAges = normalized.toLowerCase().includes('all')
+    return `${isAllAges ? '👨‍👩‍👧‍👦' : '🔞'} ${normalized}`
   }
 
   async function openVarietyPicker(event: Event) {
@@ -1517,12 +1517,12 @@ export default function Dashboard() {
                             {booking.events.theme ? `🎨 ${booking.events.theme}` : ''}
                           </div>
                         </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1">
-                            <span className="sr-only">Rating</span>
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <div className="min-w-0 flex-1 pr-2 text-xs text-muted-foreground truncate">
+                            🗣️ {formatEventLanguages(booking.events as Event)}
                           </div>
-                          <div className="whitespace-nowrap">
-                            🔞 {booking.events.rating || '18+'}
+                          <div className="whitespace-nowrap shrink-0 text-[11px] sm:text-xs">
+                            {getRatingDisplay(booking.events.rating)}
                           </div>
                         </div>
                       </div>
@@ -1792,7 +1792,6 @@ export default function Dashboard() {
                     ? (audienceHasFreePass ? 0 : audienceDepositCredits)
                     : effectiveCreditsRequired
                   const hasRedeemableCredits = event.tickets_enabled && Number((event as any).audience_deposit_credits || 0) > 0
-                  const openMicSubtype = getOpenMicSubtypeLabel(event)
                   const languageSummary = formatEventLanguages(event)
                   const canAfford = (profile?.credits || 0) >= creditsRequiredForCard
                   const isBooking = bookingLoading === event.id
@@ -1846,11 +1845,6 @@ export default function Dashboard() {
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-2">
-                          {openMicSubtype && (
-                            <div className="text-xs text-muted-foreground">
-                              🎭 {openMicSubtype}
-                            </div>
-                          )}
                           <p className="text-xs text-muted-foreground line-clamp-1 break-words whitespace-normal">
                             {event.description}
                           </p>
@@ -1876,17 +1870,12 @@ export default function Dashboard() {
                                 {event.theme ? `🎨 ${event.theme}` : ''}
                               </div>
                             </div>
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <div className="text-xs text-muted-foreground truncate">
+                            <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
+                              <div className="min-w-0 flex-1 pr-2 text-xs text-muted-foreground truncate">
                                 🗣️ {languageSummary}
                               </div>
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1">
-                                <span className="sr-only">Rating</span>
-                              </div>
-                              <div className="whitespace-nowrap">
-                                🔞 {event.rating || '18+'}
+                              <div className="whitespace-nowrap shrink-0 text-[11px] sm:text-xs">
+                                {getRatingDisplay(event.rating)}
                               </div>
                             </div>
                             {!isRegistrationOpen && registrationOpensAt && (

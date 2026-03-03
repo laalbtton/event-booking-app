@@ -148,10 +148,10 @@ export default function EventDetailsPage() {
     return isMulti ? `Multilingual: ${resolved.join(', ')}` : (resolved[0] || 'English')
   }
 
-  function openMicSubtypeLabel() {
-    if (!event || event.event_type !== 'open_mic') return null
-    const subtype = (event as any).open_mic_type || 'comedy_open_mic'
-    return subtype === 'variety_arts_open_mic' ? 'Variety Arts Open Mic' : 'Comedy Open Mic'
+  function getRatingDisplay(rating: string | null | undefined): string {
+    const normalized = String(rating || '18+').trim()
+    const isAllAges = normalized.toLowerCase().includes('all')
+    return `${isAllAges ? '👨‍👩‍👧‍👦' : '🔞'} ${normalized}`
   }
 
   function getBookingArtTypeLabel(booking: AttendeeBooking): string | null {
@@ -658,7 +658,7 @@ export default function EventDetailsPage() {
           <CardHeader>
             <CardTitle className="text-2xl md:text-3xl">{event.title}</CardTitle>
             <Badge variant="outline" className="w-fit text-xs">
-              Rating: {event.rating || '18+'}
+              {getRatingDisplay(event.rating)}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -668,11 +668,6 @@ export default function EventDetailsPage() {
               {event.theme && (
                 <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-100">
                   🎨 Theme: {event.theme}
-                </Badge>
-              )}
-              {openMicSubtypeLabel() && (
-                <Badge variant="outline">
-                  {openMicSubtypeLabel()}
                 </Badge>
               )}
               <Badge variant="outline">
