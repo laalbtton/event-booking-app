@@ -1,12 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { createNotification } from '@/lib/notifications'
 import { getRegistrationOpeningEmail, sendEmail } from '@/lib/email'
 import { formatDateTime } from '@/lib/dateUtils'
-import { sendPushToUser } from '@/lib/server/push'
+import { sendPushToAllUsers, sendPushToUser } from '@/lib/server/push'
+import { getAdminClient } from '@/lib/server/supabaseAdmin'
 
-export async function GET(request: NextRequest) {
+function isThursday(dateValue: string | null) {
+  if (!dateValue) return false
+  const parsed = new Date(dateValue)
+  if (Number.isNaN(parsed.getTime())) return false
+  return parsed.getDay() === 4
+}
+
+function isSocapName(value: string | null | undefined) {
+  if (!value) return false
+  return value.toLowerCase().includes('socap')
+}
+
+export async function GET() {
   try {
+    const admin = getAdminClient()
+    if (!admin) {
+      return NextResponse.json({ error: 'Missing Supabase environment variables' }, { status: 500 })
+    }
+
     const now = new Date()
     
     // Find events where registration opened since the last check (within the last 24 hours)
@@ -28,16 +46,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (!events || events.length === 0) {
-      return NextResponse.json({ 
-        message: 'No events with registration opening now',
-        processed: 0 
-      })
-    }
-
+    const eventsToProcess = events ?? []
     let processed = 0
 
-    for (const event of events) {
+    for (const event of eventsToProcess) {
       // Find all users who requested alerts for this event
       const { data: alerts, error: alertsError } = await supabase
         .from('registration_alerts')
@@ -102,11 +114,11 @@ export async function GET(request: NextRequest) {
           }
 
           try {
-            await sendPushToUser(supabase as any, alert.user_id, {
+            await sendPushToUser(admin, alert.user_id, {
               title: 'Registration Now Open',
               body: `Registration for "${event.title}" is now open.`,
               data: { url: `/events/${event.id}` },
-            })
+            }, 'new_events')
           } catch (pushError) {
             // Push should not block in-app/email delivery.
             console.warn(`Push send failed for user ${alert.user_id}:`, pushError)
@@ -125,15 +137,73 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Global push: Thursday SoCap events when registration is open.
+    // If registration is open at creation, this sends once shortly after creation.
+    // If registration opens later, this sends once when that open window is reached.
+    const { data: socapOpenCandidates, error: socapOpenCandidatesError } = await admin
+      .from('events')
+      .select(
+        'id, title, date, location, venue_id, created_at, registration_opens_at, thursday_socap_open_push_sent_at'
+      )
+      .is('thursday_socap_open_push_sent_at', null)
+      .lte('created_at', now.toISOString())
+
+    if (socapOpenCandidatesError) {
+      console.error('Error fetching Thursday SoCap candidates:', socapOpenCandidatesError)
+    } else if (socapOpenCandidates?.length) {
+      for (const event of socapOpenCandidates) {
+        const registrationOpenNow =
+          !event.registration_opens_at || new Date(event.registration_opens_at) <= now
+        const openedRecently = event.registration_opens_at
+          ? new Date(event.registration_opens_at) >= oneDayAgo &&
+            new Date(event.registration_opens_at) <= now
+          : new Date(event.created_at) >= oneDayAgo
+
+        if (!registrationOpenNow || !openedRecently || !isThursday(event.date)) continue
+
+        let venueName: string | null = null
+        if (event.venue_id) {
+          const { data: venue } = await admin
+            .from('venues')
+            .select('name')
+            .eq('id', event.venue_id)
+            .maybeSingle()
+          venueName = venue?.name ?? null
+        }
+
+        if (!isSocapName(venueName) && !isSocapName(event.location)) continue
+
+        try {
+          await sendPushToAllUsers(
+            admin,
+            {
+              title: 'Thursday SoCap registration is open',
+              body: `"${event.title}" is now open for registration.`,
+              data: { url: `/events/${event.id}` },
+            },
+            'new_events'
+          )
+
+          await admin
+            .from('events')
+            .update({ thursday_socap_open_push_sent_at: now.toISOString() })
+            .eq('id', event.id)
+        } catch (error) {
+          console.error(`Error sending Thursday SoCap open push for event ${event.id}:`, error)
+        }
+      }
+    }
+
     return NextResponse.json({ 
       message: 'Registration opening notifications processed',
       processed,
-      events: events.length
+      events: eventsToProcess.length
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Error in check-registration-opens:', error)
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: message },
       { status: 500 }
     )
   }

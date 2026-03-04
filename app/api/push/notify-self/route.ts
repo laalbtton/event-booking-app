@@ -36,11 +36,12 @@ export async function POST(request: NextRequest) {
     const message = typeof body?.body === 'string' && body.body.trim() ? body.body.trim() : templates[type].body
     const url = typeof body?.url === 'string' && body.url.trim() ? body.url.trim() : '/dashboard'
 
+    const category = type === 'event_reminder' ? 'event_reminders' : 'booking_updates'
     const result = await sendPushToUser(supabase, user.id, {
       title,
       body: message,
       data: { url },
-    })
+    }, category)
 
     return NextResponse.json({ success: true, ...result })
   } catch (error: any) {

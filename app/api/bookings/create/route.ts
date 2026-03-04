@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sendPushToAllUsers } from '@/lib/server/push'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -25,6 +26,18 @@ function buildAudienceCheckinCode() {
     token += alphabet[Math.floor(Math.random() * alphabet.length)]
   }
   return `AUD-${token}`
+}
+
+function isThursday(dateValue: string | null) {
+  if (!dateValue) return false
+  const parsed = new Date(dateValue)
+  if (Number.isNaN(parsed.getTime())) return false
+  return parsed.getDay() === 4
+}
+
+function isSocapName(value: string | null | undefined) {
+  if (!value) return false
+  return value.toLowerCase().includes('socap')
 }
 
 export async function POST(request: NextRequest) {
@@ -63,7 +76,7 @@ export async function POST(request: NextRequest) {
     const { data: event, error: eventError } = await supabase
       .from('events')
       .select(
-        'id, title, status, event_type, open_mic_type, variety_use_max_attendees, tickets_enabled, audience_enabled, audience_capacity, audience_deposit_credits, max_attendees, registration_opens_at, venue_id, credits_required, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents, food_coupon_expires_hours, date, end_time'
+        'id, title, status, event_type, open_mic_type, variety_use_max_attendees, tickets_enabled, audience_enabled, audience_capacity, audience_deposit_credits, max_attendees, registration_opens_at, venue_id, location, credits_required, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents, food_coupon_expires_hours, date, end_time, thursday_socap_75_push_sent_at'
       )
       .eq('id', eventId)
       .single()
@@ -355,6 +368,56 @@ export async function POST(request: NextRequest) {
         valueCents: created.value_cents,
         status: created.status,
         expiresAt: created.expires_at,
+      }
+    }
+
+    const seventyFivePushSent = Boolean(
+      (event as { thursday_socap_75_push_sent_at?: string | null }).thursday_socap_75_push_sent_at
+    )
+
+    if (
+      bookingStatus === 'confirmed' &&
+      !isAudienceBooking &&
+      Number(event.max_attendees || 0) > 0 &&
+      !seventyFivePushSent &&
+      isThursday(event.date)
+    ) {
+      let venueName: string | null = null
+      if (event.venue_id) {
+        const { data: venue } = await supabase
+          .from('venues')
+          .select('name')
+          .eq('id', event.venue_id)
+          .maybeSingle()
+        venueName = venue?.name ?? null
+      }
+
+      if (isSocapName(venueName) || isSocapName(event.location)) {
+        const maxAttendees = Number(event.max_attendees || 0)
+        const beforeConfirmed = Number(confirmedCount || 0)
+        const afterConfirmed = beforeConfirmed + 1
+        const threshold = Math.ceil(maxAttendees * 0.75)
+
+        if (beforeConfirmed < threshold && afterConfirmed >= threshold) {
+          try {
+            await sendPushToAllUsers(
+              supabase,
+              {
+                title: 'Thursday SoCap is 75% full',
+                body: `"${event.title}" is filling up fast - spots are almost gone.`,
+                data: { url: `/events/${event.id}` },
+              },
+              'new_events'
+            )
+
+            await supabase
+              .from('events')
+              .update({ thursday_socap_75_push_sent_at: new Date().toISOString() })
+              .eq('id', event.id)
+          } catch (pushError) {
+            console.warn(`Failed to send 75% full push for event ${event.id}:`, pushError)
+          }
+        }
       }
     }
 

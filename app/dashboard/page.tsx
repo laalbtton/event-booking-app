@@ -98,6 +98,7 @@ export default function Dashboard() {
   const [varietyDialogEvent, setVarietyDialogEvent] = useState<Event | null>(null)
   const [varietyOptions, setVarietyOptions] = useState<VarietyArtOption[]>([])
   const [selectedVarietyOptionId, setSelectedVarietyOptionId] = useState<string>('')
+  const [redeemInfoDialogOpen, setRedeemInfoDialogOpen] = useState(false)
   const router = useRouter()
   const PREPROMPT_SNOOZE_DAYS = 7
 
@@ -1234,6 +1235,25 @@ export default function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog open={redeemInfoDialogOpen} onOpenChange={setRedeemInfoDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Redeemable credits</DialogTitle>
+            <DialogDescription>
+              This event has attendee redeemable credits.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>Redeemable credits apply to attendee participation, not performer booking.</p>
+            <p>Tap below to view the full explainer for how redeemable credits work.</p>
+          </div>
+          <div className="flex justify-end">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/redeemable-credits">How this works</Link>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <PushPermissionPrePrompt
         open={showPushPrePrompt}
         onEnable={handleEnablePushFromPrePrompt}
@@ -1792,6 +1812,7 @@ export default function Dashboard() {
                     ? (audienceHasFreePass ? 0 : audienceDepositCredits)
                     : effectiveCreditsRequired
                   const hasRedeemableCredits = event.tickets_enabled && Number((event as any).audience_deposit_credits || 0) > 0
+                  const showRedeemableHelpDot = hasRedeemableCredits && isAudienceUser
                   const languageSummary = formatEventLanguages(event)
                   const canAfford = (profile?.credits || 0) >= creditsRequiredForCard
                   const isBooking = bookingLoading === event.id
@@ -1832,14 +1853,23 @@ export default function Dashboard() {
                                 </Badge>
                               )}
                               {event.event_type !== 'booked_show' && (
-                                <Badge variant="secondary" className="whitespace-nowrap">
-                                  {creditsRequiredForCard} {creditsRequiredForCard === 1 ? 'credit' : 'credits'}
-                                </Badge>
-                              )}
-                              {hasRedeemableCredits && (
-                                <Badge variant="outline" className="text-emerald-700 border-emerald-600 whitespace-nowrap">
-                                  Redeemable Credits
-                                </Badge>
+                                <div className="inline-flex items-center gap-1.5">
+                                  <Badge variant="secondary" className="whitespace-nowrap">
+                                    {creditsRequiredForCard} {creditsRequiredForCard === 1 ? 'credit' : 'credits'}
+                                  </Badge>
+                                  {showRedeemableHelpDot && (
+                                    <button
+                                      type="button"
+                                      className="h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-red-200"
+                                      aria-label="What are redeemable credits?"
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        setRedeemInfoDialogOpen(true)
+                                      }}
+                                    />
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>

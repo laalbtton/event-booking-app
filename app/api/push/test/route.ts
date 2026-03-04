@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       title,
       body: message,
       data: { url },
-    })
+    }, 'booking_updates')
 
     return NextResponse.json({ success: true, ...result })
   } catch (error: any) {

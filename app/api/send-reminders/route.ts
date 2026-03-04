@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
               title: 'Event Reminder',
               body: `${event.title} is happening in ${timeString}!`,
               data: { url: `/events/${event.id}` },
-            })
+            }, 'event_reminders')
 
             remindersSent++
           }

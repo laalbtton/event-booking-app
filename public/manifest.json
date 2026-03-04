@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Laal Button - Comedy Events",
-  "short_name": "Laal Button",
-  "description": "Book comedy shows and events in Toronto",
+  "name": "One Mic Stand - Performance Arts Events",
+  "short_name": "One Mic Stand",
+  "description": "Book comedy and performance arts events in Toronto",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
