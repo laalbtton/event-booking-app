@@ -75,6 +75,8 @@ export type Event = {
   spot_fee_credits?: number
   food_coupon_value_cents?: number
   food_coupon_expires_hours?: number
+  no_show_penalty_enabled?: boolean | null
+  no_show_penalty_credits?: number | null
   max_attendees: number | null
   cancellation_hours: number
   registration_opens_at: string | null
@@ -100,6 +102,8 @@ export type Booking = {
   attendance_marked_at?: string | null
   audience_checkin_code?: string | null
   audience_deposit_returned_at?: string | null
+  no_show_penalty_charged_at?: string | null
+  no_show_penalty_credits?: number
   cancellation_date?: string | null
 }
 

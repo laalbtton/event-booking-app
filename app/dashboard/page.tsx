@@ -131,6 +131,13 @@ export default function Dashboard() {
     return spotFee + couponCredits
   }
 
+  function getEffectiveNoShowPenalty(event: Event): { enabled: boolean; credits: number } {
+    const defaultEnabled = Number(event.credits_required || 0) <= 0
+    const enabled = event.no_show_penalty_enabled ?? defaultEnabled
+    const credits = Math.max(0, Number(event.no_show_penalty_credits ?? 5))
+    return { enabled, credits }
+  }
+
   function formatEventLanguages(event: Event): string {
     const langs = Array.isArray((event as any).languages) ? (event as any).languages : ['English']
     const cleaned = langs
@@ -967,11 +974,26 @@ export default function Dashboard() {
       const inNoRefundWindow = hoursUntilEvent < cancellationWindow
       const confirmedCount = eventConfirmedCounts[event.id] || 0
       const isFullAtConfirmation = event.max_attendees !== null && confirmedCount >= event.max_attendees
+      const performerFreeSpot = userRole !== 'audience' && getEffectiveCreditsRequired(event) <= 0
+      const noShowPenalty = getEffectiveNoShowPenalty(event)
+      const showFreeSpotPenaltyMessage =
+        performerFreeSpot &&
+        !isFullAtConfirmation &&
+        noShowPenalty.enabled &&
+        noShowPenalty.credits > 0
 
-      if (inNoRefundWindow) {
-        const confirmMessage = isFullAtConfirmation
-          ? `This event is currently full, so you will join the waitlist.\n\nIf you get promoted to confirmed inside ${cancellationWindow} hours of the start time, cancelling later may not be refundable.\n\nDo you want to continue and join the waitlist?`
-          : `This booking is inside the ${cancellationWindow}-hour no-refund window.\n\nIf you book now and cancel later, you may not receive a credit refund.\n\nDo you want to continue?`
+      if (inNoRefundWindow || showFreeSpotPenaltyMessage) {
+        let confirmMessage = isFullAtConfirmation
+          ? `This event is currently full, so you will join the waitlist.\n\nIf you get promoted to confirmed inside ${cancellationWindow} hours of the start time, cancelling later may not be refundable.`
+          : inNoRefundWindow
+          ? `This booking is inside the ${cancellationWindow}-hour no-refund window.\n\nIf you book now and cancel later, you may not receive a credit refund.`
+          : `You are booking a free performer spot.`
+
+        if (showFreeSpotPenaltyMessage) {
+          confirmMessage += `\n\nNo-show policy: if you are not marked attended by the host by event end time, ${noShowPenalty.credits} credit${noShowPenalty.credits > 1 ? 's will be' : ' will be'} charged as a no-show penalty. If your balance is low, it may go negative and you will need to buy credits to clear it.`
+        }
+
+        confirmMessage += '\n\nDo you want to continue?'
 
         const shouldProceed = await confirm({
           title: 'Please read before you confirm',

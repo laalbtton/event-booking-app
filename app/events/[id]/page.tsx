@@ -45,6 +45,8 @@ type EventDetails = {
   food_coupon_enabled?: boolean
   spot_fee_credits?: number
   food_coupon_value_cents?: number
+  no_show_penalty_enabled?: boolean | null
+  no_show_penalty_credits?: number | null
   max_attendees: number | null
   cancellation_hours: number
   registration_opens_at: string | null
@@ -152,6 +154,13 @@ export default function EventDetailsPage() {
     const normalized = String(rating || '18+').trim()
     const isAllAges = normalized.toLowerCase().includes('all')
     return `${isAllAges ? '👨‍👩‍👧‍👦' : '🔞'} ${normalized}`
+  }
+
+  function getEffectiveNoShowPenalty(eventData: EventDetails): { enabled: boolean; credits: number } {
+    const defaultEnabled = Number(eventData.credits_required || 0) <= 0
+    const enabled = eventData.no_show_penalty_enabled ?? defaultEnabled
+    const credits = Math.max(0, Number(eventData.no_show_penalty_credits ?? 5))
+    return { enabled, credits }
   }
 
   function getBookingArtTypeLabel(booking: AttendeeBooking): string | null {
@@ -464,11 +473,31 @@ export default function EventDetailsPage() {
       const inNoRefundWindow = hoursUntilEvent < cancellationWindow
       const isFullAtConfirmation =
         eventData.max_attendees !== null && confirmedBookings.length >= eventData.max_attendees
+      const performerFreeSpot = profile.role !== 'audience' && (
+        eventData.food_coupon_enabled
+          ? Math.max(0, Number(eventData.spot_fee_credits || 0)) +
+            Math.ceil(Math.max(0, Number(eventData.food_coupon_value_cents || 0)) / 100)
+          : Number(eventData.credits_required || 0)
+      ) <= 0
+      const noShowPenalty = getEffectiveNoShowPenalty(eventData)
+      const showFreeSpotPenaltyMessage =
+        performerFreeSpot &&
+        !isFullAtConfirmation &&
+        noShowPenalty.enabled &&
+        noShowPenalty.credits > 0
 
-      if (inNoRefundWindow) {
-        const confirmMessage = isFullAtConfirmation
-          ? `This event is currently full, so you will join the waitlist.\n\nIf you get promoted to confirmed inside ${cancellationWindow} hours of the start time, cancelling later may not be refundable.\n\nDo you want to continue and join the waitlist?`
-          : `This booking is inside the ${cancellationWindow}-hour no-refund window.\n\nIf you book now and cancel later, you may not receive a credit refund.\n\nDo you want to continue?`
+      if (inNoRefundWindow || showFreeSpotPenaltyMessage) {
+        let confirmMessage = isFullAtConfirmation
+          ? `This event is currently full, so you will join the waitlist.\n\nIf you get promoted to confirmed inside ${cancellationWindow} hours of the start time, cancelling later may not be refundable.`
+          : inNoRefundWindow
+          ? `This booking is inside the ${cancellationWindow}-hour no-refund window.\n\nIf you book now and cancel later, you may not receive a credit refund.`
+          : `You are booking a free performer spot.`
+
+        if (showFreeSpotPenaltyMessage) {
+          confirmMessage += `\n\nNo-show policy: if you are not marked attended by the host by event end time, ${noShowPenalty.credits} credit${noShowPenalty.credits > 1 ? 's will be' : ' will be'} charged as a no-show penalty. If your balance is low, it may go negative and you will need to buy credits to clear it.`
+        }
+
+        confirmMessage += '\n\nDo you want to continue?'
 
         const shouldProceed = await confirm({
           title: 'Please read before you confirm',

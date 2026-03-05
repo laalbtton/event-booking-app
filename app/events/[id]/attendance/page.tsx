@@ -25,6 +25,7 @@ type BookingWithProfile = {
   booking_scope?: 'performer' | 'audience'
   event_art_type_id?: string | null
   attendance_status: string | null
+  no_show_penalty_charged_at?: string | null
   audience_checkin_code?: string | null
   booked_at: string
   waitlist_position?: number | null
@@ -76,10 +77,14 @@ type EventDetails = {
   id: string
   title: string
   date: string
+  end_time?: string | null
   host_user_id: string | null
   created_by: string | null
   event_type: 'open_mic' | 'booked_show'
+  credits_required: number
   max_attendees: number | null
+  no_show_penalty_enabled?: boolean | null
+  no_show_penalty_credits?: number | null
   food_coupon_enabled?: boolean
   audience_attendance_open_before_minutes?: number
   audience_attendance_cutoff_hours?: number
@@ -150,6 +155,11 @@ export default function AttendancePage() {
   const [redeemPreview, setRedeemPreview] = useState<VoucherPreview | null>(null)
   const [recentRedemptions, setRecentRedemptions] = useState<RecentRedemption[]>([])
   const [showRefundTools, setShowRefundTools] = useState(false)
+  const [showNoShowPenaltyTools, setShowNoShowPenaltyTools] = useState(false)
+  const [noShowPenaltyEnabled, setNoShowPenaltyEnabled] = useState(true)
+  const [noShowPenaltyCredits, setNoShowPenaltyCredits] = useState('5')
+  const [savingNoShowPenalty, setSavingNoShowPenalty] = useState(false)
+  const [processingNoShowPenalties, setProcessingNoShowPenalties] = useState(false)
   const [refundMode, setRefundMode] = useState<'full' | 'specific'>('full')
   const [refundAmount, setRefundAmount] = useState('1')
   const [selectedRefundBookingIds, setSelectedRefundBookingIds] = useState<Set<string>>(new Set())
@@ -392,7 +402,7 @@ export default function AttendancePage() {
       // Load event
       const { data: eventData, error: eventError } = await supabase
         .from('events')
-        .select('id, title, date, host_user_id, created_by, event_type, max_attendees, food_coupon_enabled, audience_attendance_open_before_minutes, audience_attendance_cutoff_hours')
+        .select('id, title, date, end_time, host_user_id, created_by, event_type, credits_required, max_attendees, no_show_penalty_enabled, no_show_penalty_credits, food_coupon_enabled, audience_attendance_open_before_minutes, audience_attendance_cutoff_hours')
         .eq('id', eventId)
         .single()
 
@@ -414,6 +424,9 @@ export default function AttendancePage() {
       setCanManageHost(isEventCreator || isAdmin)
 
       setEvent(eventData)
+      const penaltySettings = getEffectiveNoShowSettings(eventData as EventDetails)
+      setNoShowPenaltyEnabled(penaltySettings.enabled)
+      setNoShowPenaltyCredits(String(penaltySettings.penalty))
 
       // Load host profile if host is assigned
       if (eventData.host_user_id) {
@@ -441,6 +454,7 @@ export default function AttendancePage() {
           booking_scope,
           event_art_type_id,
           attendance_status,
+          no_show_penalty_charged_at,
           audience_checkin_code,
           booked_at,
           waitlist_position,
@@ -474,6 +488,7 @@ export default function AttendancePage() {
           booking_scope,
           event_art_type_id,
           attendance_status,
+          no_show_penalty_charged_at,
           audience_checkin_code,
           booked_at,
           waitlist_position,
@@ -623,6 +638,26 @@ export default function AttendancePage() {
       grouped.get(key)!.push(booking)
     }
     return Array.from(grouped.entries())
+  }
+
+  function getEffectiveNoShowSettings(eventRow: EventDetails) {
+    const defaultEnabled = Number(eventRow.credits_required || 0) <= 0
+    const enabled = eventRow.no_show_penalty_enabled ?? defaultEnabled
+    const penalty = Math.max(0, Number(eventRow.no_show_penalty_credits ?? 5))
+    return { enabled, penalty }
+  }
+
+  function getEventEndTime(eventRow: EventDetails) {
+    return new Date(eventRow.end_time || eventRow.date)
+  }
+
+  function getNoShowPenaltyCandidates() {
+    return bookings.filter(
+      (booking) =>
+        Number(booking.credits_used || 0) <= 0 &&
+        booking.attendance_status !== 'attended' &&
+        !booking.no_show_penalty_charged_at
+    )
   }
 
   function isAudienceAttendanceWindowOpen() {
@@ -1088,6 +1123,106 @@ export default function AttendancePage() {
     setHostSearchLoading(false)
   }
 
+  async function saveNoShowPenaltySettings() {
+    if (!event) return
+    const parsedPenalty = Math.max(0, Math.floor(Number(noShowPenaltyCredits || '0')))
+    if (!Number.isFinite(parsedPenalty)) {
+      alert('Penalty amount must be a valid number.')
+      return
+    }
+
+    setSavingNoShowPenalty(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/events/no-show-penalty-settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          eventId,
+          enabled: noShowPenaltyEnabled,
+          penaltyCredits: parsedPenalty,
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Failed to update no-show penalty settings')
+
+      setNoShowPenaltyCredits(String(parsedPenalty))
+      setEvent((prev) =>
+        prev
+          ? {
+              ...prev,
+              no_show_penalty_enabled: noShowPenaltyEnabled,
+              no_show_penalty_credits: parsedPenalty,
+            }
+          : prev
+      )
+      alert('No-show penalty settings updated.')
+    } catch (error: any) {
+      alert(`Error updating no-show penalty settings: ${error.message || 'Unknown error'}`)
+    } finally {
+      setSavingNoShowPenalty(false)
+    }
+  }
+
+  async function processNoShowPenaltiesForEvent() {
+    if (!event) return
+    const eventEnd = getEventEndTime(event)
+    if (Number.isNaN(eventEnd.getTime()) || eventEnd > new Date()) {
+      alert('No-show penalties can only be processed after event end time.')
+      return
+    }
+
+    const penalty = Math.max(0, Math.floor(Number(noShowPenaltyCredits || '0')))
+    const candidates = getNoShowPenaltyCandidates()
+    const totalImpact = candidates.length * penalty
+
+    const shouldProceed = await confirm({
+      title: 'Process no-show penalties?',
+      message:
+        `You are about to process no-show penalties for "${event.title}".\n\n` +
+        `Eligible free performer bookings not marked attended: ${candidates.length}\n` +
+        `Penalty per booking: ${penalty} credits\n` +
+        `Estimated total charge: ${totalImpact} credits\n\n` +
+        'This action will deduct credits, can create negative balances, mark bookings as no-show, and notify affected users.',
+      confirmText: 'Process penalties',
+      cancelText: 'Cancel',
+      variant: 'destructive',
+    })
+    if (!shouldProceed) return
+
+    setProcessingNoShowPenalties(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/events/process-no-show-penalties', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ eventId }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Failed to process no-show penalties')
+
+      alert(`Processed penalties. Charged: ${Number(data.charged || 0)}. Skipped: ${Number(data.skipped || 0)}.`)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await loadData(user.id)
+      }
+    } catch (error: any) {
+      alert(`Error processing no-show penalties: ${error.message || 'Unknown error'}`)
+    } finally {
+      setProcessingNoShowPenalties(false)
+    }
+  }
+
   async function reorderBookings(newOrder: BookingWithProfile[]) {
     // Note: This is a UI-only reorder. If you need to persist order in the database,
     // you would need to add an order field to the bookings table.
@@ -1239,6 +1374,12 @@ export default function AttendancePage() {
       </div>
     )
   }
+
+  const eventEndAt = getEventEndTime(event)
+  const eventHasEnded = !Number.isNaN(eventEndAt.getTime()) && new Date() >= eventEndAt
+  const noShowCandidates = getNoShowPenaltyCandidates()
+  const parsedPenaltyCredits = Math.max(0, Math.floor(Number(noShowPenaltyCredits || '0')))
+  const canProcessNoShowPenalties = eventHasEnded
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -1398,6 +1539,77 @@ export default function AttendancePage() {
                 )}
               </div>
             )}
+
+            <div className="border-t pt-4 mt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold">No-show penalty (free performer spots)</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Applies when a performer books a free spot and is not marked attended by event end time.
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowNoShowPenaltyTools((prev) => !prev)}
+                  aria-label={showNoShowPenaltyTools ? 'Hide no-show penalty settings' : 'Show no-show penalty settings'}
+                >
+                  <ChevronDown className={cn('h-4 w-4 transition-transform', showNoShowPenaltyTools && 'rotate-180')} />
+                </Button>
+              </div>
+              {showNoShowPenaltyTools && (
+                <div className="mt-3 space-y-3 rounded-lg border p-3 bg-white">
+                  <label className="flex items-center justify-between text-sm gap-3">
+                    <span>Enable no-show penalty for free performer bookings</span>
+                    <input
+                      type="checkbox"
+                      checked={noShowPenaltyEnabled}
+                      onChange={(e) => setNoShowPenaltyEnabled(e.target.checked)}
+                    />
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="text-sm">Penalty amount (credits)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={noShowPenaltyCredits}
+                      onChange={(e) => setNoShowPenaltyCredits(e.target.value)}
+                      className="w-24 px-2 py-1.5 border rounded-md text-sm"
+                    />
+                    <span className="text-xs text-muted-foreground">Default is 5 credits ($5 equivalent).</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    If the account balance is insufficient, credits can go negative and the performer must top up later.
+                    {Number(event.credits_required || 0) > 0 && ' This event currently requires paid performer credits, so this policy does not apply unless set to free.'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Eligible now: {noShowCandidates.length} booking{noShowCandidates.length === 1 ? '' : 's'} •
+                    Estimated charge: {noShowCandidates.length * parsedPenaltyCredits} credits
+                  </p>
+                  <div>
+                    <Button size="sm" onClick={saveNoShowPenaltySettings} disabled={savingNoShowPenalty}>
+                      {savingNoShowPenalty ? 'Saving...' : 'Save penalty settings'}
+                    </Button>
+                  </div>
+                  <div className="pt-2 border-t space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      {eventHasEnded
+                        ? 'Event has ended. You can now process no-show penalties.'
+                        : `Processing will unlock after event end time (${formatDateTime(event.end_time || event.date)}).`}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={processNoShowPenaltiesForEvent}
+                      disabled={processingNoShowPenalties || !canProcessNoShowPenalties}
+                    >
+                      {processingNoShowPenalties ? 'Processing penalties...' : 'Process no-show penalties'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
