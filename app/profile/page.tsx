@@ -17,12 +17,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronDown, Copy, Download, LogOut, Settings } from 'lucide-react'
+import { ChevronDown, Copy, Download, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { QRCodeSVG } from 'qrcode.react'
-import { signOutAndCleanup } from '@/lib/authClient'
 import { getPushClientState, subscribeCurrentUserToPush, unsubscribeCurrentUserFromPush } from '@/lib/pushClient'
 import { toast } from 'sonner'
 import {
@@ -190,11 +189,6 @@ export default function ProfilePage() {
     const publicUrl = `${window.location.origin}/profile/${profile.id}`
     navigator.clipboard.writeText(publicUrl)
     alert('Public profile link copied to clipboard!')
-  }
-
-  async function handleSignOut() {
-    await signOutAndCleanup()
-    router.push('/')
   }
 
   async function loadProfile(userId: string) {
@@ -1047,15 +1041,6 @@ export default function ProfilePage() {
                       <Link href="/settings">
                         <Settings className="w-5 h-5" />
                       </Link>
-                    </Button>
-                    <Button
-                      onClick={handleSignOut}
-                      variant="outline"
-                      size="sm"
-                      className="h-9"
-                    >
-                      <LogOut className="w-4 h-4 mr-2" />
-                      Sign out
                     </Button>
                   </div>
                 </div>

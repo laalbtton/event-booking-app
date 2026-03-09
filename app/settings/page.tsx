@@ -23,8 +23,9 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, Download } from 'lucide-react'
+import { ChevronLeft, Download, LogOut } from 'lucide-react'
 import { toast } from 'sonner'
+import { signOutAndCleanup } from '@/lib/authClient'
 
 type PushNotificationPrefs = {
   user_id: string
@@ -672,6 +673,19 @@ export default function SettingsPage() {
             </div>
 
             <Badge variant="outline" className="w-fit">Moved from profile</Badge>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-xl">Account</CardTitle>
+            <CardDescription>Sign out of your account on this device.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="destructive" onClick={async () => { await signOutAndCleanup(); router.push('/') }}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign out
+            </Button>
           </CardContent>
         </Card>
       </div>
