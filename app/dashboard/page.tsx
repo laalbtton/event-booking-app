@@ -1187,7 +1187,7 @@ export default function Dashboard() {
 
             if (filteredEvents.length === 0) {
               return (
-                <Card>
+                <Card className="-mx-4 sm:mx-0 rounded-none sm:rounded-lg">
                   <CardContent className="p-8 text-center text-muted-foreground">
                     {(userRole !== 'audience' && eventTab === 'perform')
                       ? 'No upcoming events available to perform'
@@ -1198,7 +1198,7 @@ export default function Dashboard() {
             }
 
             return (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3 -mx-4 sm:mx-0 px-0">
                 {filteredEvents.map((event) => {
                   const activeBooking = myBookings.find(
                     (b) =>
@@ -1242,7 +1242,7 @@ export default function Dashboard() {
                       href={`/events/${event.id}`}
                       className="block active:opacity-90"
                     >
-                      <Card className="hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40">
+                      <Card className="hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40 rounded-none sm:rounded-lg border-x-0 sm:border-x">
                         <CardHeader className="pb-3">
                           <div className="flex justify-between items-start gap-2">
                             <CardTitle className="text-base md:text-lg flex-1">

@@ -456,7 +456,7 @@ export default function ProfilePage() {
 
   function renderCouponCard(coupon: MyCoupon) {
     return (
-      <Card key={coupon.id} className="border-l-4 border-l-blue-500">
+      <Card key={coupon.id} className="rounded-none sm:rounded-lg border-x-0 sm:border-x border-l-0 sm:border-l-4 sm:border-l-blue-500">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-2">
             <CardTitle className="text-base md:text-lg line-clamp-2">{coupon.eventTitle}</CardTitle>
@@ -1250,8 +1250,8 @@ export default function ProfilePage() {
 
         {/* My Invites - only when invites exist */}
         {invites.length > 0 && (
-          <Card className="shadow-sm">
-            <CardHeader className="cursor-pointer" onClick={() => setInvitesExpanded((p) => !p)}>
+          <Card className="shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
+            <CardHeader className="cursor-pointer p-4 sm:p-6" onClick={() => setInvitesExpanded((p) => !p)}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">
@@ -1262,7 +1262,7 @@ export default function ProfilePage() {
               </div>
             </CardHeader>
             {invitesExpanded && (
-              <CardContent>
+              <CardContent className="p-4 sm:p-6 pt-0">
                 <div className="space-y-3">
                   {invites.map((invite) => (
                     <div key={invite.id} className="flex items-center justify-between gap-3 p-3 border rounded-lg">
@@ -1295,12 +1295,12 @@ export default function ProfilePage() {
           </Card>
         )}
 
-        {/* My Bookings - always visible, no dropdown */}
-        <Card className="shadow-sm">
-          <CardHeader>
+        {/* My Bookings - always visible, no dropdown, full-bleed on mobile */}
+        <Card className="shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
+          <CardHeader className="p-4 sm:p-6">
             <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Bookings</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6 pt-0">
             <Tabs value={bookingsTab} onValueChange={(v) => setBookingsTab(v as typeof bookingsTab)} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="bookings">Bookings</TabsTrigger>
@@ -1324,7 +1324,7 @@ export default function ProfilePage() {
                       )
                     }
                     return (
-                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3 -mx-4 sm:mx-0 px-0">
                         {activeUpcomingBookings.map((booking) => {
                           const eventDate = new Date(booking.events.date)
                           const now = currentTime
@@ -1370,8 +1370,8 @@ export default function ProfilePage() {
                             <Link key={booking.id} href={`/events/${booking.event_id}`} className="block active:opacity-90">
                               <Card
                                 className={cn(
-                                  'border-l-4 hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40',
-                                  isEventCancelled ? 'border-l-red-500' : isWaitlist ? 'border-l-yellow-500' : 'border-l-green-500'
+                                  'hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40 rounded-none sm:rounded-lg border-x-0 sm:border-x border-l-0 sm:border-l-4',
+                                  isEventCancelled ? 'sm:border-l-red-500' : isWaitlist ? 'sm:border-l-yellow-500' : 'sm:border-l-green-500'
                                 )}
                               >
                                 <CardHeader className="pb-3">
@@ -1539,7 +1539,7 @@ export default function ProfilePage() {
                           {activeCoupons.length === 0 ? (
                             <p className="text-sm text-muted-foreground">No active coupons.</p>
                           ) : (
-                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3 -mx-4 sm:mx-0 px-0">
                               {activeCoupons.map((c) => renderCouponCard(c))}
                             </div>
                           )}
@@ -1558,17 +1558,17 @@ export default function ProfilePage() {
                               {redeemedCoupons.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">No redeemed coupons.</p>
                               ) : (
-                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3 -mx-4 sm:mx-0 px-0">
                                   {redeemedCoupons.map((c) => renderCouponCard(c))}
                                 </div>
                               )}
-                              {otherCoupons.length > 0 && (
-                                <div className="space-y-3 border-t pt-4">
-                                  <p className="text-sm font-semibold text-muted-foreground">
-                                    Expired / cancelled coupons ({otherCoupons.length})
-                                  </p>
-                                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                    {otherCoupons.map((c) => renderCouponCard(c))}
+                                {otherCoupons.length > 0 && (
+                                  <div className="space-y-3 border-t pt-4">
+                                    <p className="text-sm font-semibold text-muted-foreground">
+                                      Expired / cancelled coupons ({otherCoupons.length})
+                                    </p>
+                                    <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3 -mx-4 sm:mx-0 px-0">
+                                      {otherCoupons.map((c) => renderCouponCard(c))}
                                   </div>
                                 </div>
                               )}
@@ -1599,16 +1599,16 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* My Transactions - collapsible at bottom */}
-        <Card className="shadow-sm">
-          <CardHeader className="cursor-pointer" onClick={() => setTransactionsExpanded((p) => !p)}>
+        {/* My Transactions - collapsible at bottom, full-bleed on mobile */}
+        <Card className="shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
+          <CardHeader className="cursor-pointer p-4 sm:p-6" onClick={() => setTransactionsExpanded((p) => !p)}>
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Transactions</CardTitle>
               <ChevronDown className={cn('h-5 w-5 text-muted-foreground transition-transform', transactionsExpanded && 'rotate-180')} />
             </div>
           </CardHeader>
           {transactionsExpanded && (
-            <CardContent>
+            <CardContent className="p-4 sm:p-6 pt-0">
               {eventBookings.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">No recent activity.</p>
               ) : (
