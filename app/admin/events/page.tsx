@@ -481,7 +481,7 @@ export default function AdminEventsPage() {
       .eq('event_id', event.id)
       .order('created_at', { ascending: true })
 
-    setFormData({
+      setFormData({
       title: event.title,
       description: event.description || '',
       theme: event.theme || '',
@@ -888,7 +888,7 @@ export default function AdminEventsPage() {
                 {event.event_type !== 'booked_show' && (
                   <p>Cancel up to {event.cancellation_hours || 4} hours before</p>
                 )}
-              </div>
+            </div>
 
               <div className="flex flex-wrap gap-2">
                 <label className="inline-flex">
@@ -966,7 +966,7 @@ export default function AdminEventsPage() {
                 >
                   <Link href={`/admin/events/${event.id}/qr`}>
                     <QrCode className="w-4 h-4" />
-                  </Link>
+                </Link>
                 </Button>
 
                 <Button
@@ -977,7 +977,7 @@ export default function AdminEventsPage() {
                 >
                   <Link href={`/admin/events/${event.id}/attendance`}>
                     <Users className="w-4 h-4" />
-                  </Link>
+                </Link>
                 </Button>
               </div>
               {event.poster_url && (
@@ -985,7 +985,7 @@ export default function AdminEventsPage() {
                   <div className="flex items-center gap-1">
                     <ImageIcon className="w-3.5 h-3.5" />
                     Poster published
-                  </div>
+          </div>
                   <div className="text-muted-foreground">
                     Posted: {posterJobSummary[event.id]?.posted || 0} | Pending: {posterJobSummary[event.id]?.pending || 0} | Failed: {posterJobSummary[event.id]?.failed || 0}
                   </div>
@@ -1005,7 +1005,7 @@ export default function AdminEventsPage() {
       {events.length === 0 && (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
-            No events yet. Create your first event!
+          No events yet. Create your first event!
           </CardContent>
         </Card>
       )}
@@ -1025,29 +1025,29 @@ export default function AdminEventsPage() {
           </DialogHeader>
 
           <form onSubmit={handleUpdateEvent} className="space-y-4">
-            <div>
+              <div>
               <Label htmlFor="edit-title">Event Title *</Label>
               <Input
                 id="edit-title"
-                type="text"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                required
-              />
-            </div>
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  required
+                />
+              </div>
 
-            <div>
+              <div>
               <Label htmlFor="edit-description">Description *</Label>
               <Textarea
                 id="edit-description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
-                required
-              />
-            </div>
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  rows={3}
+                  required
+                />
+              </div>
 
-            <div>
+              <div>
               <Label htmlFor="edit-theme">Theme (Optional)</Label>
               <Input
                 id="edit-theme"
@@ -1100,7 +1100,7 @@ export default function AdminEventsPage() {
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                     />
                     {option.label}
-                  </label>
+                </label>
                 ))}
               </div>
             </div>
@@ -1114,7 +1114,7 @@ export default function AdminEventsPage() {
                     { value: 'variety_arts_open_mic', label: 'Variety Arts Open Mic' },
                   ].map((option) => (
                     <label key={option.value} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <input
+                <input
                         type="radio"
                         name="edit-open-mic-type"
                         value={option.value}
@@ -1187,17 +1187,17 @@ export default function AdminEventsPage() {
               <Label htmlFor="edit-date">Date & Time *</Label>
               <Input
                 id="edit-date"
-                type="datetime-local"
-                value={formData.date}
+                  type="datetime-local"
+                  value={formData.date}
                 onChange={(e) => {
                   const nextDate = e.target.value
                   const durationMinutes = hoursToMinutes(formData.duration_hours)
                   const nextEndTime = computeEndTime(nextDate, durationMinutes)
                   setFormData({ ...formData, date: nextDate, end_time: nextEndTime })
                 }}
-                required
-              />
-            </div>
+                  required
+                />
+              </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -1348,7 +1348,7 @@ export default function AdminEventsPage() {
             <div className="border-t pt-4 space-y-3">
               <div className="space-y-2 rounded-lg border p-3">
                 <Label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <input
+                <input
                     type="checkbox"
                     checked={formData.is_multilingual}
                     onChange={(e) =>
@@ -1654,14 +1654,14 @@ export default function AdminEventsPage() {
               <Label htmlFor="create-title">Event Title *</Label>
               <Input
                 id="create-title"
-                type="text"
+                  type="text"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                required
-              />
-            </div>
+                  required
+                />
+              </div>
 
-            <div>
+                <div>
               <Label htmlFor="create-description">Description *</Label>
               <Textarea
                 id="create-description"
@@ -1739,7 +1739,7 @@ export default function AdminEventsPage() {
                     { value: 'variety_arts_open_mic', label: 'Variety Arts Open Mic' },
                   ].map((option) => (
                     <label key={option.value} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <input
+                  <input
                         type="radio"
                         name="create-open-mic-type"
                         value={option.value}
@@ -1846,38 +1846,38 @@ export default function AdminEventsPage() {
                 <Label htmlFor="create-credits">Credits Required *</Label>
                 <Input
                   id="create-credits"
-                  type="number"
-                  value={formData.credits_required}
-                  onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
+                    type="number"
+                    value={formData.credits_required}
+                    onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
                   min="0"
                 disabled={formData.event_type === 'booked_show'}
-                  required
-                />
-              </div>
+                    required
+                  />
+                </div>
 
-              <div>
+                <div>
                 <Label htmlFor="create-max">Max Attendees</Label>
                 <Input
                   id="create-max"
-                  type="number"
-                  value={formData.max_attendees}
-                  onChange={(e) => setFormData({ ...formData, max_attendees: e.target.value })}
-                  min="1"
-                  placeholder="Unlimited"
-                />
-              </div>
+                    type="number"
+                    value={formData.max_attendees}
+                    onChange={(e) => setFormData({ ...formData, max_attendees: e.target.value })}
+                    min="1"
+                    placeholder="Unlimited"
+                  />
+                </div>
 
-              <div>
+                <div>
                 <Label htmlFor="create-cancel">Cancel Hours *</Label>
                 <Input
                   id="create-cancel"
-                  type="number"
-                  value={formData.cancellation_hours}
-                  onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
-                  min="0"
+                    type="number"
+                    value={formData.cancellation_hours}
+                    onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
+                    min="0"
                 disabled={formData.event_type === 'booked_show'}
-                  required
-                />
+                    required
+                  />
                 <p className="text-xs text-muted-foreground mt-1">
                   {formData.event_type === 'booked_show'
                     ? 'Not applicable for booked shows'
@@ -1885,8 +1885,8 @@ export default function AdminEventsPage() {
                       ? 'Not applicable for ticketed events'
                       : 'Hours before event to allow cancellation with refund'}
                 </p>
+                </div>
               </div>
-            </div>
 
             {formData.event_type === 'open_mic' && !formData.tickets_enabled && (
               <div className="border-t pt-4 space-y-3">
@@ -2114,28 +2114,28 @@ export default function AdminEventsPage() {
               </div>
             )}
 
-            <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-4">
               <Button
-                type="submit"
-                disabled={submitting}
+                  type="submit"
+                  disabled={submitting}
                 className="flex-1"
-              >
-                {submitting ? 'Creating...' : 'Create Event'}
+                >
+                  {submitting ? 'Creating...' : 'Create Event'}
               </Button>
               <Button
-                type="button"
+                  type="button"
                 variant="outline"
-                onClick={() => {
-                  setShowCreateForm(false)
+                  onClick={() => {
+                    setShowCreateForm(false)
                   setCreateStep('details')
                   resetFormData()
                 }}
                 className="flex-1"
-              >
-                Cancel
+                >
+                  Cancel
               </Button>
-            </div>
-          </form>
+              </div>
+            </form>
         </DialogContent>
       </Dialog>
     </div>

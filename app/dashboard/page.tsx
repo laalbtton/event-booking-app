@@ -1110,40 +1110,31 @@ export default function Dashboard() {
         )}
 
         {/* Credits Card */}
-        <Card className="bg-gradient-to-r from-blue-600 to-purple-700 border-0 text-white shadow-lg mb-8">
-          <CardContent className="p-6 sm:p-8">
-            <h2 className="text-base sm:text-lg font-semibold mb-3 text-white/90">Welcome, {profile?.full_name}!</h2>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl sm:text-5xl lg:text-6xl font-bold drop-shadow-md tracking-tight">{profile?.credits || 0}</span>
-              <span className="text-lg sm:text-xl ml-1 drop-shadow text-white/90">credits available</span>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
+        <Card className="bg-gradient-to-r from-emerald-600 to-teal-700 border-0 text-white shadow-lg mb-8">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center gap-2 sm:gap-3 flex-nowrap">
+              <span className="text-2xl sm:text-3xl font-bold drop-shadow-md tracking-tight shrink-0">{profile?.credits || 0}</span>
+              <span className="text-sm sm:text-base drop-shadow text-white/90 shrink-0">credits</span>
+              <div className="flex-1 min-w-0" />
               <Button
                 asChild
                 type="button"
-                className="bg-white text-blue-700 hover:bg-white/90"
+                size="sm"
+                className="bg-white text-emerald-700 hover:bg-white/90 shrink-0"
               >
                 <Link href="/buy-credits">Buy Credits</Link>
               </Button>
-              <Button asChild variant="secondary" className="bg-white/10 text-white hover:bg-white/20">
+              <Button asChild variant="secondary" size="sm" className="bg-white/10 text-white hover:bg-white/20 shrink-0">
                 <Link href="/credits">Credits History</Link>
               </Button>
             </div>
-            <div className="mt-4 space-y-2 text-sm text-white/90">
-              {userRole === 'audience' && (
-                <p>
-                  {Number(profile?.audience_free_passes_remaining || 0) > 0
-                    ? `You have ${profile?.audience_free_passes_remaining || 0} free pass available.`
-                    : 'No free pass remaining right now.'}
-                </p>
-              )}
-              <p>
-                Attend events free with Redeemable Credits.{' '}
-                <Link href="/redeemable-credits" className="underline underline-offset-2 font-medium">
-                  How this works
-                </Link>
+            {userRole === 'audience' && (
+              <p className="mt-4 text-sm text-white/90">
+                {Number(profile?.audience_free_passes_remaining || 0) > 0
+                  ? `You have ${profile?.audience_free_passes_remaining || 0} free pass available.`
+                  : 'No free pass remaining right now.'}
               </p>
-            </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1339,69 +1330,91 @@ export default function Dashboard() {
                                 )}
                               </div>
                               
-                              {isBooked ? (
-                                activeBooking?.status === 'waitlist' ? (
-                                  <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-                                    ⏳ Waitlisted
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="text-green-600 border-green-600">
-                                    ✓ Booked
-                                  </Badge>
-                                )
-                              ) : event.status === 'cancelled' ? (
-                                <Badge variant="destructive">Cancelled</Badge>
-                              ) : !isRegistrationOpen ? (
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-orange-600 border-orange-600">
-                                    Not Open
-                                  </Badge>
-                                  {!alertSet.has(event.id) && (
-                                    <Button
-                                      onClick={(e) => {
-                                        e.preventDefault()
-                                        e.stopPropagation()
-                                        handleSetAlert(event.id)
-                                      }}
-                                      disabled={settingAlert === event.id}
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-xs"
-                                    >
-                                      {settingAlert === event.id ? 'Setting...' : 'Alert Me'}
-                                    </Button>
-                                  )}
-                                  {alertSet.has(event.id) && (
-                                    <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
-                                      ✓ Alert Set
+                              <div className="flex items-center gap-2 shrink-0">
+                                {event.poster_url && (
+                                  <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-border bg-muted">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={event.poster_url}
+                                      alt=""
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                )}
+                                {isBooked ? (
+                                  activeBooking?.status === 'waitlist' ? (
+                                    <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                                      ⏳ Waitlisted
                                     </Badge>
-                                  )}
-                                </div>
-                              ) : (
-                                <Button
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    handleBookEvent(event)
-                                  }}
-                                  disabled={!canAfford || isBooking}
-                                  size="sm"
-                                  className="text-xs"
-                                >
-                                  {isBooking 
-                                    ? 'Booking...' 
-                                    : !canAfford 
-                                      ? 'Not enough credits' 
-                                      : isFull 
-                                        ? 'Join Waitlist' 
-                                        : isAudienceUser ? 'Reserve Spot' : 'Book Event'}
-                                </Button>
-                              )}
+                                  ) : (
+                                    <Badge variant="outline" className="text-green-600 border-green-600">
+                                      ✓ Booked
+                                    </Badge>
+                                  )
+                                ) : event.status === 'cancelled' ? (
+                                  <Badge variant="destructive">Cancelled</Badge>
+                                ) : !isRegistrationOpen ? (
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                      Not Open
+                                    </Badge>
+                                    {!alertSet.has(event.id) && (
+                                      <Button
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          handleSetAlert(event.id)
+                                        }}
+                                        disabled={settingAlert === event.id}
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs"
+                                      >
+                                        {settingAlert === event.id ? 'Setting...' : 'Alert Me'}
+                                      </Button>
+                                    )}
+                                    {alertSet.has(event.id) && (
+                                      <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
+                                        ✓ Alert Set
+                                      </Badge>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <Button
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      handleBookEvent(event)
+                                    }}
+                                    disabled={!canAfford || isBooking}
+                                    size="sm"
+                                    className="text-xs"
+                                  >
+                                    {isBooking 
+                                      ? 'Booking...' 
+                                      : !canAfford 
+                                        ? 'Not enough credits' 
+                                        : isFull 
+                                          ? 'Join Waitlist' 
+                                          : isAudienceUser ? 'Reserve Spot' : 'Book Event'}
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           )}
 
                           {(event.event_type === 'booked_show' || (event.tickets_enabled && event.event_type !== 'open_mic')) && (
                             <div className="flex items-center justify-end gap-2 pt-2 border-t">
+                              {event.poster_url && (
+                                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-border bg-muted">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={event.poster_url}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              )}
                               {event.tickets_enabled && event.external_event && event.external_ticket_url ? (
                                 <a
                                   href={event.external_ticket_url}

@@ -617,6 +617,24 @@ export default function SettingsPage() {
 
         <Card className="shadow-sm">
           <CardHeader>
+            <CardTitle className="text-xl">FAQ</CardTitle>
+            <CardDescription>Frequently asked questions about credits and events.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-sm font-medium">Redeemable Credits</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Attend events free with Redeemable Credits.{' '}
+                <Link href="/redeemable-credits" className="underline underline-offset-2 font-medium text-foreground">
+                  How this works
+                </Link>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
             <CardTitle className="text-xl">Instagram & Poster Auto-Post</CardTitle>
             <CardDescription>Connect Instagram and control poster auto-post behavior.</CardDescription>
           </CardHeader>

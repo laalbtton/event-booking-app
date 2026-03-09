@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
-import { ChevronLeft, Copy } from 'lucide-react'
+import { ChevronLeft, ChevronDown, ChevronUp, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 
 
@@ -112,6 +112,7 @@ export default function EventDetailsPage() {
   const [varietyDialogOpen, setVarietyDialogOpen] = useState(false)
   const [varietyOptions, setVarietyOptions] = useState<VarietyArtOption[]>([])
   const [selectedVarietyOptionId, setSelectedVarietyOptionId] = useState('')
+  const [posterExpanded, setPosterExpanded] = useState(true)
 
 
   function copyPublicLink() {
@@ -686,6 +687,56 @@ export default function EventDetailsPage() {
         </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        {/* Poster Section - at top, collapsible caption + buttons */}
+        {event.poster_url && (
+          <Card className="mb-6">
+            <CardContent className="p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={event.poster_url}
+                alt={`${event.title} poster`}
+                className="w-full max-h-[500px] object-contain rounded border bg-muted/30"
+              />
+              <button
+                type="button"
+                onClick={() => setPosterExpanded((prev) => !prev)}
+                className="w-full flex items-center justify-center gap-2 py-2 hover:bg-muted/50 transition-colors rounded-lg mt-2"
+                aria-label={posterExpanded ? 'Hide caption and actions' : 'Show caption and actions'}
+              >
+                {posterExpanded ? (
+                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+              {posterExpanded && (
+                <div className="space-y-3 pt-2">
+                  {event.poster_caption && (
+                    <p className="text-sm text-muted-foreground">{event.poster_caption}</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <a href={event.poster_url} target="_blank" rel="noreferrer" download>
+                      <Button variant="outline" size="sm">Download</Button>
+                    </a>
+                    <Button variant="outline" size="sm" onClick={copyPosterLink}>Copy Link</Button>
+                    <Button variant="outline" size="sm" onClick={sharePoster}>Share</Button>
+                    {(userBooking || isHost || isEventCreator) && (
+                      <Button
+                        variant={eventAutoPostEnabled ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => toggleEventAutoPost(!eventAutoPostEnabled)}
+                        disabled={prefLoading}
+                      >
+                        {eventAutoPostEnabled ? 'Auto-post On' : 'Enable Auto-post'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Event Info Card */}
         <Card className="mb-6">
           <CardHeader>
@@ -889,42 +940,6 @@ export default function EventDetailsPage() {
             )}
           </CardContent>
         </Card>
-
-        {event.poster_url && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="text-lg md:text-xl">Event Poster</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={event.poster_url}
-                alt={`${event.title} poster`}
-                className="w-full max-h-[500px] object-contain rounded border bg-muted/30"
-              />
-              {event.poster_caption && (
-                <p className="text-sm text-muted-foreground">{event.poster_caption}</p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <a href={event.poster_url} target="_blank" rel="noreferrer" download>
-                  <Button variant="outline" size="sm">Download</Button>
-                </a>
-                <Button variant="outline" size="sm" onClick={copyPosterLink}>Copy Link</Button>
-                <Button variant="outline" size="sm" onClick={sharePoster}>Share</Button>
-                {(userBooking || isHost || isEventCreator) && (
-                  <Button
-                    variant={eventAutoPostEnabled ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => toggleEventAutoPost(!eventAutoPostEnabled)}
-                    disabled={prefLoading}
-                  >
-                    {eventAutoPostEnabled ? 'Auto-post On' : 'Enable Auto-post'}
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Confirmed Attendees */}
         <Card className="mb-6">

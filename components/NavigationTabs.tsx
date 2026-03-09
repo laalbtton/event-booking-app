@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Home, MessageSquare, Mic, MoreHorizontal, LogOut } from 'lucide-react'
+import { Home, MessageSquare, Mic, MoreHorizontal, LogOut, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { signOutAndCleanup } from '@/lib/authClient'
@@ -276,7 +276,7 @@ export default function NavigationTabs() {
     'flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors'
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 z-50 safe-area-inset-bottom">
+    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 shadow-lg border-t border-gray-200 dark:border-zinc-800 z-50 safe-area-inset-bottom">
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
         <nav className="flex items-center justify-around py-2 sm:justify-between">
           <div className="flex items-center gap-1 sm:gap-2 flex-1 justify-around">
@@ -284,8 +284,8 @@ export default function NavigationTabs() {
               href="/profile"
               className={`${navItemClass} ${
                 isActive('/profile') && !pathname?.startsWith('/profile/')
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
               }`}
             >
               <Home className="w-5 h-5" />
@@ -296,8 +296,8 @@ export default function NavigationTabs() {
               href="/dashboard"
               className={`${navItemClass} ${
                 isActive('/dashboard')
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
               }`}
             >
               <Mic className="w-5 h-5" />
@@ -309,8 +309,8 @@ export default function NavigationTabs() {
                 href="/events/manage"
                 className={`${navItemClass} ${
                   isActive('/events/manage')
-                    ? 'bg-green-50 text-green-600'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'bg-green-50 dark:bg-green-950/50 text-green-600 dark:text-green-400'
+                    : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
                 }`}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -326,8 +326,8 @@ export default function NavigationTabs() {
                 href="/admin"
                 className={`${navItemClass} ${
                   isActive('/admin')
-                    ? 'bg-purple-50 text-purple-600'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400'
+                    : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
                 }`}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -343,8 +343,8 @@ export default function NavigationTabs() {
                 href="/venues/redemptions"
                 className={`${navItemClass} ${
                   isActive('/venues/redemptions')
-                    ? 'bg-amber-50 text-amber-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400'
+                    : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
                 }`}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -357,8 +357,8 @@ export default function NavigationTabs() {
               href="/notifications"
               className={`relative ${navItemClass} ${
                 isActive('/notifications')
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
               }`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -376,20 +376,10 @@ export default function NavigationTabs() {
               <span className="text-xs font-medium sm:hidden">Alerts</span>
             </Link>
             <Button
-              onClick={() => setFeedbackOpen(true)}
-              variant="ghost"
-              size="sm"
-              className={`${navItemClass} h-auto`}
-            >
-              <MessageSquare className="w-5 h-5" />
-              <span className="text-xs font-medium">Feedback</span>
-            </Button>
-
-            <Button
               onClick={() => setMoreOpen(true)}
               variant="ghost"
               size="sm"
-              className={`${navItemClass} h-auto`}
+              className={`${navItemClass} h-auto text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800`}
             >
               <MoreHorizontal className="w-5 h-5" />
               <span className="text-xs font-medium">More</span>
@@ -473,12 +463,26 @@ export default function NavigationTabs() {
           </DialogHeader>
           <div className="space-y-2">
             <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => {
+                setMoreOpen(false)
+                setFeedbackOpen(true)
+              }}
+            >
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Feedback
+            </Button>
+            <Button
               asChild
               variant="outline"
               className="w-full justify-start"
               onClick={() => setMoreOpen(false)}
             >
-              <Link href="/settings">Settings</Link>
+              <Link href="/settings">
+                <Settings className="w-4 h-4 mr-2 inline" />
+                Settings
+              </Link>
             </Button>
             <Button
               variant="destructive"
