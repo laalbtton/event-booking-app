@@ -84,6 +84,8 @@ export async function POST(request: Request) {
     reference_id: null,
     notes: sessionNote,
     stripe_payment_id: paymentIntentId,
+    credit_source: 'purchase',
+    source_reason: 'stripe_checkout',
   }
 
   const { error: insertError } = await serviceClient

@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { MessageSquare, MoreHorizontal, LogOut } from 'lucide-react'
+import { Home, MessageSquare, Mic, MoreHorizontal, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { signOutAndCleanup } from '@/lib/authClient'
@@ -281,20 +281,6 @@ export default function NavigationTabs() {
         <nav className="flex items-center justify-around py-2 sm:justify-between">
           <div className="flex items-center gap-1 sm:gap-2 flex-1 justify-around">
             <Link
-              href="/dashboard"
-              className={`${navItemClass} ${
-                isActive('/dashboard')
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-              <span className="text-xs font-medium">Dashboard</span>
-            </Link>
-
-            <Link
               href="/profile"
               className={`${navItemClass} ${
                 isActive('/profile') && !pathname?.startsWith('/profile/')
@@ -302,10 +288,20 @@ export default function NavigationTabs() {
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              <span className="text-xs font-medium">Profile</span>
+              <Home className="w-5 h-5" />
+              <span className="text-xs font-medium">Home</span>
+            </Link>
+
+            <Link
+              href="/dashboard"
+              className={`${navItemClass} ${
+                isActive('/dashboard')
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <Mic className="w-5 h-5" />
+              <span className="text-xs font-medium">Perform</span>
             </Link>
 
             {(userRole === 'event_creator' || userRole === 'admin') && (
@@ -357,15 +353,6 @@ export default function NavigationTabs() {
                 <span className="text-xs font-medium text-center leading-tight">Venue</span>
               </Link>
             )}
-            <Button
-              onClick={() => setFeedbackOpen(true)}
-              variant="ghost"
-              size="sm"
-              className={`${navItemClass} h-auto`}
-            >
-              <MessageSquare className="w-5 h-5" />
-              <span className="text-xs font-medium">Feedback</span>
-            </Button>
             <Link
               href="/notifications"
               className={`relative ${navItemClass} ${
@@ -388,6 +375,15 @@ export default function NavigationTabs() {
               <span className="text-xs font-medium hidden sm:inline">Notifications</span>
               <span className="text-xs font-medium sm:hidden">Alerts</span>
             </Link>
+            <Button
+              onClick={() => setFeedbackOpen(true)}
+              variant="ghost"
+              size="sm"
+              className={`${navItemClass} h-auto`}
+            >
+              <MessageSquare className="w-5 h-5" />
+              <span className="text-xs font-medium">Feedback</span>
+            </Button>
 
             <Button
               onClick={() => setMoreOpen(true)}

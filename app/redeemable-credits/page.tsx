@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { ChevronLeft } from 'lucide-react'
 
 export default function RedeemableCreditsPage() {
   return (
@@ -45,9 +46,6 @@ export default function RedeemableCreditsPage() {
         </div>
 
         <div className="mt-6 flex gap-2">
-          <Button asChild>
-            <Link href="/dashboard">Back to dashboard</Link>
-          </Button>
           <Button asChild variant="outline">
             <Link href="/credits">View credits history</Link>
           </Button>

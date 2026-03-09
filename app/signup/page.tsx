@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -9,8 +9,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { redeemPendingAppInvite, setPendingAppInviteToken } from '@/lib/appInviteClient'
 
-export default function SignupPage() {
+function SignupContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
@@ -18,6 +19,14 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const inviteToken = searchParams.get('invite')
+    if (inviteToken) {
+      setPendingAppInviteToken(inviteToken)
+    }
+  }, [searchParams])
 
   // Email/password signup
   async function handleSubmit(e: React.FormEvent) {
@@ -48,6 +57,9 @@ export default function SignupPage() {
       }
 
       // If email is already confirmed (shouldn't happen normally, but handle it)
+      if (data.session?.access_token) {
+        await redeemPendingAppInvite(data.session.access_token)
+      }
       setSuccess(true)
       setTimeout(() => {
         router.push('/onboarding/role')
@@ -237,5 +249,17 @@ export default function SignupPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 sm:py-16">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    }>
+      <SignupContent />
+    </Suspense>
   )
 }

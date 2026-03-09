@@ -151,10 +151,32 @@ export type CreditTransaction = {
   user_id: string
   amount: number
   transaction_type: string
+  credit_source?: 'purchase' | 'cash' | 'in_kind' | null
+  source_reason?: string | null
   reference_id: string | null
   notes: string | null
   created_by: string | null
   stripe_payment_id?: string | null
+  created_at: string
+}
+
+export type AppInviteLink = {
+  id: string
+  token: string
+  welcome_credits: number
+  expires_at: string
+  max_uses: number | null
+  uses: number
+  is_active: boolean
+  created_by: string
+  created_at: string
+}
+
+export type AppInviteCreditGrant = {
+  id: string
+  invite_link_id: string
+  user_id: string
+  credits_granted: number
   created_at: string
 }
 

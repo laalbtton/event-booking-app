@@ -7,6 +7,7 @@ import type { Profile } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
+import { ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -132,9 +133,12 @@ export default function ApplyEventCreatorPage() {
     return (
       <div className="min-h-screen bg-background pb-20">
         <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <Button variant="ghost" asChild className="mb-6">
-            <Link href="/dashboard">← Back to Dashboard</Link>
-          </Button>
+          <div className="flex items-center gap-2 mb-6">
+            <Link href="/dashboard" className="p-1 -ml-1 rounded hover:bg-muted" aria-label="Back to Dashboard">
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+            <h1 className="text-xl font-bold">Apply for Event Creator</h1>
+          </div>
 
           <Card>
             <CardHeader className="text-center">
@@ -176,9 +180,12 @@ export default function ApplyEventCreatorPage() {
     return (
       <div className="min-h-screen bg-background pb-20">
         <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <Button variant="ghost" asChild className="mb-6">
-            <Link href="/dashboard">← Back to Dashboard</Link>
-          </Button>
+          <div className="flex items-center gap-2 mb-6">
+            <Link href="/dashboard" className="p-1 -ml-1 rounded hover:bg-muted" aria-label="Back to Dashboard">
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+            <h1 className="text-xl font-bold">Apply for Event Creator</h1>
+          </div>
 
           <Card>
             <CardHeader className="text-center">
@@ -209,9 +216,12 @@ export default function ApplyEventCreatorPage() {
     return (
       <div className="min-h-screen bg-background pb-20">
         <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <Button variant="ghost" asChild className="mb-6">
-            <Link href="/dashboard">← Back to Dashboard</Link>
-          </Button>
+          <div className="flex items-center gap-2 mb-6">
+            <Link href="/dashboard" className="p-1 -ml-1 rounded hover:bg-muted" aria-label="Back to Dashboard">
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+            <h1 className="text-xl font-bold">Apply for Event Creator</h1>
+          </div>
 
           <Card>
             <CardHeader className="text-center">
@@ -247,9 +257,12 @@ export default function ApplyEventCreatorPage() {
   return (
     <div className="min-h-screen bg-background pb-20">
       <div className="max-w-3xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <Button variant="ghost" asChild className="mb-6">
-          <Link href="/dashboard">← Back to Dashboard</Link>
-        </Button>
+        <div className="flex items-center gap-2 mb-6">
+          <Link href="/dashboard" className="p-1 -ml-1 rounded hover:bg-muted" aria-label="Back to Dashboard">
+            <ChevronLeft className="w-5 h-5" />
+          </Link>
+          <h1 className="text-xl font-bold">Apply for Event Creator</h1>
+        </div>
 
         <Card>
           <CardHeader>

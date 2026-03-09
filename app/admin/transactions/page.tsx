@@ -15,6 +15,8 @@ type TransactionRow = {
   user_id: string
   amount: number
   transaction_type: string
+  credit_source?: 'purchase' | 'cash' | 'in_kind' | null
+  source_reason?: string | null
   notes: string | null
   created_at: string
   profile: {
@@ -29,6 +31,7 @@ export default function AdminTransactionsPage() {
   const [loadError, setLoadError] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'purchased' | 'in_kind'>('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
@@ -51,7 +54,7 @@ export default function AdminTransactionsPage() {
       // NOTE: Do NOT embed `profiles(...)` here.
       // `credit_transactions` has more than one FK to `profiles` (e.g. `user_id` + `created_by`),
       // which makes `profiles(...)` embeds ambiguous in PostgREST.
-      .select('id, user_id, amount, transaction_type, notes, created_at')
+      .select('id, user_id, amount, transaction_type, credit_source, source_reason, notes, created_at')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -101,17 +104,30 @@ export default function AdminTransactionsPage() {
       const query = searchTerm.toLowerCase()
       const matchesSearch = !query || name.includes(query) || email.includes(query)
       const matchesType = typeFilter === 'all' || row.transaction_type === typeFilter
+      const isPurchasedRow =
+        row.credit_source === 'purchase' ||
+        row.credit_source === 'cash' ||
+        row.transaction_type === 'purchase'
+      const isInKindRow = row.credit_source === 'in_kind'
+      const matchesSource =
+        sourceFilter === 'all' ||
+        (sourceFilter === 'purchased' && isPurchasedRow) ||
+        (sourceFilter === 'in_kind' && isInKindRow)
 
       const createdAt = new Date(row.created_at)
       const matchesFrom = !dateFrom || createdAt >= new Date(`${dateFrom}T00:00:00`)
       const matchesTo = !dateTo || createdAt <= new Date(`${dateTo}T23:59:59`)
 
-      return matchesSearch && matchesType && matchesFrom && matchesTo
+      return matchesSearch && matchesType && matchesSource && matchesFrom && matchesTo
     })
-  }, [transactions, searchTerm, typeFilter, dateFrom, dateTo])
+  }, [transactions, searchTerm, typeFilter, sourceFilter, dateFrom, dateTo])
 
-  const totalReceived = filteredTransactions
-    .filter((row) => row.transaction_type === 'purchase')
+  const totalPurchased = filteredTransactions
+    .filter((row) => row.credit_source === 'purchase' || row.credit_source === 'cash' || row.transaction_type === 'purchase')
+    .reduce((sum, row) => sum + (row.amount || 0), 0)
+
+  const totalInKind = filteredTransactions
+    .filter((row) => row.credit_source === 'in_kind')
     .reduce((sum, row) => sum + (row.amount || 0), 0)
 
   if (loading) {
@@ -140,11 +156,20 @@ export default function AdminTransactionsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Total received (filtered)</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Purchased credits (filtered)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">${totalReceived}</div>
-            <p className="text-xs text-muted-foreground">Credits purchased</p>
+            <div className="text-2xl font-bold text-gray-900">{totalPurchased}</div>
+            <p className="text-xs text-muted-foreground">Stripe + cash payment credits</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">In-kind credits (filtered)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-900">{totalInKind}</div>
+            <p className="text-xs text-muted-foreground">Complimentary / non-cash issuance</p>
           </CardContent>
         </Card>
         <Card>
@@ -160,7 +185,7 @@ export default function AdminTransactionsPage() {
 
       <Card>
         <CardContent className="p-4 space-y-4">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <div className="md:col-span-2">
               <Label htmlFor="transaction-search" className="text-sm font-semibold">Search</Label>
               <Input
@@ -184,12 +209,27 @@ export default function AdminTransactionsPage() {
                 <option value="refund">Refund</option>
                 <option value="booking">Booking</option>
                 <option value="cancellation">Cancellation</option>
+                <option value="welcome_invite_credit">Welcome Invite Credit</option>
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="transaction-source" className="text-sm font-semibold">Source</Label>
+              <select
+                id="transaction-source"
+                value={sourceFilter}
+                onChange={(e) => setSourceFilter(e.target.value as 'all' | 'purchased' | 'in_kind')}
+                className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="all">All</option>
+                <option value="purchased">Purchased (cash/stripe)</option>
+                <option value="in_kind">In-kind</option>
               </select>
             </div>
             <div className="flex items-end">
               <Button variant="outline" onClick={() => {
                 setSearchTerm('')
                 setTypeFilter('all')
+                setSourceFilter('all')
                 setDateFrom('')
                 setDateTo('')
               }}>
@@ -252,6 +292,12 @@ export default function AdminTransactionsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant="secondary">{row.transaction_type}</Badge>
+                      {row.credit_source && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Source: {row.credit_source}
+                          {row.source_reason ? ` (${row.source_reason})` : ''}
+                        </div>
+                      )}
                       {row.notes && (
                         <div className="text-xs text-gray-500 mt-1 truncate max-w-[220px]">
                           {row.notes}

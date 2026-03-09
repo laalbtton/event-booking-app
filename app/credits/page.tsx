@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
+import { ChevronLeft } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase'
@@ -62,16 +63,16 @@ export default function CreditsHistoryPage() {
   return (
     <div className="min-h-screen bg-background py-6 sm:py-8 px-4 pb-20">
       <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard" className="p-1 -ml-1 rounded hover:bg-muted shrink-0" aria-label="Back to Dashboard">
+            <ChevronLeft className="w-5 h-5" />
+          </Link>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Credits History</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Credits</h1>
             <p className="text-sm text-muted-foreground">
               Track purchases, refunds, and bookings.
             </p>
           </div>
-          <Link href="/dashboard" className="text-sm text-blue-600 hover:text-blue-800 underline">
-            Back to Dashboard
-          </Link>
         </div>
 
         <Card className="border-blue-200 bg-blue-50/50 shadow-sm">

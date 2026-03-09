@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { useTheme } from 'next-themes'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { getPushClientState, subscribeCurrentUserToPush, unsubscribeCurrentUserFromPush } from '@/lib/pushClient'
 import {
@@ -21,7 +23,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { Download } from 'lucide-react'
+import { ChevronLeft, Download } from 'lucide-react'
 import { toast } from 'sonner'
 
 type PushNotificationPrefs = {
@@ -58,6 +60,12 @@ export default function SettingsPage() {
   const [socapTestEventId, setSocapTestEventId] = useState('')
   const [socapScenario, setSocapScenario] = useState<ThursdaySocapScenario>('registration_open')
   const [socapTestLoading, setSocapTestLoading] = useState(false)
+  const [themeMounted, setThemeMounted] = useState(false)
+  const { theme, setTheme } = useTheme()
+
+  useEffect(() => {
+    setThemeMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!authResolved) return
@@ -435,15 +443,30 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-background pb-20">
       <NavigationTabs />
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8 space-y-6">
-        <Card>
+        <div className="flex items-center gap-2">
+          <Link href="/profile" className="p-1 -ml-1 rounded hover:bg-muted shrink-0" aria-label="Back to profile">
+            <ChevronLeft className="w-5 h-5" />
+          </Link>
+          <h1 className="text-2xl font-bold">Settings</h1>
+        </div>
+        <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="text-2xl">Settings</CardTitle>
-            <CardDescription>Manage notifications, Instagram, and app installation.</CardDescription>
+            <CardTitle className="text-xl">Appearance</CardTitle>
+            <CardDescription>Use dark backgrounds and light text across the app.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" asChild>
-              <Link href="/profile">Back to profile</Link>
-            </Button>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Dark mode</p>
+                <p className="text-xs text-muted-foreground">Switch to dark theme for the entire app.</p>
+              </div>
+              {themeMounted && (
+                <Switch
+                  checked={theme === 'dark'}
+                  onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
+                />
+              )}
+            </div>
           </CardContent>
         </Card>
 

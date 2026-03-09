@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { QRCodeSVG } from 'qrcode.react'
 import Link from 'next/link'
+import { ChevronLeft } from 'lucide-react'
 import NavigationTabs from '@/components/NavigationTabs'
 
 export default function EventQRCodePage() {
@@ -97,16 +98,16 @@ export default function EventQRCodePage() {
     <div className="min-h-screen bg-gray-50 pb-20">
       <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-2 mb-6">
             <Link
               href="/events/manage"
-              className="text-blue-600 hover:text-blue-800 font-medium"
+              className="text-blue-600 hover:text-blue-800 p-1 -ml-1 rounded hover:bg-gray-100"
+              aria-label="Back to Events"
             >
-              ← Back to Events
+              <ChevronLeft className="w-5 h-5" />
             </Link>
+            <h1 className="text-3xl font-bold text-gray-900">QR Code</h1>
           </div>
-
-          <h1 className="text-3xl font-bold mb-6 text-gray-900">Event QR Code</h1>
           
           <div className="text-center mb-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-900">{event.title}</h2>

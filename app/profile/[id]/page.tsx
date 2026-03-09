@@ -7,6 +7,7 @@ import type { PublicProfile } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { ChevronLeft } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -160,20 +161,24 @@ export default function PublicProfilePage() {
       {/* Header */}
       <div className="bg-background/80 backdrop-blur-sm border-b shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-sm"
-            onClick={() => {
-              if (typeof window !== 'undefined' && window.history.length > 1) {
-                router.back()
-              } else {
-                router.push('/dashboard')
-              }
-            }}
-          >
-            ← Back
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.history.length > 1) {
+                  router.back()
+                } else {
+                  router.push('/dashboard')
+                }
+              }}
+              aria-label="Back"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </Button>
+            <h1 className="text-xl font-bold tracking-tight">Profile</h1>
+          </div>
         </div>
       </div>
 

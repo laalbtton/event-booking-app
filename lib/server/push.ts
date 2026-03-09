@@ -22,7 +22,12 @@ function ensureWebPushConfigured() {
   const subject = process.env.VAPID_SUBJECT
 
   if (!publicKey || !privateKey || !subject) {
-    throw new Error('Missing VAPID env vars')
+    const missing = [
+      !publicKey && 'NEXT_PUBLIC_VAPID_PUBLIC_KEY',
+      !privateKey && 'VAPID_PRIVATE_KEY',
+      !subject && 'VAPID_SUBJECT',
+    ].filter(Boolean) as string[]
+    throw new Error(`Missing VAPID env vars: ${missing.join(', ')}. Add them to .env.local and restart the dev server.`)
   }
 
   webpush.setVapidDetails(subject, publicKey, privateKey)

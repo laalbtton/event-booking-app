@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
-import { Copy } from 'lucide-react'
+import { ChevronLeft, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 
 
@@ -580,7 +580,8 @@ export default function EventDetailsPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Event Not Found</h1>
-          <Link href="/dashboard" className="text-blue-600 hover:underline">
+          <Link href="/dashboard" className="flex items-center gap-2 text-blue-600 hover:underline">
+            <ChevronLeft className="w-5 h-5" />
             Back to Dashboard
           </Link>
         </div>
@@ -671,13 +672,16 @@ export default function EventDetailsPage() {
         {/* Header */}
         <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-            <Link 
-            href="/dashboard"
-            className="text-blue-700 hover:text-blue-900 text-sm mb-2 inline-block font-medium"
-            >
-            ← Back to Dashboard
-            </Link>
-            <h1 className="text-3xl font-bold text-gray-900">Event Details</h1>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard"
+                className="text-blue-700 hover:text-blue-900 p-1 -ml-1 rounded hover:bg-gray-100"
+                aria-label="Back to Dashboard"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </Link>
+              <h1 className="text-3xl font-bold text-gray-900">Event Details</h1>
+            </div>
         </div>
         </div>
 

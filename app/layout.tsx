@@ -6,6 +6,7 @@ import { ConfirmDialogProvider } from '@/components/providers/confirm-dialog-pro
 import { GlobalAlertsProvider } from '@/components/providers/global-alerts-provider'
 import { AuthBootstrapProvider } from '@/components/providers/auth-bootstrap-provider'
 import { PushServiceWorkerProvider } from '@/components/providers/push-service-worker-provider'
+import { ThemeProvider } from '@/components/providers/theme-provider'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -51,6 +52,7 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
       >
+        <ThemeProvider>
         <ConfirmDialogProvider>
           <AuthBootstrapProvider>
             <PushServiceWorkerProvider />
@@ -86,6 +88,7 @@ export default function RootLayout({
             </footer>
           </AuthBootstrapProvider>
         </ConfirmDialogProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { redeemPendingAppInvite } from '@/lib/appInviteClient'
 
 export default function AuthCallbackPage() {
   const router = useRouter()
@@ -70,6 +71,11 @@ export default function AuthCallbackPage() {
           console.error('Error getting user after OAuth:', userError)
           router.replace('/login?error=no_user')
           return
+        }
+
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+          await redeemPendingAppInvite(session.access_token)
         }
 
         const shouldShowRoleOnboarding = await ensureRoleOnboardingFlag(user)

@@ -417,6 +417,24 @@ export default function AdminEventsPage() {
         })
       }
 
+      // Send push notification to all users about the new event
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const accessToken = sessionData.session?.access_token
+        if (accessToken) {
+          await fetch('/api/events/notify-new', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ eventId: data.id }),
+          })
+        }
+      } catch (pushErr) {
+        console.warn('Failed to send new event push notification:', pushErr)
+      }
+
       toast.success('Event created successfully!')
       setShowCreateForm(false)
       setCreateStep('details')

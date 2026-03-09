@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createNotification } from '@/lib/notifications'
+import { sendPushToUser } from '@/lib/server/push'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, created_by, host_user_id, event_type')
+      .select('id, title, created_by, host_user_id, event_type')
       .eq('id', eventId)
       .single()
 
@@ -94,6 +96,35 @@ export async function POST(request: NextRequest) {
 
     if (inviteError) {
       return NextResponse.json({ error: inviteError.message }, { status: 500 })
+    }
+
+    const eventTitle = event.title || 'Event'
+    try {
+      await createNotification(
+        invitedUserId,
+        'general',
+        'Event Invite',
+        `You're invited to "${eventTitle}"`,
+        null,
+        eventId
+      )
+    } catch (notifErr) {
+      console.warn('Failed to create invite notification:', notifErr)
+    }
+
+    try {
+      await sendPushToUser(
+        supabase,
+        invitedUserId,
+        {
+          title: 'Event Invite',
+          body: `You're invited to "${eventTitle}"`,
+          data: { url: `/events/${eventId}` },
+        },
+        'booking_updates'
+      )
+    } catch (pushErr) {
+      console.warn('Failed to send invite push:', pushErr)
     }
 
     return NextResponse.json({ success: true, invite })

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime, formatTime } from '@/lib/dateUtils'
 import Link from 'next/link'
+import { ChevronLeft } from 'lucide-react'
 
 type BookingWithProfile = {
   id: string
@@ -193,14 +194,15 @@ export default function AttendancePage() {
       {/* Header */}
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <Link
               href="/admin/events"
-              className="text-blue-600 hover:text-blue-800 font-medium"
+              className="text-blue-600 hover:text-blue-800 p-1 -ml-1 rounded hover:bg-gray-100"
+              aria-label="Back to Events"
             >
-              ← Back to Events
+              <ChevronLeft className="w-5 h-5" />
             </Link>
-            <h1 className="text-2xl font-bold text-gray-900">Attendance Management</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Attendance</h1>
           </div>
         </div>
       </div>

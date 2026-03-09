@@ -17,9 +17,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Download, LogOut } from 'lucide-react'
+import { ChevronDown, Copy, Download, LogOut, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
+import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
+import { QRCodeSVG } from 'qrcode.react'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { getPushClientState, subscribeCurrentUserToPush, unsubscribeCurrentUserFromPush } from '@/lib/pushClient'
 import { toast } from 'sonner'
@@ -67,6 +69,16 @@ type PushNotificationPrefs = {
   subscribed_at: string | null
 }
 
+type MyCoupon = {
+  id: string
+  eventTitle: string
+  eventDate: string | null
+  code: string
+  valueCents: number
+  status: 'issued' | 'redeemed' | 'cancelled' | 'expired'
+  expiresAt: string | null
+}
+
 export default function ProfilePage() {
   const PUSH_REMINDER_SNOOZE_DAYS = 7
   const { authResolved, user } = useAuthBootstrap()
@@ -97,6 +109,17 @@ export default function ProfilePage() {
   const [showInstallHelp, setShowInstallHelp] = useState(false)
   const [installActionLoading, setInstallActionLoading] = useState(false)
   const [isStandalone, setIsStandalone] = useState(false)
+  const [invitesExpanded, setInvitesExpanded] = useState(true)
+  const [transactionsExpanded, setTransactionsExpanded] = useState(false)
+  const [myBookings, setMyBookings] = useState<any[]>([])
+  const [myCoupons, setMyCoupons] = useState<MyCoupon[]>([])
+  const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
+  const [currentTime, setCurrentTime] = useState(new Date())
+  const [showRedeemedCoupons, setShowRedeemedCoupons] = useState(false)
+  const [bookingsTab, setBookingsTab] = useState<'bookings' | 'coupons'>('bookings')
+  const [cancellingBooking, setCancellingBooking] = useState<string | null>(null)
+  const [expandedPosterActions, setExpandedPosterActions] = useState<Set<string>>(new Set())
+  const { confirm } = useConfirmDialog()
   const touchStartX = useRef<Record<string, number>>({})
   const touchStartY = useRef<Record<string, number>>({})
   const router = useRouter()
@@ -129,6 +152,11 @@ export default function ProfilePage() {
     const state = getPushClientState()
     setPushSupported(state.supported)
     setPushPermission(state.permission)
+  }, [])
+
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(new Date()), 60_000)
+    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
@@ -269,6 +297,39 @@ export default function ProfilePage() {
         setInvites(invitesData as any)
       }
 
+      // Load user's bookings (confirmed, waitlist, cancelled) for Bookings tab
+      const { data: bookingsFullData, error: bookingsFullError } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          events (*)
+        `)
+        .eq('user_id', userId)
+        .in('status', ['confirmed', 'waitlist', 'cancelled'])
+
+      if (!bookingsFullError) {
+        setMyBookings(bookingsFullData || [])
+        // Load confirmed counts for events in myBookings
+        const eventIds = [...new Set((bookingsFullData || []).map((b: any) => b.event_id))]
+        if (eventIds.length > 0) {
+          const { data: countsData } = await supabase
+            .from('bookings')
+            .select('event_id, status, booking_scope')
+            .in('event_id', eventIds)
+            .eq('status', 'confirmed')
+          if (countsData) {
+            const counts: Record<string, number> = {}
+            countsData.forEach((b: any) => {
+              if (b.booking_scope === 'audience') return
+              counts[b.event_id] = (counts[b.event_id] || 0) + 1
+            })
+            setEventConfirmedCounts(counts)
+          }
+        }
+      }
+
+      await loadMyCoupons(userId)
+
       const { data: pushPrefsData } = await supabase
         .from('push_notification_prefs')
         .select('user_id, preprompt_dismissed_at, preprompt_dismissed_until, native_permission_denied_at, subscribed_at')
@@ -284,6 +345,237 @@ export default function ProfilePage() {
       alert('Error loading profile: ' + error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadMyCoupons(userId: string) {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+    if (!accessToken) {
+      setMyCoupons([])
+      return
+    }
+    const makeRequest = async (token: string) =>
+      fetch('/api/vouchers/my', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    let response = await makeRequest(accessToken)
+    if (response.status === 401) {
+      const retrySession = await supabase.auth.getSession()
+      const retryToken = retrySession.data.session?.access_token
+      if (retryToken) response = await makeRequest(retryToken)
+    }
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) return
+    const vouchers = Array.isArray(result.vouchers) ? result.vouchers : []
+    const scoped = vouchers.filter((v: any) => v && v.id && v.code)
+    setMyCoupons(
+      scoped.map((v: any) => ({
+        id: v.id,
+        eventTitle: v.eventTitle || 'Event',
+        eventDate: v.eventDate || null,
+        code: v.code,
+        valueCents: Number(v.valueCents || 0),
+        status: v.status,
+        expiresAt: v.expiresAt || null,
+      }))
+    )
+  }
+
+  function formatLocationValue(value: unknown): string {
+    if (!value) return 'TBD'
+    if (typeof value === 'string') return value
+    if (typeof value === 'object' && value !== null) {
+      const v = value as { name?: string; address?: string; pathname?: string }
+      if (v.name && v.address) return `${v.name}, ${v.address}`
+      if (v.pathname) return v.pathname
+    }
+    return 'TBD'
+  }
+
+  function formatVenueName(value: unknown): string {
+    const location = formatLocationValue(value)
+    const [name] = location.split(',')
+    return name.trim() || location
+  }
+
+  function getRatingDisplay(rating: string | null | undefined): string {
+    const normalized = String(rating || '18+').trim()
+    const isAllAges = normalized.toLowerCase().includes('all')
+    return `${isAllAges ? '👨‍👩‍👧‍👦' : '🔞'} ${normalized}`
+  }
+
+  function formatEventLanguages(event: Event | any): string {
+    const langs = Array.isArray(event?.languages) ? event.languages : ['English']
+    const cleaned = langs
+      .map((l: string) => String(l || '').trim())
+      .filter(Boolean)
+      .filter((l: string, i: number, arr: string[]) => arr.findIndex((x) => x.toLowerCase() === l.toLowerCase()) === i)
+    const withEnglish = cleaned.some((l: string) => l.toLowerCase() === 'english') ? cleaned : [...cleaned, 'English']
+    return [...withEnglish.filter((l: string) => l.toLowerCase() !== 'english'), 'English'].join(', ')
+  }
+
+  function formatCouponStatus(status: MyCoupon['status']) {
+    if (status === 'issued') return 'Issued'
+    if (status === 'redeemed') return 'Redeemed'
+    if (status === 'expired') return 'Expired'
+    return 'Cancelled'
+  }
+
+  function copyCouponCode(code: string) {
+    navigator.clipboard.writeText(code)
+    toast.success('Coupon code copied!')
+  }
+
+  function copyPosterLink(url: string) {
+    navigator.clipboard.writeText(url)
+    toast.success('Poster link copied!')
+  }
+
+  function togglePosterActions(bookingId: string) {
+    setExpandedPosterActions((prev) => {
+      const next = new Set(prev)
+      if (next.has(bookingId)) next.delete(bookingId)
+      else next.add(bookingId)
+      return next
+    })
+  }
+
+  async function sharePoster(url: string, title: string) {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ title: `${title} poster`, text: `Check out this event poster for ${title}`, url })
+        return
+      }
+      copyPosterLink(url)
+    } catch {
+      copyPosterLink(url)
+    }
+  }
+
+  function renderCouponCard(coupon: MyCoupon) {
+    return (
+      <Card key={coupon.id} className="border-l-4 border-l-blue-500">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-2">
+            <CardTitle className="text-base md:text-lg line-clamp-2">{coupon.eventTitle}</CardTitle>
+            <Badge
+              variant="outline"
+              className={cn(
+                coupon.status === 'issued' && 'text-blue-600 border-blue-600',
+                coupon.status === 'redeemed' && 'text-green-600 border-green-600',
+                coupon.status === 'expired' && 'text-amber-600 border-amber-600',
+                coupon.status === 'cancelled' && 'text-muted-foreground'
+              )}
+            >
+              {formatCouponStatus(coupon.status)}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="text-sm text-muted-foreground">
+            {coupon.eventDate ? `📅 ${formatDateTime(coupon.eventDate)}` : '📅 Event date unavailable'}
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Code</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-foreground">{coupon.code}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => copyCouponCode(coupon.code)}
+                aria-label="Copy coupon code"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Value</span>
+            <span className="font-medium">${(coupon.valueCents / 100).toFixed(2)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Expires</span>
+            <span>{coupon.expiresAt ? formatDateTime(coupon.expiresAt) : 'No expiry'}</span>
+          </div>
+          <div className="pt-2 border-t flex justify-center">
+            <div className="bg-white p-2 rounded border">
+              <QRCodeSVG value={coupon.code} size={96} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  async function handleCancelBooking(booking: any) {
+    if (!profile) return
+    const event = booking.events
+    const eventDate = new Date(event.date)
+    const now = currentTime
+    const hoursUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
+    const isBookedShow = event.event_type === 'booked_show'
+    const cancellationWindow = isBookedShow ? 0 : (event.cancellation_hours || 4)
+    const willGetRefund = !isBookedShow && hoursUntilEvent >= cancellationWindow
+    const isAudienceBooking = booking.booking_scope === 'audience'
+
+    let confirmMessage = ''
+    if (booking.status === 'waitlist') {
+      confirmMessage = isBookedShow
+        ? `Remove yourself from the waitlist for "${event.title}"?`
+        : isAudienceBooking && booking.credits_used === 0
+          ? `Remove yourself from the waitlist for "${event.title}"?\n\nYour free audience pass will be restored.`
+          : `Remove yourself from the waitlist for "${event.title}"?\n\nYou will receive a full refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
+    } else {
+      confirmMessage = isBookedShow
+        ? `Cancel participation for "${event.title}"?`
+        : willGetRefund
+          ? isAudienceBooking && booking.credits_used === 0
+            ? `Cancel registration for "${event.title}"?\n\nYour free audience pass will be restored.`
+            : `Cancel registration for "${event.title}"?\n\nYou will receive a refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
+          : `Cancel registration for "${event.title}"?\n\n⚠️ You will NOT receive a refund because cancellation is within ${cancellationWindow} hours of the event.\n\nAre you sure you want to cancel?`
+    }
+
+    const shouldProceed = await confirm({
+      title: 'Confirm cancellation',
+      message: confirmMessage,
+      confirmText: booking.status === 'waitlist' ? 'Leave Waitlist' : 'Cancel Booking',
+      cancelText: 'Keep Booking',
+      variant: 'destructive',
+    })
+    if (!shouldProceed) return
+
+    setCancellingBooking(booking.id)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+      const response = await fetch('/api/bookings/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ bookingId: booking.id }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Failed to cancel booking')
+      await loadProfile(profile.id)
+      const refundedCredits = Number(result.refundedCredits || 0)
+      const restoredFreePass = !!result.restoredFreePass
+      if (restoredFreePass) {
+        toast.success('Booking cancelled. Your free audience pass has been restored.')
+      } else if (refundedCredits > 0) {
+        const voucherNote = result.voucherRefunded ? ' Food coupon credits were also refunded.' : ''
+        toast.success(
+          `${booking.status === 'waitlist' ? 'Waitlist removed' : 'Booking cancelled'}. ${refundedCredits} credit${refundedCredits > 1 ? 's have' : ' has'} been refunded to your account.${voucherNote}`
+        )
+      } else {
+        toast.info('Booking cancelled. No refund issued based on cancellation policy and voucher status.')
+      }
+    } catch (error: any) {
+      toast.error('Error cancelling booking: ' + error.message)
+    } finally {
+      setCancellingBooking(null)
     }
   }
 
@@ -751,6 +1043,11 @@ export default function ProfilePage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     </Button>
+                    <Button variant="ghost" size="icon" className="h-9 w-9" title="Settings" asChild>
+                      <Link href="/settings">
+                        <Settings className="w-5 h-5" />
+                      </Link>
+                    </Button>
                     <Button
                       onClick={handleSignOut}
                       variant="outline"
@@ -764,15 +1061,22 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Consolidated Stats - Horizontal Layout */}
-                <div className="flex items-center gap-6 pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-muted-foreground">Credits:</span>
-                    <span className="text-lg sm:text-xl font-bold text-primary">{profile.credits}</span>
+                <div className="flex flex-col gap-2 pt-4 border-t">
+                  <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-muted-foreground">Credits:</span>
+                      <span className="text-lg sm:text-xl font-bold text-primary">{profile.credits}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-muted-foreground">Attended:</span>
+                      <span className="text-lg sm:text-xl font-bold text-green-600">{attendedCount}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-muted-foreground">Attended:</span>
-                    <span className="text-lg sm:text-xl font-bold text-green-600">{attendedCount}</span>
-                  </div>
+                  {shouldShowPushReminder && (
+                    <p className="text-xs text-muted-foreground">
+                      Notifications are not enabled yet. Enable them from <Link href="/settings" className="underline underline-offset-2">Settings</Link>.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -944,192 +1248,442 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm mb-6 border-blue-200">
+        {/* My Invites - only when invites exist */}
+        {invites.length > 0 && (
+          <Card className="shadow-sm">
+            <CardHeader className="cursor-pointer" onClick={() => setInvitesExpanded((p) => !p)}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">
+                    My Invites{invites.filter((i) => i.status === 'pending').length > 0 ? ` (${invites.filter((i) => i.status === 'pending').length})` : ''}
+                  </CardTitle>
+                </div>
+                <ChevronDown className={cn('h-5 w-5 text-muted-foreground transition-transform', invitesExpanded && 'rotate-180')} />
+              </div>
+            </CardHeader>
+            {invitesExpanded && (
+              <CardContent>
+                <div className="space-y-3">
+                  {invites.map((invite) => (
+                    <div key={invite.id} className="flex items-center justify-between gap-3 p-3 border rounded-lg">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{invite.events.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">{formatDate(invite.events.date)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => respondToInvite(invite.id, 'accept')}
+                          disabled={respondingInvite === invite.id}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => respondToInvite(invite.id, 'decline')}
+                          disabled={respondingInvite === invite.id}
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* My Bookings - always visible, no dropdown */}
+        <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">Settings</CardTitle>
-            <CardDescription>
-              Push notifications, Instagram auto-post, and install options are now in one place.
-            </CardDescription>
+            <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Bookings</CardTitle>
           </CardHeader>
           <CardContent>
-            <Button asChild variant="outline">
-              <Link href="/settings">Open Settings</Link>
-            </Button>
-            {shouldShowPushReminder && (
-              <p className="text-xs text-muted-foreground mt-3">
-                Notifications are not enabled yet. You can enable them from Settings.
-              </p>
-            )}
+            <Tabs value={bookingsTab} onValueChange={(v) => setBookingsTab(v as typeof bookingsTab)} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="bookings">Bookings</TabsTrigger>
+                <TabsTrigger value="coupons">Coupons</TabsTrigger>
+              </TabsList>
+              <TabsContent value="bookings" className="pt-4">
+                  {(() => {
+                    const activeUpcomingBookings = myBookings.filter(
+                      (b) =>
+                        new Date(b.events.date) >= currentTime &&
+                        b.status !== 'cancelled' &&
+                        b.events.status !== 'cancelled'
+                    )
+                    if (activeUpcomingBookings.length === 0) {
+                      return (
+                        <Card>
+                          <CardContent className="p-8 text-center text-muted-foreground">
+                            No upcoming bookings yet.
+                          </CardContent>
+                        </Card>
+                      )
+                    }
+                    return (
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {activeUpcomingBookings.map((booking) => {
+                          const eventDate = new Date(booking.events.date)
+                          const now = currentTime
+                          const hoursUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
+                          const isBookedShow = booking.events.event_type === 'booked_show'
+                          const cancellationWindow = isBookedShow ? 0 : (booking.events.cancellation_hours || 4)
+                          const canCancel = hoursUntilEvent >= 0 && booking.events.status !== 'cancelled'
+                          const willGetRefund = !isBookedShow && hoursUntilEvent >= cancellationWindow
+                          const diffMs = eventDate.getTime() - now.getTime()
+                          const isPast = diffMs < 0
+                          let timeDisplay = ''
+                          if (!isPast) {
+                            const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+                            const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+                            const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
+                            const parts = []
+                            if (days > 0) parts.push(`${days}d`)
+                            if (hours > 0 || days > 0) parts.push(`${hours}h`)
+                            if (days === 0) parts.push(`${minutes}m`)
+                            timeDisplay = parts.join(' ') || '0m'
+                          }
+                          const refundDeadline = new Date(eventDate.getTime() - cancellationWindow * 60 * 60 * 1000)
+                          const refundDiffMs = refundDeadline.getTime() - now.getTime()
+                          let refundTimeDisplay = ''
+                          if (refundDiffMs > 0) {
+                            const days = Math.floor(refundDiffMs / (1000 * 60 * 60 * 24))
+                            const hours = Math.floor((refundDiffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+                            const minutes = Math.floor((refundDiffMs % (1000 * 60 * 60)) / (1000 * 60))
+                            const parts = []
+                            if (days > 0) parts.push(`${days}d`)
+                            if (hours > 0 || days > 0) parts.push(`${hours}h`)
+                            if (days === 0) parts.push(`${minutes}m`)
+                            refundTimeDisplay = parts.join(' ') || '0m'
+                          }
+                          const isWaitlist = booking.status === 'waitlist'
+                          const isEventCancelled = booking.events.status === 'cancelled'
+                          const isAudienceBooking = booking.booking_scope === 'audience'
+                          const confirmedCount = eventConfirmedCounts[booking.event_id] || 0
+                          const spotsLeft = booking.events.max_attendees != null
+                            ? booking.events.max_attendees - confirmedCount
+                            : null
+                          return (
+                            <Link key={booking.id} href={`/events/${booking.event_id}`} className="block active:opacity-90">
+                              <Card
+                                className={cn(
+                                  'border-l-4 hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40',
+                                  isEventCancelled ? 'border-l-red-500' : isWaitlist ? 'border-l-yellow-500' : 'border-l-green-500'
+                                )}
+                              >
+                                <CardHeader className="pb-3">
+                                  <div className="flex justify-between items-start">
+                                    <CardTitle className="text-base md:text-lg flex-1">{booking.events.title}</CardTitle>
+                                    {!isPast &&
+                                      (isEventCancelled ? (
+                                        <Badge variant="destructive" className="ml-2">Cancelled</Badge>
+                                      ) : isWaitlist ? (
+                                        <Badge variant="outline" className="text-yellow-600 border-yellow-600 ml-2">
+                                          ⏳ #{booking.waitlist_position}
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="outline" className="text-green-600 border-green-600 ml-2">✓</Badge>
+                                      ))}
+                                  </div>
+                                </CardHeader>
+                                <CardContent className="space-y-2">
+                                  <p className="text-xs text-muted-foreground line-clamp-1 break-words whitespace-normal">
+                                    {booking.events.description}
+                                  </p>
+                                  <div className="text-xs text-muted-foreground">
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                      <div className="flex items-center gap-1">
+                                        <span>📅</span>
+                                        <span>{formatDateTime(booking.events.date)}</span>
+                                      </div>
+                                      {booking.events.max_attendees != null && spotsLeft != null && (
+                                        <div className="whitespace-nowrap">
+                                          👥 {spotsLeft} / {booking.events.max_attendees} spots left
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                      <div className="flex items-center gap-1">
+                                        <span>📍</span>
+                                        <span>{formatVenueName(booking.events.location)}</span>
+                                      </div>
+                                      <div className="whitespace-nowrap">
+                                        {booking.events.theme ? `🎨 ${booking.events.theme}` : ''}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 min-w-0">
+                                      <div className="min-w-0 flex-1 pr-2 text-xs text-muted-foreground truncate">
+                                        🗣️ {formatEventLanguages(booking.events)}
+                                      </div>
+                                      <div className="whitespace-nowrap shrink-0 text-[11px] sm:text-xs">
+                                        {getRatingDisplay(booking.events.rating)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-1 text-muted-foreground">
+                                      <span>💳</span>
+                                      {isBookedShow ? (
+                                        <span>Invite only</span>
+                                      ) : isAudienceBooking ? (
+                                        booking.credits_used > 0 ? (
+                                          <span>Deposit held: {booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
+                                        ) : (
+                                          <span>Free pass used</span>
+                                        )
+                                      ) : (
+                                        <span>{booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
+                                      )}
+                                    </div>
+                                    {!isPast ? (
+                                      <Badge variant="secondary" className="text-xs">⏰ In {timeDisplay}</Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-xs">✓ Completed</Badge>
+                                    )}
+                                  </div>
+                                  {isAudienceBooking && booking.audience_checkin_code && (
+                                    <div className="text-xs text-muted-foreground rounded-md border bg-muted/30 px-2 py-1">
+                                      Check-in code: <span className="font-medium text-foreground">{booking.audience_checkin_code}</span>
+                                    </div>
+                                  )}
+                                  {isAudienceBooking && (
+                                    <p className="text-xs text-muted-foreground">Not marked attended? You can request a review soon.</p>
+                                  )}
+                                  {canCancel && (
+                                    <div className="space-y-2 pt-2 border-t">
+                                      <Button
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          handleCancelBooking(booking)
+                                        }}
+                                        disabled={cancellingBooking === booking.id}
+                                        variant="destructive"
+                                        size="sm"
+                                        className="w-full"
+                                      >
+                                        {cancellingBooking === booking.id
+                                          ? 'Cancelling...'
+                                          : isWaitlist
+                                            ? 'Leave Waitlist'
+                                            : 'Cancel Booking'}
+                                      </Button>
+                                      {!isBookedShow && (
+                                        <p className="text-xs text-muted-foreground text-center">
+                                          {isWaitlist
+                                            ? '✓ Full refund if you leave waitlist'
+                                            : willGetRefund
+                                              ? `✓ Full refund available (${refundTimeDisplay} left)`
+                                              : `⚠️ No refund (within ${cancellationWindow}h window)`}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+                                  {booking.events.poster_url && (
+                                    <div className="space-y-2 pt-2 border-t">
+                                      <button
+                                        type="button"
+                                        className="w-full flex items-center justify-between text-xs text-muted-foreground"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          togglePosterActions(booking.id)
+                                        }}
+                                      >
+                                        <span>Poster available</span>
+                                        <ChevronDown className={cn('h-4 w-4 transition-transform', expandedPosterActions.has(booking.id) && 'rotate-180')} />
+                                      </button>
+                                      {expandedPosterActions.has(booking.id) && (
+                                        <div className="flex flex-wrap gap-2">
+                                          <a href={booking.events.poster_url} target="_blank" rel="noreferrer" download onClick={(e) => e.stopPropagation()}>
+                                            <Button size="sm" variant="outline" className="text-xs">Download Poster</Button>
+                                          </a>
+                                          <Button size="sm" variant="outline" className="text-xs" onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyPosterLink(booking.events.poster_url) }}>
+                                            Copy Poster Link
+                                          </Button>
+                                          <Button size="sm" variant="outline" className="text-xs" onClick={(e) => { e.preventDefault(); e.stopPropagation(); sharePoster(booking.events.poster_url, booking.events.title) }}>
+                                            Share Poster
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                </TabsContent>
+              <TabsContent value="coupons" className="pt-4">
+                {myCoupons.length === 0 ? (
+                  <Card>
+                    <CardContent className="p-8 text-center text-muted-foreground">
+                      No coupons issued yet.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  (() => {
+                    const activeCoupons = myCoupons.filter((c) => c.status === 'issued')
+                    const redeemedCoupons = myCoupons.filter((c) => c.status === 'redeemed')
+                    const otherCoupons = myCoupons.filter((c) => c.status !== 'issued' && c.status !== 'redeemed')
+                    return (
+                      <div className="space-y-6">
+                        <div className="space-y-3">
+                          <p className="text-sm font-semibold text-foreground">Active coupons</p>
+                          {activeCoupons.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No active coupons.</p>
+                          ) : (
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                              {activeCoupons.map((c) => renderCouponCard(c))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-3 border-t pt-4">
+                          <button
+                            type="button"
+                            className="w-full flex items-center justify-between text-sm font-semibold"
+                            onClick={() => setShowRedeemedCoupons((p) => !p)}
+                          >
+                            <span>Redeemed coupons ({redeemedCoupons.length})</span>
+                            <ChevronDown className={cn('h-4 w-4 transition-transform', showRedeemedCoupons && 'rotate-180')} />
+                          </button>
+                          {showRedeemedCoupons && (
+                            <>
+                              {redeemedCoupons.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No redeemed coupons.</p>
+                              ) : (
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                  {redeemedCoupons.map((c) => renderCouponCard(c))}
+                                </div>
+                              )}
+                              {otherCoupons.length > 0 && (
+                                <div className="space-y-3 border-t pt-4">
+                                  <p className="text-sm font-semibold text-muted-foreground">
+                                    Expired / cancelled coupons ({otherCoupons.length})
+                                  </p>
+                                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                    {otherCoupons.map((c) => renderCouponCard(c))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()
+                )}
+              </TabsContent>
+            </Tabs>
+            {(() => {
+              const activeUpcomingBookings = myBookings.filter(
+                (b) =>
+                  new Date(b.events.date) >= currentTime &&
+                  b.status !== 'cancelled' &&
+                  b.events.status !== 'cancelled'
+              )
+              return activeUpcomingBookings.length === 0 && myCoupons.length === 0 && (
+                <div className="pt-4 text-center">
+                  <Button variant="link" asChild>
+                    <Link href="/dashboard">Browse Events →</Link>
+                  </Button>
+                </div>
+              )
+            })()}
           </CardContent>
         </Card>
 
-        {/* Event Bookings */}
-        {(eventBookings.length > 0 || invites.length > 0) ? (
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Event Activity</CardTitle>
-            </CardHeader>
+        {/* My Transactions - collapsible at bottom */}
+        <Card className="shadow-sm">
+          <CardHeader className="cursor-pointer" onClick={() => setTransactionsExpanded((p) => !p)}>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Transactions</CardTitle>
+              <ChevronDown className={cn('h-5 w-5 text-muted-foreground transition-transform', transactionsExpanded && 'rotate-180')} />
+            </div>
+          </CardHeader>
+          {transactionsExpanded && (
             <CardContent>
-              <Tabs defaultValue="activity" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="activity">Activity</TabsTrigger>
-                  <TabsTrigger value="invites">Invites</TabsTrigger>
-                </TabsList>
-                <TabsContent value="activity" className="pt-4">
-                  {eventBookings.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-6">No recent activity.</p>
-                  ) : (
-                    (() => {
-                      const rows = eventBookings.map((booking) => {
-                        const isEventCancelled = booking.status === 'cancelled' && booking.event_status === 'cancelled'
-                        const activity = isEventCancelled
-                          ? 'Event cancelled'
-                          : booking.status === 'cancelled'
-                            ? 'Cancelled'
-                            : 'Booked'
-                        const activityDate =
-                          booking.booked_at
-                        const displayAmount =
-                          activity === 'Booked' ? -booking.credits_used : booking.credits_used
-
-                        return {
-                          ...booking,
-                          activity,
-                          activityDate,
-                          displayAmount,
-                        }
-                      })
-
-                      rows.sort((a, b) => new Date(b.activityDate).getTime() - new Date(a.activityDate).getTime())
-
-                      return (
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-border text-sm">
-                            <tbody className="divide-y divide-border">
-                              {(() => {
-                                const formatActivityDate = (value: string) =>
-                                  new Date(value).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    year: 'numeric',
-                                  })
-
-                                const grouped = rows.reduce((acc: Record<string, typeof rows>, row) => {
-                                  const key = formatActivityDate(row.activityDate)
-                                  if (!acc[key]) acc[key] = []
-                                  acc[key].push(row)
-                                  return acc
-                                }, {})
-
-                                const orderedDates: string[] = []
-                                rows.forEach((row) => {
-                                  const key = formatActivityDate(row.activityDate)
-                                  if (!orderedDates.includes(key)) {
-                                    orderedDates.push(key)
-                                  }
-                                })
-
-                                return orderedDates.flatMap((groupDate) => [
-                                  (
-                                    <tr key={`${groupDate}-header`}>
-                                      <td colSpan={3} className="px-4 py-2 text-xs font-semibold text-muted-foreground bg-muted/30">
-                                        {groupDate}
-                                      </td>
-                                    </tr>
-                                  ),
-                                  ...(grouped[groupDate] || []).map((row) => (
-                                    <tr
-                                      key={row.id}
-                                      className="hover:bg-muted/30"
-                                      style={{ transform: `translateX(${swipeOffset[row.id] || 0}px)` }}
-                                      onTouchStart={(e) => handleTouchStart(e, row.id)}
-                                      onTouchMove={(e) => handleTouchMove(e, row.id)}
-                                      onTouchEnd={() => handleTouchEnd(row.id)}
-                                    >
-                                      <td className="px-4 py-3">
-                                        <div className="font-medium text-foreground truncate max-w-[220px] sm:max-w-[320px]">
-                                          <Link href={`/events/${row.event_id}`} className="hover:underline">
-                                            {row.title}
-                                          </Link>
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">{row.activity}</div>
-                                      </td>
-                                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                                        {new Date(row.date).toLocaleDateString('en-US', {
-                                          month: 'short',
-                                          day: 'numeric',
-                                          year: 'numeric'
-                                        })}
-                                      </td>
-                                      <td className="px-4 py-3 text-right text-muted-foreground">
-                                        <div className="text-sm">
-                                          {row.displayAmount > 0 ? '+' : ''}{row.displayAmount}
-                                        </div>
-                                        {swipeDirection[row.id] === 'right' && (swipeOffset[row.id] || 0) > 50 && (
-                                          <div className="text-xs text-muted-foreground mt-1">
-                                            {formatTime(row.activityDate)}
-                                          </div>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  ))
-                                ])
-                              })()}
-                            </tbody>
-                          </table>
-                        </div>
-                      )
-                    })()
-                  )}
-                </TabsContent>
-                <TabsContent value="invites" className="pt-4">
-                  {invites.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-6">No invites right now.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {invites.map((invite) => (
-                        <div key={invite.id} className="flex items-center justify-between gap-3 p-3 border rounded-lg">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{invite.events.title}</p>
-                            <p className="text-xs text-muted-foreground truncate">{formatDate(invite.events.date)}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => respondToInvite(invite.id, 'accept')}
-                              disabled={respondingInvite === invite.id}
-                            >
-                              Accept
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => respondToInvite(invite.id, 'decline')}
-                              disabled={respondingInvite === invite.id}
-                            >
-                              Decline
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+              {eventBookings.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No recent activity.</p>
+              ) : (
+                (() => {
+                  const rows = eventBookings.map((booking) => {
+                    const isEventCancelled = booking.status === 'cancelled' && booking.event_status === 'cancelled'
+                    const activity = isEventCancelled
+                      ? 'Event cancelled'
+                      : booking.status === 'cancelled'
+                        ? 'Cancelled'
+                        : 'Booked'
+                    const activityDate = booking.booked_at
+                    const displayAmount = activity === 'Booked' ? -booking.credits_used : booking.credits_used
+                    return { ...booking, activity, activityDate, displayAmount }
+                  })
+                  rows.sort((a, b) => new Date(b.activityDate).getTime() - new Date(a.activityDate).getTime())
+                  const formatActivityDate = (value: string) =>
+                    new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  const grouped = rows.reduce((acc: Record<string, typeof rows>, row) => {
+                    const key = formatActivityDate(row.activityDate)
+                    if (!acc[key]) acc[key] = []
+                    acc[key].push(row)
+                    return acc
+                  }, {})
+                  const orderedDates: string[] = []
+                  rows.forEach((row) => {
+                    const key = formatActivityDate(row.activityDate)
+                    if (!orderedDates.includes(key)) orderedDates.push(key)
+                  })
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-border text-sm">
+                        <tbody className="divide-y divide-border">
+                          {orderedDates.flatMap((groupDate) => [
+                            <tr key={`${groupDate}-header`}>
+                              <td colSpan={3} className="px-4 py-2 text-xs font-semibold text-muted-foreground bg-muted/30">
+                                {groupDate}
+                              </td>
+                            </tr>,
+                            ...(grouped[groupDate] || []).map((row) => (
+                              <tr
+                                key={row.id}
+                                className="hover:bg-muted/30"
+                                style={{ transform: `translateX(${swipeOffset[row.id] || 0}px)` }}
+                                onTouchStart={(e) => handleTouchStart(e, row.id)}
+                                onTouchMove={(e) => handleTouchMove(e, row.id)}
+                                onTouchEnd={() => handleTouchEnd(row.id)}
+                              >
+                                <td className="px-4 py-3">
+                                  <div className="font-medium text-foreground truncate max-w-[220px] sm:max-w-[320px]">
+                                    <Link href={`/events/${row.event_id}`} className="hover:underline">{row.title}</Link>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">{row.activity}</div>
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                                  {new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </td>
+                                <td className="px-4 py-3 text-right text-muted-foreground">
+                                  <div className="text-sm">{row.displayAmount > 0 ? '+' : ''}{row.displayAmount}</div>
+                                  {swipeDirection[row.id] === 'right' && (swipeOffset[row.id] || 0) > 50 && (
+                                    <div className="text-xs text-muted-foreground mt-1">{formatTime(row.activityDate)}</div>
+                                  )}
+                                </td>
+                              </tr>
+                            )),
+                          ])}
+                        </tbody>
+                      </table>
                     </div>
-                  )}
-                </TabsContent>
-              </Tabs>
+                  )
+                })()
+              )}
             </CardContent>
-          </Card>
-        ) : (
-          <Card className="shadow-sm">
-            <CardContent className="p-8 text-center">
-              <p className="text-lg font-medium text-muted-foreground mb-3">No event bookings yet</p>
-              <Button variant="link" asChild>
-                <Link href="/dashboard">
-                  Browse Events →
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+          )}
+        </Card>
 
       </div>
     </div>

@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -10,13 +10,15 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { redeemPendingAppInvite, setPendingAppInviteToken } from '@/lib/appInviteClient'
 
-export default function LoginPage() {
+function LoginContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   function shouldRouteToRoleOnboarding(user: { user_metadata?: Record<string, any> }) {
     const pendingFromMetadata = !!user.user_metadata?.onboarding_role_pending
@@ -24,6 +26,13 @@ export default function LoginPage() {
       typeof window !== 'undefined' && window.localStorage.getItem('pending_role_onboarding') === '1'
     return pendingFromMetadata || pendingFromStorage
   }
+
+  useEffect(() => {
+    const inviteToken = searchParams.get('invite')
+    if (inviteToken) {
+      setPendingAppInviteToken(inviteToken)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     async function handleHashAuth() {
@@ -45,6 +54,11 @@ export default function LoginPage() {
 
         if (sessionError) {
           throw sessionError
+        }
+
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+          await redeemPendingAppInvite(session.access_token)
         }
 
         const { data: { user }, error: userError } = await supabase.auth.getUser()
@@ -103,6 +117,10 @@ export default function LoginPage() {
 
       if (error) throw error
 
+      if (data.session?.access_token) {
+        await redeemPendingAppInvite(data.session.access_token)
+      }
+
       if (shouldRouteToRoleOnboarding(data.user)) {
         window.localStorage.removeItem('pending_role_onboarding')
         router.push('/onboarding/role')
@@ -139,6 +157,10 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
+      const inviteToken = searchParams.get('invite')
+      if (inviteToken) {
+        setPendingAppInviteToken(inviteToken)
+      }
       // Ensure we use the current origin (localhost or production)
       const redirectUrl = typeof window !== 'undefined' 
         ? `${window.location.origin}/auth/callback`
@@ -244,5 +266,17 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 sm:py-16">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }
