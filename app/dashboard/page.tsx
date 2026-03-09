@@ -108,6 +108,22 @@ export default function Dashboard() {
     return name.trim() || location
   }
 
+  function getEventTimeBucket(eventDate: Date, now: Date): 'this_week' | 'next_week' | 'later' {
+    const day = now.getDay()
+    const endThisWeek = new Date(now)
+    endThisWeek.setDate(now.getDate() + (day === 0 ? 0 : 7 - day))
+    endThisWeek.setHours(23, 59, 59, 999)
+    const startNextWeek = new Date(endThisWeek)
+    startNextWeek.setDate(startNextWeek.getDate() + 1)
+    startNextWeek.setHours(0, 0, 0, 0)
+    const endNextWeek = new Date(startNextWeek)
+    endNextWeek.setDate(endNextWeek.getDate() + 6)
+    endNextWeek.setHours(23, 59, 59, 999)
+    if (eventDate <= endThisWeek) return 'this_week'
+    if (eventDate <= endNextWeek) return 'next_week'
+    return 'later'
+  }
+
   function getEffectiveCreditsRequired(event: Event): number {
     if (!event.food_coupon_enabled) return event.credits_required
     const spotFee = Math.max(0, Number(event.spot_fee_credits || 0))
@@ -741,9 +757,19 @@ export default function Dashboard() {
     setError('')
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) {
+        setError('Please sign in to set an alert')
+        return
+      }
+
       const response = await fetch('/api/set-registration-alert', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ eventId }),
       })
 
@@ -1112,9 +1138,8 @@ export default function Dashboard() {
         {/* Credits Card */}
         <Card className="bg-gradient-to-r from-emerald-600 to-teal-700 border-0 text-white shadow-lg mb-8">
           <CardContent className="p-4 sm:p-5">
-            <div className="flex items-center gap-2 sm:gap-3 flex-nowrap">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
               <span className="text-2xl sm:text-3xl font-bold drop-shadow-md tracking-tight shrink-0">{profile?.credits || 0}</span>
-              <span className="text-sm sm:text-base drop-shadow text-white/90 shrink-0">credits</span>
               <div className="flex-1 min-w-0" />
               <Button
                 asChild
@@ -1125,7 +1150,7 @@ export default function Dashboard() {
                 <Link href="/buy-credits">Buy Credits</Link>
               </Button>
               <Button asChild variant="secondary" size="sm" className="bg-white/10 text-white hover:bg-white/20 shrink-0">
-                <Link href="/credits">Credits History</Link>
+                <Link href="/credits">History</Link>
               </Button>
             </div>
             {userRole === 'audience' && (
@@ -1166,6 +1191,7 @@ export default function Dashboard() {
 
           {(() => {
             const isAudienceUser = userRole === 'audience'
+            const now = new Date()
             const filteredEvents = events.filter((event) =>
               isAudienceUser
                 ? event.event_type === 'open_mic'
@@ -1175,6 +1201,17 @@ export default function Dashboard() {
                   ? !invitedEventIds.has(event.id)
                   : event.tickets_enabled && event.event_type !== 'open_mic'
             )
+
+            const eventsByBucket = {
+              this_week: filteredEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'this_week'),
+              next_week: filteredEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'next_week'),
+              later: filteredEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'later'),
+            }
+            const bucketOrder: Array<{ key: 'this_week' | 'next_week' | 'later'; label: string }> = [
+              { key: 'this_week', label: 'This week' },
+              { key: 'next_week', label: 'Next week' },
+              { key: 'later', label: 'Later' },
+            ]
 
             if (filteredEvents.length === 0) {
               return (
@@ -1189,8 +1226,17 @@ export default function Dashboard() {
             }
 
             return (
-              <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3 -mx-4 sm:mx-0 px-0">
-                {filteredEvents.map((event) => {
+              <div className="space-y-4 -mx-4 sm:mx-0 px-0">
+                {bucketOrder.map(({ key, label }) => {
+                  const bucketEvents = eventsByBucket[key]
+                  if (bucketEvents.length === 0) return null
+                  return (
+                    <div key={key} className="space-y-1.5">
+                      <div className="pt-1 first:pt-0 pl-4 text-sm font-semibold text-muted-foreground">
+                        {label}
+                      </div>
+                      <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {bucketEvents.map((event) => {
                   const activeBooking = myBookings.find(
                     (b) =>
                       b.event_id === event.id &&
@@ -1437,6 +1483,10 @@ export default function Dashboard() {
                         </CardContent>
                       </Card>
                     </Link>
+                  )
+                })}
+                      </div>
+                    </div>
                   )
                 })}
               </div>

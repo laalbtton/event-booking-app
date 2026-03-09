@@ -1452,7 +1452,26 @@ export default function AttendancePage() {
             {/* Host Section - Only show if user can manage hosts */}
             {canManageHost && (
               <div className="border-t pt-4 mt-4">
-                <h3 className="text-lg font-semibold mb-3">Event Host</h3>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <h3 className="text-lg font-semibold">Event Host</h3>
+                  <Button
+                    onClick={() => {
+                      if (showReplaceHostPanel) {
+                        setShowReplaceHostPanel(false)
+                        setHostSearch('')
+                        setHostSearchResults([])
+                        setHostSearchLoading(false)
+                        return
+                      }
+                      setShowReplaceHostPanel(true)
+                    }}
+                    disabled={updating === 'host'}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {showReplaceHostPanel ? 'Hide' : 'Replace Host'}
+                  </Button>
+                </div>
                 <div
                   onDragOver={handleHostDragOver}
                   onDragLeave={handleDragLeave}
@@ -1477,23 +1496,6 @@ export default function AttendancePage() {
                         <p className="font-semibold text-indigo-900">{hostProfile.full_name}</p>
                         <p className="text-sm text-indigo-700">Host</p>
                       </div>
-                      <Button
-                        onClick={() => {
-                          if (showReplaceHostPanel) {
-                            setShowReplaceHostPanel(false)
-                            setHostSearch('')
-                            setHostSearchResults([])
-                            setHostSearchLoading(false)
-                            return
-                          }
-                          setShowReplaceHostPanel(true)
-                        }}
-                        disabled={updating === 'host'}
-                        variant="outline"
-                        size="sm"
-                      >
-                        {showReplaceHostPanel ? 'Hide' : 'Replace Host'}
-                      </Button>
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full text-center min-h-[72px]">
@@ -1505,27 +1507,6 @@ export default function AttendancePage() {
                     </div>
                   )}
                 </div>
-                {!hostProfile && (
-                  <div className="mt-3 flex justify-end">
-                    <Button
-                      onClick={() => {
-                        if (showReplaceHostPanel) {
-                          setShowReplaceHostPanel(false)
-                          setHostSearch('')
-                          setHostSearchResults([])
-                          setHostSearchLoading(false)
-                          return
-                        }
-                        setShowReplaceHostPanel(true)
-                      }}
-                      disabled={updating === 'host'}
-                      variant="outline"
-                      size="sm"
-                    >
-                      {showReplaceHostPanel ? 'Hide' : 'Replace Host'}
-                    </Button>
-                  </div>
-                )}
                 {showReplaceHostPanel && (
                   <div className="mt-3 p-3 border rounded-lg bg-white space-y-2">
                     <label className="block text-xs text-muted-foreground">Search user</label>

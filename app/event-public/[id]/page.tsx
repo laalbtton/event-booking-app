@@ -287,8 +287,9 @@ export default function PublicEventPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+        <div className="-mx-4 sm:mx-0">
         {/* Event Info Card */}
-        <Card className="mb-6 shadow-lg border-t-4 border-t-primary">
+        <Card className="mb-6 shadow-lg border-t-4 border-t-primary rounded-none sm:rounded-lg border-x-0 sm:border-x">
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">{event.title}</CardTitle>
@@ -423,7 +424,7 @@ export default function PublicEventPage() {
         </Card>
 
         {/* Confirmed Attendees */}
-        <Card className="mb-6 shadow-sm">
+        <Card className="mb-6 shadow-sm rounded-none sm:rounded-lg border-x-0 sm:border-x">
           <CardHeader>
             <CardTitle className="text-lg sm:text-xl font-bold tracking-tight">
               Confirmed Attendees ({confirmedBookings.length})
@@ -464,7 +465,7 @@ export default function PublicEventPage() {
 
         {/* Waitlist */}
         {waitlistBookings.length > 0 && (
-          <Card className="mb-6 shadow-sm">
+          <Card className="mb-6 shadow-sm rounded-none sm:rounded-lg border-x-0 sm:border-x">
             <CardHeader>
               <CardTitle className="text-lg sm:text-xl font-bold tracking-tight">
                 Waitlist ({waitlistBookings.length})
@@ -501,7 +502,7 @@ export default function PublicEventPage() {
         )}
 
         {/* Call to Action */}
-        <Card className="bg-gradient-to-r from-blue-600 to-purple-700 border-0 text-white shadow-lg">
+        <Card className="bg-gradient-to-r from-blue-600 to-purple-700 border-0 text-white shadow-lg rounded-none sm:rounded-lg">
           <CardContent className="p-8 text-center">
             {event.event_type === 'booked_show' && (
               <p className="text-sm font-semibold text-white/90 mb-2">Invite only</p>
@@ -527,6 +528,7 @@ export default function PublicEventPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   )

@@ -112,7 +112,7 @@ export default function EventDetailsPage() {
   const [varietyDialogOpen, setVarietyDialogOpen] = useState(false)
   const [varietyOptions, setVarietyOptions] = useState<VarietyArtOption[]>([])
   const [selectedVarietyOptionId, setSelectedVarietyOptionId] = useState('')
-  const [posterExpanded, setPosterExpanded] = useState(true)
+  const [posterExpanded, setPosterExpanded] = useState(false)
 
 
   function copyPublicLink() {
@@ -406,9 +406,19 @@ export default function EventDetailsPage() {
     setError('')
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) {
+        setError('Please sign in to set an alert')
+        return
+      }
+
       const response = await fetch('/api/set-registration-alert', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ eventId }),
       })
 
@@ -620,7 +630,7 @@ export default function EventDetailsPage() {
     !!(event as any).variety_use_max_attendees
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gray-50 dark:bg-background pb-20">
       <Dialog open={varietyDialogOpen} onOpenChange={setVarietyDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -671,25 +681,26 @@ export default function EventDetailsPage() {
         </DialogContent>
       </Dialog>
         {/* Header */}
-        <div className="bg-white shadow">
+        <div className="bg-white dark:bg-card shadow border-b border-transparent dark:border-border">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-2">
               <Link
                 href="/dashboard"
-                className="text-blue-700 hover:text-blue-900 p-1 -ml-1 rounded hover:bg-gray-100"
+                className="text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-1 -ml-1 rounded hover:bg-gray-100 dark:hover:bg-muted"
                 aria-label="Back to Dashboard"
               >
                 <ChevronLeft className="w-5 h-5" />
               </Link>
-              <h1 className="text-3xl font-bold text-gray-900">Event Details</h1>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-foreground">Event Details</h1>
             </div>
         </div>
         </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="-mx-4 sm:mx-0">
         {/* Poster Section - at top, collapsible caption + buttons */}
         {event.poster_url && (
-          <Card className="mb-6">
+          <Card className="mb-6 rounded-none sm:rounded-lg border-x-0 sm:border-x">
             <CardContent className="p-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -738,7 +749,7 @@ export default function EventDetailsPage() {
         )}
 
         {/* Event Info Card */}
-        <Card className="mb-6">
+        <Card className="mb-6 rounded-none sm:rounded-lg border-x-0 sm:border-x">
           <CardHeader>
             <CardTitle className="text-2xl md:text-3xl">{event.title}</CardTitle>
             <Badge variant="outline" className="w-fit text-xs">
@@ -777,18 +788,18 @@ export default function EventDetailsPage() {
             </div>
 
             <div className="space-y-2 mb-4">
-                <div className="flex items-center text-sm md:text-base text-gray-900">
+                <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                   <span className="mr-2">📅</span>
                   <span>{formatDateTime(event.date)}</span>
                 </div>
 
-                <div className="flex items-center text-sm md:text-base text-gray-900">
+                <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                   <span className="mr-2">📍</span>
                   {venue ? (
                     <button
                       type="button"
                       onClick={() => setVenueOpen(true)}
-                      className="text-blue-700 hover:text-blue-900 underline underline-offset-2"
+                      className="text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 underline underline-offset-2"
                     >
                       {venue.name}
                     </button>
@@ -797,7 +808,7 @@ export default function EventDetailsPage() {
                   )}
                 </div>
 
-                <div className="flex items-center text-sm md:text-base text-gray-900">
+                <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                   <span className="mr-2">💳</span>
                   {event.event_type === 'booked_show' ? (
                     <span><strong className="font-semibold">Type:</strong> Invite only</span>
@@ -817,42 +828,42 @@ export default function EventDetailsPage() {
                 </div>
 
                 {!isRegistrationOpen && event.registration_opens_at && (
-                  <div className="flex items-center text-sm md:text-base text-orange-700">
+                  <div className="flex items-center text-sm md:text-base text-orange-700 dark:text-orange-400">
                     <span className="mr-2">⏰</span>
                     <span>Registration opens {formatDateTime(event.registration_opens_at)}</span>
                   </div>
                 )}
 
                 {event.max_attendees ? (
-                  <div className="flex items-center text-sm md:text-base text-gray-900">
+                  <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                     <span className="mr-2">👥</span>
                     <span>{confirmedBookings.length} / {event.max_attendees} confirmed
                       {spotsAvailable !== null && spotsAvailable > 0 && (
-                        <span className="text-green-600 ml-2">
+                        <span className="text-green-600 dark:text-green-400 ml-2">
                           ({spotsAvailable} spot{spotsAvailable !== 1 ? 's' : ''} left)
                         </span>
                       )}
                       {spotsAvailable === 0 && (
-                        <span className="text-red-600 ml-2">(FULL)</span>
+                        <span className="text-red-600 dark:text-red-400 ml-2">(FULL)</span>
                       )}
                     </span>
                   </div>
                 ) : (
-                  <div className="flex items-center text-sm md:text-base text-gray-900">
+                  <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                     <span className="mr-2">👥</span>
                     <span>{confirmedBookings.length} registered (Unlimited)</span>
                   </div>
                 )}
 
                 {audienceExpectedCount >= 5 && (
-                  <div className="flex items-center text-sm md:text-base text-gray-900">
+                  <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                     <span className="mr-2">🧑‍🤝‍🧑</span>
                     <span>Expected audience: {audienceExpectedCount}</span>
                   </div>
                 )}
 
                 {event.event_type === 'open_mic' && (event as any).open_mic_type === 'variety_arts_open_mic' && varietyOptions.length > 0 && (
-                  <div className="text-sm md:text-base text-gray-900">
+                  <div className="text-sm md:text-base text-gray-900 dark:text-foreground">
                     <span className="mr-2">🎭</span>
                     <span>
                       {useGlobalVarietyCapacity
@@ -863,7 +874,7 @@ export default function EventDetailsPage() {
                 )}
 
                 {event.event_type !== 'booked_show' && !event.tickets_enabled && (
-                  <div className="flex items-center text-sm md:text-base text-gray-900">
+                  <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                     <span className="mr-2">⏱️</span>
                     <span>Cancel up to {event.cancellation_hours}h before for full refund</span>
                   </div>
@@ -942,7 +953,7 @@ export default function EventDetailsPage() {
         </Card>
 
         {/* Confirmed Attendees */}
-        <Card className="mb-6">
+        <Card className="mb-6 rounded-none sm:rounded-lg border-x-0 sm:border-x">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="text-lg md:text-xl">
               Confirmed Attendees ({confirmedBookings.length})
@@ -987,7 +998,7 @@ export default function EventDetailsPage() {
 
         {/* Waitlist */}
         {waitlistBookings.length > 0 && (
-          <Card>
+          <Card className="rounded-none sm:rounded-lg border-x-0 sm:border-x">
             <CardHeader>
               <CardTitle className="text-lg md:text-xl">
                 Waitlist ({waitlistBookings.length})
@@ -1022,6 +1033,7 @@ export default function EventDetailsPage() {
             </CardContent>
           </Card>
         )}
+        </div>
       </div>
 
       {/* Bottom Navigation */}
