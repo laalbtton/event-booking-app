@@ -10,7 +10,7 @@ import { sendBookingConfirmationEmail } from '@/lib/emailService'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
@@ -73,6 +73,7 @@ type AttendeeBooking = {
     id: string
     full_name: string
     email: string
+    avatar_url?: string | null
   }
 }
 
@@ -322,7 +323,7 @@ export default function EventDetailsPage() {
           booking_scope,
           event_art_type_id,
           waitlist_position,
-          profiles (id, full_name, email)
+          profiles (id, full_name, email, avatar_url)
         `)
         .eq('event_id', eventId)
         .eq('status', 'confirmed')
@@ -341,7 +342,7 @@ export default function EventDetailsPage() {
           booking_scope,
           event_art_type_id,
           waitlist_position,
-          profiles (id, full_name, email)
+          profiles (id, full_name, email, avatar_url)
         `)
         .eq('event_id', eventId)
         .eq('status', 'waitlist')
@@ -974,7 +975,7 @@ export default function EventDetailsPage() {
                     href={`/profile/${booking.profiles.id}`}
                     className="flex items-center p-2 bg-muted/40 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/60 transition-all cursor-pointer"
                   >
-                    <Avatar className="w-8 h-8 mr-2 bg-foreground ring-2 ring-muted-foreground/40">
+                    <Avatar className="w-8 h-8 mr-2 bg-foreground ring-2 ring-muted-foreground/40 shrink-0">
                       <AvatarFallback className="text-background text-xs font-bold bg-foreground">
                         {index + 1}
                       </AvatarFallback>
@@ -989,6 +990,17 @@ export default function EventDetailsPage() {
                         </p>
                       )}
                     </div>
+                    <Avatar className="w-8 h-8 shrink-0 rounded-full overflow-hidden">
+                      <AvatarImage src={booking.profiles.avatar_url || undefined} alt="" />
+                      <AvatarFallback className="text-xs font-medium bg-muted">
+                        {(booking.profiles.full_name || '')
+                          .split(/\s+/)
+                          .map((n) => n[0])
+                          .join('')
+                          .toUpperCase()
+                          .slice(0, 2) || '?'}
+                      </AvatarFallback>
+                    </Avatar>
                   </Link>
                 ))}
               </div>
@@ -1012,7 +1024,7 @@ export default function EventDetailsPage() {
                     href={`/profile/${booking.profiles.id}`}
                     className="flex items-center p-2 bg-muted/40 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/60 transition-all cursor-pointer"
                   >
-                    <Avatar className="w-8 h-8 mr-2 bg-foreground ring-2 ring-muted-foreground/40">
+                    <Avatar className="w-8 h-8 mr-2 bg-foreground ring-2 ring-muted-foreground/40 shrink-0">
                       <AvatarFallback className="text-background text-xs font-bold bg-foreground">
                         {booking.waitlist_position}
                       </AvatarFallback>
@@ -1027,6 +1039,17 @@ export default function EventDetailsPage() {
                         </p>
                       )}
                     </div>
+                    <Avatar className="w-8 h-8 shrink-0 rounded-full overflow-hidden">
+                      <AvatarImage src={booking.profiles.avatar_url || undefined} alt="" />
+                      <AvatarFallback className="text-xs font-medium bg-muted">
+                        {(booking.profiles.full_name || '')
+                          .split(/\s+/)
+                          .map((n) => n[0])
+                          .join('')
+                          .toUpperCase()
+                          .slice(0, 2) || '?'}
+                      </AvatarFallback>
+                    </Avatar>
                   </Link>
                 ))}
               </div>
