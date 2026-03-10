@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import NavigationTabs from '@/components/NavigationTabs'
 import { formatDateTime } from '@/lib/dateUtils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -89,6 +90,7 @@ export default function VenueRedemptionsPage() {
   const [issuedVouchers, setIssuedVouchers] = useState<IssuedVoucherRow[]>([])
   const [issuedLoading, setIssuedLoading] = useState(false)
   const [issuedSearch, setIssuedSearch] = useState('')
+  const [activeTab, setActiveTab] = useState<'redeem' | 'history'>('redeem')
 
   const [scannerActive, setScannerActive] = useState(false)
   const [scannerSupported, setScannerSupported] = useState(true)
@@ -548,8 +550,8 @@ export default function VenueRedemptionsPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Venue Coupon Redemptions</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-4">
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <Label>Venue</Label>
                 <select
@@ -580,39 +582,17 @@ export default function VenueRedemptionsPage() {
                   ))}
                 </select>
               </div>
-              <div>
-                <Label>From</Label>
-                <Input type="datetime-local" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-              </div>
-              <div>
-                <Label>To</Label>
-                <Input type="datetime-local" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground">Redemptions</p>
-                  <p className="text-2xl font-semibold">{totals.count}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground">Total Discount</p>
-                  <p className="text-2xl font-semibold">${(totals.totalDiscount / 100).toFixed(2)}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground">Order Total Captured</p>
-                  <p className="text-2xl font-semibold">${(totals.totalOrders / 100).toFixed(2)}</p>
-                </CardContent>
-              </Card>
             </div>
           </CardContent>
         </Card>
 
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'redeem' | 'history')} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="redeem">Redeem</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="redeem" className="space-y-6 mt-0">
         <Card>
           <CardHeader>
             <CardTitle>Redeem Coupon</CardTitle>
@@ -759,6 +739,48 @@ export default function VenueRedemptionsPage() {
           </CardContent>
         </Card>
 
+          </TabsContent>
+
+          <TabsContent value="history" className="space-y-6 mt-0">
+        <Card>
+          <CardHeader>
+            <CardTitle>Redemption History</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <Label>From</Label>
+                <Input type="datetime-local" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>To</Label>
+                <Input type="datetime-local" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">Redemptions</p>
+                  <p className="text-2xl font-semibold">{totals.count}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">Total Discount</p>
+                  <p className="text-2xl font-semibold">${(totals.totalDiscount / 100).toFixed(2)}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">Order Total Captured</p>
+                  <p className="text-2xl font-semibold">${(totals.totalOrders / 100).toFixed(2)}</p>
+                </CardContent>
+              </Card>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Event Totals</CardTitle>
@@ -813,6 +835,9 @@ export default function VenueRedemptionsPage() {
             )}
           </CardContent>
         </Card>
+
+          </TabsContent>
+        </Tabs>
 
         {isAdmin && (
           <p className="text-xs text-muted-foreground">

@@ -62,6 +62,7 @@ type VenueDetails = {
   parking_options: string | null
   accessibility: string | null
   food_drinks_available: boolean
+  drinks_available?: boolean
 }
 
 type AttendeeBooking = {
@@ -282,7 +283,7 @@ export default function EventDetailsPage() {
       if (eventData.venue_id) {
         const { data: venueData, error: venueError } = await supabase
           .from('venues')
-          .select('id, name, address, parking_options, accessibility, food_drinks_available')
+          .select('id, name, address, parking_options, accessibility, food_drinks_available, drinks_available')
           .eq('id', eventData.venue_id)
           .single()
 
@@ -631,7 +632,7 @@ export default function EventDetailsPage() {
     !!(event as any).variety_use_max_attendees
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background pb-20">
+    <div className={cn('min-h-screen bg-gray-50 dark:bg-background', userBooking ? 'pb-28' : 'pb-20')}>
       <Dialog open={varietyDialogOpen} onOpenChange={setVarietyDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1059,6 +1060,17 @@ export default function EventDetailsPage() {
         </div>
       </div>
 
+      {/* Booking strip - fixed above nav when user has a booking */}
+      {userBooking && (
+        <Link
+          href={`/bookings/${userBooking.id}`}
+          className="fixed left-0 right-0 z-40 flex items-center justify-center py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm shadow-lg"
+          style={{ bottom: 64 }}
+        >
+          View booking details
+        </Link>
+      )}
+
       {/* Bottom Navigation */}
       <NavigationTabs />
 
@@ -1089,6 +1101,10 @@ export default function EventDetailsPage() {
               <div>
                 <p className="font-medium text-foreground">Food & Drinks</p>
                 <p>{venue.food_drinks_available ? 'Available' : 'Not available'}</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Drinks</p>
+                <p>{venue.drinks_available ? 'Available' : 'Not available'}</p>
               </div>
             </div>
           )}

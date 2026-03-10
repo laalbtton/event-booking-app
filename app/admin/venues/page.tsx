@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
-import { Trash2, Edit, MapPin, Car, Accessibility, UtensilsCrossed } from 'lucide-react'
+import { Trash2, Edit, MapPin, Car, Accessibility, UtensilsCrossed, Wine } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/lib/dateUtils'
 import { toast } from 'sonner'
@@ -23,6 +23,7 @@ type Venue = {
   parking_options: string | null
   accessibility: string | null
   food_drinks_available: boolean
+  drinks_available?: boolean
   created_at: string
   updated_at: string
 }
@@ -88,7 +89,8 @@ export default function AdminVenuesPage() {
     address: '',
     parking_options: '',
     accessibility: '',
-    food_drinks_available: false
+    food_drinks_available: false,
+    drinks_available: false
   })
 
   useEffect(() => {
@@ -302,7 +304,8 @@ export default function AdminVenuesPage() {
       address: '',
       parking_options: '',
       accessibility: '',
-      food_drinks_available: false
+      food_drinks_available: false,
+      drinks_available: false
     })
   }
 
@@ -317,6 +320,7 @@ export default function AdminVenuesPage() {
         parking_options: formData.parking_options || null,
         accessibility: formData.accessibility || null,
         food_drinks_available: formData.food_drinks_available,
+        drinks_available: formData.drinks_available,
         updated_at: new Date().toISOString()
       }
 
@@ -345,7 +349,8 @@ export default function AdminVenuesPage() {
       address: venue.address,
       parking_options: venue.parking_options || '',
       accessibility: venue.accessibility || '',
-      food_drinks_available: venue.food_drinks_available
+      food_drinks_available: venue.food_drinks_available,
+      drinks_available: venue.drinks_available ?? false
     })
     setShowEditForm(true)
   }
@@ -363,6 +368,7 @@ export default function AdminVenuesPage() {
         parking_options: formData.parking_options || null,
         accessibility: formData.accessibility || null,
         food_drinks_available: formData.food_drinks_available,
+        drinks_available: formData.drinks_available,
         updated_at: new Date().toISOString()
       }
 
@@ -486,6 +492,12 @@ export default function AdminVenuesPage() {
                       <div className="flex items-center gap-2">
                         <UtensilsCrossed className="w-4 h-4 text-muted-foreground" />
                         <Badge variant="secondary">Food & Drinks Available</Badge>
+                      </div>
+                    )}
+                    {venue.drinks_available && (
+                      <div className="flex items-center gap-2">
+                        <Wine className="w-4 h-4 text-muted-foreground" />
+                        <Badge variant="secondary">Drinks Available</Badge>
                       </div>
                     )}
                   </div>
@@ -703,6 +715,20 @@ export default function AdminVenuesPage() {
               </Label>
             </div>
 
+            <div>
+              <Label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.drinks_available}
+                  onChange={(e) => setFormData({ ...formData, drinks_available: e.target.checked })}
+                  className="mr-2 h-4 w-4"
+                />
+                <span className="text-sm font-medium">
+                  Drinks Available
+                </span>
+              </Label>
+            </div>
+
             <div className="flex gap-3 pt-4">
               <Button
                 type="submit"
@@ -794,6 +820,20 @@ export default function AdminVenuesPage() {
                 />
                 <span className="text-sm font-medium">
                   Food & Drinks Available
+                </span>
+              </Label>
+            </div>
+
+            <div>
+              <Label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.drinks_available}
+                  onChange={(e) => setFormData({ ...formData, drinks_available: e.target.checked })}
+                  className="mr-2 h-4 w-4"
+                />
+                <span className="text-sm font-medium">
+                  Drinks Available
                 </span>
               </Label>
             </div>

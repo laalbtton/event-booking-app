@@ -1139,7 +1139,10 @@ export default function Dashboard() {
         <Card className="bg-gradient-to-r from-emerald-600 to-teal-700 border-0 text-white shadow-lg mb-8">
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
-              <span className="text-2xl sm:text-3xl font-bold drop-shadow-md tracking-tight shrink-0">{profile?.credits || 0}</span>
+              <div className="flex items-baseline gap-1.5 shrink-0">
+                <span className="text-2xl sm:text-3xl font-bold drop-shadow-md tracking-tight">{profile?.credits || 0}</span>
+                <span className="text-sm text-white/90">credits</span>
+              </div>
               <div className="flex-1 min-w-0" />
               <Button
                 asChild
@@ -1294,7 +1297,7 @@ export default function Dashboard() {
                               {event.event_type !== 'booked_show' && (
                                 <div className="inline-flex items-center gap-1.5">
                                   <Badge variant="secondary" className="whitespace-nowrap">
-                                    {creditsRequiredForCard} {creditsRequiredForCard === 1 ? 'credit' : 'credits'}
+                                    {creditsRequiredForCard} Cr
                                   </Badge>
                                   {showRedeemableHelpDot && (
                                     <button
@@ -1366,12 +1369,12 @@ export default function Dashboard() {
                                   <p className="text-xs text-muted-foreground">
                                     {audienceHasFreePass
                                       ? '1 free audience pass will be used'
-                                      : `Deposit hold ${audienceDepositCredits} credit${audienceDepositCredits === 1 ? '' : 's'}`}
+                                      : `Deposit hold ${audienceDepositCredits} Cr`}
                                   </p>
                                 )}
                                 {event.food_coupon_enabled && (
                                   <p className="text-xs text-muted-foreground">
-                                    Spot fee {event.spot_fee_credits || 0} credits + coupon ${(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100).toFixed(2)}
+                                    Spot fee {event.spot_fee_credits || 0} Cr + coupon ${(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100).toFixed(2)}
                                   </p>
                                 )}
                               </div>

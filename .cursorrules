@@ -134,6 +134,7 @@ Note: We are not using a service worker yet (no offline caching / push). Add tha
    - parking_options (text, nullable)
    - accessibility (text, nullable)
    - food_drinks_available (boolean)
+   - drinks_available (boolean)
    - created_at, updated_at (timestamp)
 
 6. **admin_users**
