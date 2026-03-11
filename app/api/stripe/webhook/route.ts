@@ -68,7 +68,7 @@ export async function POST(request: Request) {
 
   const { data: profile, error: profileError } = await serviceClient
     .from('profiles')
-    .select('id, email, full_name, credits, stripe_customer_id, stripe_customer_mode')
+    .select('id, email, full_name, credits, credits_purchased, credits_complimentary, stripe_customer_id, stripe_customer_mode')
     .eq('id', userId)
     .single()
 
@@ -111,11 +111,13 @@ export async function POST(request: Request) {
   }
 
   const newBalance = (profile.credits || 0) + credits
+  const newPurchased = (profile.credits_purchased ?? 0) + credits
 
   const { error: updateError } = await serviceClient
     .from('profiles')
     .update({
       credits: newBalance,
+      credits_purchased: newPurchased,
       stripe_customer_id: profile.stripe_customer_id || session.customer || null,
       stripe_customer_mode: profile.stripe_customer_mode || stripeMode,
     })

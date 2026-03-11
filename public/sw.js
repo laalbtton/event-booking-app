@@ -8,7 +8,7 @@ self.addEventListener('push', (event) => {
     payload = { body: event.data.text() }
   }
 
-  const title = payload.title || 'Laal Button'
+  const title = payload.title || 'One Mic Stand'
   const body = payload.body || 'You have a new update.'
   const data = payload.data || {}
 

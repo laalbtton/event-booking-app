@@ -23,6 +23,8 @@ export type Profile = {
   full_name: string | null
   avatar_url: string | null
   credits: number
+  credits_purchased?: number
+  credits_complimentary?: number
   audience_free_passes_remaining?: number
   role: UserRole
   stripe_customer_id?: string | null
@@ -151,7 +153,7 @@ export type CreditTransaction = {
   user_id: string
   amount: number
   transaction_type: string
-  credit_source?: 'purchase' | 'cash' | 'in_kind' | null
+  credit_source?: 'purchase' | 'cash' | 'in_kind' | 'install_bonus' | null
   source_reason?: string | null
   reference_id: string | null
   notes: string | null

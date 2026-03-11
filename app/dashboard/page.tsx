@@ -372,6 +372,34 @@ export default function Dashboard() {
     }
   }, [authResolved, user])
 
+  // Grant 5 credits when user has installed the app (standalone mode)
+  useEffect(() => {
+    if (!authResolved || !user || !isStandaloneMode()) return
+
+    let cancelled = false
+    async function claimInstallBonus() {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        if (!token || cancelled) return
+
+        const res = await fetch('/api/credits/install-bonus', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!cancelled && res.ok && data.success && !data.alreadyGranted && data.credits != null) {
+          toast.success('You earned 5 free credits for installing the app!')
+          setProfile((p) => (p ? { ...p, credits: data.credits } : null))
+        }
+      } catch {
+        // Silent fail
+      }
+    }
+    void claimInstallBonus()
+    return () => { cancelled = true }
+  }, [authResolved, user])
+
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(new Date())
@@ -1105,7 +1133,7 @@ export default function Dashboard() {
                 <div>
                   <CardTitle className="text-base sm:text-lg font-semibold text-blue-900">Install app for quicker access</CardTitle>
                   <p className="text-sm text-blue-700 mt-1">
-                    Add Laal Button to your home screen so it opens like a native app.
+                    Add One Mic Stand to your home screen and get 5 free credits.
                   </p>
                 </div>
                 <Download className="h-5 w-5 text-blue-700 shrink-0 mt-0.5" />
@@ -1372,7 +1400,7 @@ export default function Dashboard() {
                                       : `Deposit hold ${audienceDepositCredits} Cr`}
                                   </p>
                                 )}
-                                {event.food_coupon_enabled && (
+                                {!isAudienceUser && event.food_coupon_enabled && (
                                   <p className="text-xs text-muted-foreground">
                                     Spot fee {event.spot_fee_credits || 0} Cr + coupon ${(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100).toFixed(2)}
                                   </p>
@@ -1428,6 +1456,12 @@ export default function Dashboard() {
                                       </Badge>
                                     )}
                                   </div>
+                                ) : !canAfford ? (
+                                  <Link href="/buy-credits" onClick={(e) => e.stopPropagation()}>
+                                    <Button size="sm" className="text-xs">
+                                      Buy Credits
+                                    </Button>
+                                  </Link>
                                 ) : (
                                   <Button
                                     onClick={(e) => {
@@ -1435,17 +1469,15 @@ export default function Dashboard() {
                                       e.stopPropagation()
                                       handleBookEvent(event)
                                     }}
-                                    disabled={!canAfford || isBooking}
+                                    disabled={isBooking}
                                     size="sm"
                                     className="text-xs"
                                   >
                                     {isBooking 
                                       ? 'Booking...' 
-                                      : !canAfford 
-                                        ? 'Not enough credits' 
-                                        : isFull 
-                                          ? 'Join Waitlist' 
-                                          : isAudienceUser ? 'Reserve Spot' : 'Book Event'}
+                                      : isFull 
+                                        ? 'Join Waitlist' 
+                                        : isAudienceUser ? 'Reserve Spot' : 'Book Event'}
                                   </Button>
                                 )}
                               </div>

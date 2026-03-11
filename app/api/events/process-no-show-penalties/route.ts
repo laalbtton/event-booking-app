@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { splitDeduction, hasEnoughCredits } from '@/lib/creditLedger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
 
       const { data: attendeeProfile, error: profileLoadError } = await supabase
         .from('profiles')
-        .select('credits')
+        .select('credits, credits_purchased, credits_complimentary')
         .eq('id', booking.user_id)
         .single()
       if (profileLoadError || !attendeeProfile) {
@@ -124,10 +125,26 @@ export async function POST(request: NextRequest) {
         continue
       }
 
+      const purchased = attendeeProfile.credits_purchased ?? 0
+      const complimentary = attendeeProfile.credits_complimentary ?? 0
+      if (!hasEnoughCredits(purchased, complimentary, penaltyCredits)) {
+        skipped += 1
+        continue
+      }
+
+      const split = splitDeduction(purchased, complimentary, penaltyCredits)
       const nextCredits = Number(attendeeProfile.credits || 0) - penaltyCredits
+      const nextPurchased = purchased - split.purchasedUsed
+      const nextComplimentary = complimentary - split.complimentaryUsed
+
       const { error: creditsError } = await supabase
         .from('profiles')
-        .update({ credits: nextCredits, updated_at: nowIso })
+        .update({
+          credits: nextCredits,
+          credits_purchased: nextPurchased,
+          credits_complimentary: nextComplimentary,
+          updated_at: nowIso,
+        })
         .eq('id', booking.user_id)
       if (creditsError) {
         skipped += 1

@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
+import { useIsMobile } from '@/hooks/useMediaQuery'
+import { ChevronLeft } from 'lucide-react'
 
 export default function AdminLayout({
   children,
@@ -17,6 +19,7 @@ export default function AdminLayout({
   const { authResolved, user } = useAuthBootstrap()
   const router = useRouter()
   const pathname = usePathname()
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     if (!authResolved) return
@@ -73,14 +76,15 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Admin Sub-Navigation */}
+      {/* Admin Sub-Navigation - hidden on mobile */}
+      {!isMobile && (
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8 py-4">
             <Link
-              href="/admin"
+              href="/admin/users"
               className={`font-medium transition-colors ${
-                pathname === '/admin'
+                pathname === '/admin/users'
                   ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
                   : 'text-gray-700 hover:text-gray-900'
               }`}
@@ -110,7 +114,7 @@ export default function AdminLayout({
             <Link
               href="/admin/transactions"
               className={`font-medium transition-colors ${
-                pathname === '/admin/transactions'
+                pathname.startsWith('/admin/transactions')
                   ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
                   : 'text-gray-700 hover:text-gray-900'
               }`}
@@ -130,6 +134,22 @@ export default function AdminLayout({
           </nav>
         </div>
       </div>
+      )}
+
+      {/* Mobile back button */}
+      {isMobile && (
+        <div className="bg-white border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+            <Link
+              href={pathname === '/admin' ? '/settings' : '/admin'}
+              className="inline-flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              {pathname === '/admin' ? 'Back to Settings' : 'Back to Admin'}
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">

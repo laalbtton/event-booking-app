@@ -86,12 +86,16 @@ export async function POST(request: NextRequest) {
         id,
         user_id,
         credits_used,
+        credits_purchased_used,
+        credits_complimentary_used,
         booking_scope,
         status,
         profiles (
           email,
           full_name,
           credits,
+          credits_purchased,
+          credits_complimentary,
           audience_free_passes_remaining
         )
       `)
@@ -129,9 +133,21 @@ export async function POST(request: NextRequest) {
           notes: `Audience free pass restored for cancelled event: ${event.title}`,
         })
       } else if (booking.credits_used > 0) {
+        const purchasedUsed = booking.credits_purchased_used ?? 0
+        const complimentaryUsed = booking.credits_complimentary_used ?? 0
+        const hasLedgerSplit = purchasedUsed > 0 || complimentaryUsed > 0
+
+        const profilePatch: Record<string, unknown> = {
+          credits: currentCredits + booking.credits_used,
+        }
+        if (hasLedgerSplit) {
+          profilePatch.credits_purchased = (profileData?.credits_purchased ?? 0) + purchasedUsed
+          profilePatch.credits_complimentary = (profileData?.credits_complimentary ?? 0) + complimentaryUsed
+        }
+
         const { error: creditError } = await supabase
           .from('profiles')
-          .update({ credits: currentCredits + booking.credits_used })
+          .update(profilePatch)
           .eq('id', booking.user_id)
 
         if (creditError) {

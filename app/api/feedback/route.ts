@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     const emailSent = await sendEmail({
       to: 'events.laalbutton@gmail.com',
-      subject: 'Alpha Feedback - Laal Button',
+      subject: 'Alpha Feedback - One Mic Stand',
       html,
     })
 

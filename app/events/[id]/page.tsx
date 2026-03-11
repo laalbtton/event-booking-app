@@ -928,10 +928,14 @@ export default function EventDetailsPage() {
                       {alertSet ? 'Alert Set' : settingAlert ? 'Setting...' : 'Alert Me'}
                     </Button>
                   </div>
+                ) : !canAfford ? (
+                  <Link href="/buy-credits">
+                    <Button size="sm">Buy Credits</Button>
+                  </Link>
                 ) : (
                   <Button
                     onClick={() => handleBookEvent(event)}
-                    disabled={bookingLoading || isAlreadyBooked || !canAfford}
+                    disabled={bookingLoading || isAlreadyBooked}
                     size="sm"
                   >
                     {bookingLoading
@@ -940,8 +944,6 @@ export default function EventDetailsPage() {
                         ? userBooking?.status === 'waitlist'
                           ? 'On Waitlist'
                           : 'Booked'
-                        : !canAfford
-                          ? 'Not enough credits'
                         : bookingLabel}
                   </Button>
                 )

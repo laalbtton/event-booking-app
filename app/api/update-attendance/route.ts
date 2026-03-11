@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, event_id, user_id, status, booking_scope, credits_used, attendance_status, audience_deposit_returned_at')
+      .select('id, event_id, user_id, status, booking_scope, credits_used, credits_purchased_used, credits_complimentary_used, attendance_status, audience_deposit_returned_at')
       .eq('id', bookingId)
       .single()
 
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
     ) {
       const { data: attendeeProfile, error: attendeeError } = await supabase
         .from('profiles')
-        .select('credits')
+        .select('credits, credits_purchased, credits_complimentary')
         .eq('id', booking.user_id)
         .single()
 
@@ -131,10 +131,22 @@ export async function POST(request: NextRequest) {
       }
 
       refundedCredits = Number(booking.credits_used || 0)
-      const nowIso = new Date().toISOString()
+      const purchasedUsed = booking.credits_purchased_used ?? 0
+      const complimentaryUsed = booking.credits_complimentary_used ?? 0
+      const hasLedgerSplit = purchasedUsed > 0 || complimentaryUsed > 0
+
+      const profilePatch: Record<string, unknown> = {
+        credits: Number(attendeeProfile.credits || 0) + refundedCredits,
+        updated_at: new Date().toISOString(),
+      }
+      if (hasLedgerSplit) {
+        profilePatch.credits_purchased = (attendeeProfile.credits_purchased ?? 0) + purchasedUsed
+        profilePatch.credits_complimentary = (attendeeProfile.credits_complimentary ?? 0) + complimentaryUsed
+      }
+
       const { error: creditError } = await supabase
         .from('profiles')
-        .update({ credits: Number(attendeeProfile.credits || 0) + refundedCredits, updated_at: nowIso })
+        .update(profilePatch)
         .eq('id', booking.user_id)
 
       if (creditError) {

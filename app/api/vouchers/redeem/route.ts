@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
 
     const { data: attendeeProfile, error: attendeeProfileError } = await supabase
       .from('profiles')
-      .select('credits')
+      .select('credits, credits_complimentary')
       .eq('id', voucher.user_id)
       .single()
 
@@ -142,6 +142,7 @@ export async function POST(request: NextRequest) {
         .from('profiles')
         .update({
           credits: Number(attendeeProfile.credits || 0) + redeemedCredits,
+          credits_complimentary: (attendeeProfile.credits_complimentary ?? 0) + redeemedCredits,
           updated_at: new Date().toISOString(),
         })
         .eq('id', voucher.user_id)

@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, credits')
+      .select('id, credits, credits_purchased, credits_complimentary')
       .eq('id', userId)
       .single()
     if (profileError || !profile) {
@@ -71,11 +71,12 @@ export async function POST(request: NextRequest) {
     }
 
     const nextCredits = Number(profile.credits || 0) + amount
+    const nextComplimentary = (profile.credits_complimentary ?? 0) + amount
     const nowIso = new Date().toISOString()
 
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ credits: nextCredits, updated_at: nowIso })
+      .update({ credits: nextCredits, credits_complimentary: nextComplimentary, updated_at: nowIso })
       .eq('id', userId)
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
 

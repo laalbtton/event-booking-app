@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import { Button } from '@/components/ui/button'
@@ -108,7 +109,10 @@ export default function AdminTransactionsPage() {
         row.credit_source === 'purchase' ||
         row.credit_source === 'cash' ||
         row.transaction_type === 'purchase'
-      const isInKindRow = row.credit_source === 'in_kind'
+      const isInKindRow =
+        row.credit_source === 'in_kind' ||
+        (row.transaction_type === 'manual_add' && row.credit_source == null) ||
+        (row.transaction_type === 'welcome_invite_credit' && row.credit_source == null)
       const matchesSource =
         sourceFilter === 'all' ||
         (sourceFilter === 'purchased' && isPurchasedRow) ||
@@ -127,7 +131,11 @@ export default function AdminTransactionsPage() {
     .reduce((sum, row) => sum + (row.amount || 0), 0)
 
   const totalInKind = filteredTransactions
-    .filter((row) => row.credit_source === 'in_kind')
+    .filter((row) =>
+      row.credit_source === 'in_kind' ||
+      (row.transaction_type === 'manual_add' && row.credit_source == null) ||
+      (row.transaction_type === 'welcome_invite_credit' && row.credit_source == null)
+    )
     .reduce((sum, row) => sum + (row.amount || 0), 0)
 
   if (loading) {
@@ -141,6 +149,12 @@ export default function AdminTransactionsPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Credit Transactions</h1>
+        <Link href="/admin/transactions/credits-report">
+          <Button variant="outline" size="sm">Credits Report</Button>
+        </Link>
+      </div>
       {loadError && (
         <Card>
           <CardContent className="p-4">

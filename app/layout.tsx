@@ -6,6 +6,7 @@ import { ConfirmDialogProvider } from '@/components/providers/confirm-dialog-pro
 import { GlobalAlertsProvider } from '@/components/providers/global-alerts-provider'
 import { AuthBootstrapProvider } from '@/components/providers/auth-bootstrap-provider'
 import { PushServiceWorkerProvider } from '@/components/providers/push-service-worker-provider'
+import { InstallBonusProvider } from '@/components/providers/install-bonus-provider'
 import { ThemeProvider } from '@/components/providers/theme-provider'
 
 const geistSans = Geist({
@@ -19,13 +20,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Laal Button Event Booking",
+  title: "One Mic Stand Event Booking",
   description: "Book comedy shows and events with credits",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Laal Button",
+    title: "One Mic Stand",
   },
   icons: {
     icon: [
@@ -56,6 +57,7 @@ export default function RootLayout({
         <ConfirmDialogProvider>
           <AuthBootstrapProvider>
             <PushServiceWorkerProvider />
+            <InstallBonusProvider />
             <GlobalAlertsProvider />
             {/* Main content area */}
             <main className="flex-1">

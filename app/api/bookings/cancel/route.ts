@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, user_id, event_id, credits_used, status, booking_scope, event_art_type_id')
+      .select('id, user_id, event_id, credits_used, credits_purchased_used, credits_complimentary_used, status, booking_scope, event_art_type_id')
       .eq('id', bookingId)
       .single()
 
@@ -82,6 +82,10 @@ export async function POST(request: NextRequest) {
     let voucherRefunded = false
     let refundedCredits = 0
     let restoredFreePass = false
+
+    const purchasedUsed = booking.credits_purchased_used ?? 0
+    const complimentaryUsed = booking.credits_complimentary_used ?? 0
+    const hasLedgerSplit = purchasedUsed > 0 || complimentaryUsed > 0
 
     if (refundEligible) {
       if (isAudienceBooking) {
@@ -144,7 +148,7 @@ export async function POST(request: NextRequest) {
     if (refundedCredits > 0 || restoredFreePass) {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('credits, audience_free_passes_remaining')
+        .select('credits, credits_purchased, credits_complimentary, audience_free_passes_remaining')
         .eq('id', authData.user.id)
         .single()
 
@@ -157,6 +161,10 @@ export async function POST(request: NextRequest) {
       }
       if (refundedCredits > 0) {
         profilePatch.credits = Number(profile.credits || 0) + refundedCredits
+        if (hasLedgerSplit) {
+          profilePatch.credits_purchased = (profile.credits_purchased ?? 0) + purchasedUsed
+          profilePatch.credits_complimentary = (profile.credits_complimentary ?? 0) + complimentaryUsed
+        }
       }
       if (restoredFreePass) {
         profilePatch.audience_free_passes_remaining = Number(profile.audience_free_passes_remaining || 0) + 1

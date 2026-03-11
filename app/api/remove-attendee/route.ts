@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, event_id, user_id, credits_used, status, booking_scope, event_art_type_id')
+      .select('id, event_id, user_id, credits_used, credits_purchased_used, credits_complimentary_used, status, booking_scope, event_art_type_id')
       .eq('id', bookingId)
       .single()
 
@@ -108,10 +108,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
+    const purchasedUsed = booking.credits_purchased_used ?? 0
+    const complimentaryUsed = booking.credits_complimentary_used ?? 0
+    const hasLedgerSplit = purchasedUsed > 0 || complimentaryUsed > 0
+
     if (refundAllowed && (booking.credits_used > 0 || isAudienceBooking)) {
       const { data: attendeeProfile, error: attendeeError } = await supabase
         .from('profiles')
-        .select('credits, audience_free_passes_remaining')
+        .select('credits, credits_purchased, credits_complimentary, audience_free_passes_remaining')
         .eq('id', booking.user_id)
         .single()
 
@@ -122,6 +126,10 @@ export async function POST(request: NextRequest) {
       const patch: Record<string, any> = {}
       if (booking.credits_used > 0) {
         patch.credits = (attendeeProfile?.credits || 0) + booking.credits_used
+        if (hasLedgerSplit) {
+          patch.credits_purchased = (attendeeProfile?.credits_purchased ?? 0) + purchasedUsed
+          patch.credits_complimentary = (attendeeProfile?.credits_complimentary ?? 0) + complimentaryUsed
+        }
       } else if (isAudienceBooking) {
         patch.audience_free_passes_remaining = (attendeeProfile?.audience_free_passes_remaining || 0) + 1
       }

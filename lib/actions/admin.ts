@@ -12,30 +12,35 @@ export async function addCreditsToUser(
     // Get current credits
     const { data: user, error: fetchError } = await supabase
       .from('profiles')
-      .select('credits')
+      .select('credits, credits_complimentary')
       .eq('id', userId)
       .single()
 
     if (fetchError) throw fetchError
 
+    const nextCredits = (user.credits || 0) + amount
+    const nextComplimentary = (user.credits_complimentary ?? 0) + amount
+
     // Update credits
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
-        credits: user.credits + amount,
+        credits: nextCredits,
+        credits_complimentary: nextComplimentary,
         updated_at: new Date().toISOString()
       })
       .eq('id', userId)
 
     if (updateError) throw updateError
 
-    // Log transaction
+    // Log transaction (manual add = complimentary)
     await supabase.from('credit_transactions').insert({
       user_id: userId,
       amount: amount,
       transaction_type: 'manual_add',
       notes: notes || `Manual credit adjustment by admin`,
-      created_by: adminId
+      created_by: adminId,
+      credit_source: 'in_kind',
     })
 
     return { success: true }

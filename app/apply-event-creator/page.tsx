@@ -89,26 +89,23 @@ export default function ApplyEventCreatorPage() {
     setError('')
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not authenticated')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Not authenticated')
 
-      const { error: insertError } = await supabase
-        .from('role_change_requests')
-        .insert({
-          user_id: user.id,
-          requested_role: 'event_creator',
-          from_role: profile.role,
-          message: message || null,
-          status: 'pending'
-        })
+      const res = await fetch('/api/apply-event-creator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ message: message || null }),
+      })
 
-      if (insertError) throw insertError
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to submit application')
 
       alert('Application submitted successfully! An admin will review your request shortly.')
       router.push('/dashboard')
-    } catch (error: any) {
-      console.error('Error submitting application:', error)
-      setError(error.message)
+    } catch (err: unknown) {
+      console.error('Error submitting application:', err)
+      setError(err instanceof Error ? err.message : 'Failed to submit')
     } finally {
       setSubmitting(false)
     }

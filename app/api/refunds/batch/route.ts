@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     const [{ data: attendeeProfiles, error: attendeeProfilesError }, { data: priorRefunds, error: priorRefundsError }] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, credits')
+        .select('id, credits, credits_complimentary')
         .in('id', uniqueUserIds),
       supabase
         .from('credit_transactions')
@@ -152,6 +152,7 @@ export async function POST(request: NextRequest) {
         .from('profiles')
         .update({
           credits: Number(attendee.credits || 0) + refundAmount,
+          credits_complimentary: (attendee.credits_complimentary ?? 0) + refundAmount,
           updated_at: new Date().toISOString(),
         })
         .eq('id', booking.user_id)

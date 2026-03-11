@@ -98,7 +98,7 @@ export default function InstallOnboardingPage() {
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">One last thing</p>
           <CardTitle className="text-3xl font-bold">Get the Full Experience</CardTitle>
           <CardDescription>
-            Install Laal Button for faster access, app-like feel, and a cleaner experience without browser chrome.
+            Install One Mic Stand to your home screen and get 5 free credits.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -106,7 +106,7 @@ export default function InstallOnboardingPage() {
             <div className="rounded-2xl bg-background p-4 flex items-center justify-center">
               <Image src="/icon-192.png" alt="App icon preview" width={88} height={88} className="rounded-2xl" />
             </div>
-            <p className="text-center text-xs text-muted-foreground mt-2">Laal Button on your home screen</p>
+            <p className="text-center text-xs text-muted-foreground mt-2">One Mic Stand on your home screen</p>
           </div>
 
           <div className="rounded-md border p-4 space-y-2 text-sm">
@@ -114,7 +114,7 @@ export default function InstallOnboardingPage() {
               <>
                 <p className="font-medium">Android install</p>
                 <p>
-                  Tap <strong>Install App</strong> to add Laal Button to your home screen in one step.
+                  Tap <strong>Install App</strong> to add One Mic Stand to your home screen in one step.
                 </p>
                 {!promptAvailable && (
                   <p className="text-muted-foreground">

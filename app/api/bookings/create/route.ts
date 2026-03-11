@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendPushToAllUsers } from '@/lib/server/push'
+import { splitDeduction, hasEnoughCredits } from '@/lib/creditLedger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, credits, role, audience_free_passes_remaining')
+      .select('id, credits, credits_purchased, credits_complimentary, role, audience_free_passes_remaining')
       .eq('id', authData.user.id)
       .single()
 
@@ -131,7 +132,9 @@ export async function POST(request: NextRequest) {
     const hasAudienceFreePass = isAudienceBooking && Number(profile.audience_free_passes_remaining || 0) > 0
     const creditsToDebit = hasAudienceFreePass ? 0 : totalCreditsRequired
 
-    if (profile.credits < creditsToDebit) {
+    const purchased = profile.credits_purchased ?? 0
+    const complimentary = profile.credits_complimentary ?? 0
+    if (!hasEnoughCredits(purchased, complimentary, creditsToDebit)) {
       return NextResponse.json({ error: 'Insufficient credits' }, { status: 400 })
     }
 
@@ -209,19 +212,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const creditSplit = splitDeduction(purchased, complimentary, creditsToDebit)
+
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
         user_id: authData.user.id,
         event_id: event.id,
         credits_used: creditsToDebit,
+        credits_purchased_used: creditSplit.purchasedUsed,
+        credits_complimentary_used: creditSplit.complimentaryUsed,
         status: bookingStatus,
         attendance_status: null,
         booking_scope: isAudienceBooking ? 'audience' : 'performer',
         event_art_type_id: isAudienceBooking ? null : selectedArtTypeId,
         audience_checkin_code: audienceCheckinCode,
       })
-      .select('id, user_id, event_id, credits_used, status, booking_scope, event_art_type_id, audience_checkin_code')
+      .select('id, user_id, event_id, credits_used, credits_purchased_used, credits_complimentary_used, status, booking_scope, event_art_type_id, audience_checkin_code')
       .single()
 
     if (bookingError || !booking) {
@@ -230,6 +237,8 @@ export async function POST(request: NextRequest) {
 
     const profilePatch: Record<string, any> = {
       credits: profile.credits - creditsToDebit,
+      credits_purchased: purchased - creditSplit.purchasedUsed,
+      credits_complimentary: complimentary - creditSplit.complimentaryUsed,
       updated_at: new Date().toISOString(),
     }
     if (hasAudienceFreePass) {

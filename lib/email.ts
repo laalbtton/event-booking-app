@@ -10,16 +10,23 @@
  * - Event reminders
  */
 
+type EmailAttachment = {
+  filename: string
+  content: string
+  contentType?: string
+}
+
 type EmailData = {
   to: string
   subject: string
   html: string
+  attachments?: EmailAttachment[]
 }
 
 /**
  * Send an email using Resend API
  */
-export async function sendEmail({ to, subject, html }: EmailData): Promise<boolean> {
+export async function sendEmail({ to, subject, html, attachments }: EmailData): Promise<boolean> {
   const resendApiKey = process.env.RESEND_API_KEY
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@laalbutton.com'
 
@@ -40,6 +47,14 @@ export async function sendEmail({ to, subject, html }: EmailData): Promise<boole
         to: [to],
         subject,
         html,
+        ...(attachments?.length
+          ? {
+              attachments: attachments.map((a) => ({
+                filename: a.filename,
+                content: a.content,
+              })),
+            }
+          : {}),
       }),
     })
 
@@ -110,7 +125,7 @@ export function getBookingConfirmationEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 Laal Button. All rights reserved.</p>
+          <p>© 2025 One Mic Stand. All rights reserved.</p>
         </div>
       </body>
     </html>
@@ -164,7 +179,7 @@ export function getWaitlistPromotionEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 Laal Button. All rights reserved.</p>
+          <p>© 2025 One Mic Stand. All rights reserved.</p>
         </div>
       </body>
     </html>
@@ -216,7 +231,7 @@ export function getBookingCancellationEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 Laal Button. All rights reserved.</p>
+          <p>© 2025 One Mic Stand. All rights reserved.</p>
         </div>
       </body>
     </html>
@@ -256,12 +271,12 @@ export function getCreditPurchaseEmail(data: {
           </div>
           
           <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">
-            Thanks for supporting Laal Button. See you at the next show!
+            Thanks for supporting One Mic Stand. See you at the next show!
           </p>
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 Laal Button. All rights reserved.</p>
+          <p>© 2025 One Mic Stand. All rights reserved.</p>
         </div>
       </body>
     </html>
@@ -314,7 +329,7 @@ export function getEventCancelledEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 Laal Button. All rights reserved.</p>
+          <p>© 2025 One Mic Stand. All rights reserved.</p>
         </div>
       </body>
     </html>
@@ -384,7 +399,7 @@ export function getWaitlistPositionEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 Laal Button. All rights reserved.</p>
+          <p>© 2025 One Mic Stand. All rights reserved.</p>
         </div>
       </body>
     </html>
@@ -444,7 +459,7 @@ export function getEventReminderEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 Laal Button. All rights reserved.</p>
+          <p>© 2025 One Mic Stand. All rights reserved.</p>
         </div>
       </body>
     </html>
@@ -498,7 +513,7 @@ export function getRegistrationOpeningEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 Laal Button. All rights reserved.</p>
+          <p>© 2025 One Mic Stand. All rights reserved.</p>
         </div>
       </body>
     </html>

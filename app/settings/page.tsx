@@ -23,9 +23,11 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, Download, LogOut } from 'lucide-react'
+import { ChevronLeft, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
+import { useIsMobile } from '@/hooks/useMediaQuery'
+import { SettingsListRow } from '@/components/SettingsListRow'
 
 type PushNotificationPrefs = {
   user_id: string
@@ -43,7 +45,9 @@ type ThursdaySocapScenario = 'registration_open' | 'seventy_five_full'
 export default function SettingsPage() {
   const { authResolved, user } = useAuthBootstrap()
   const router = useRouter()
+  const isMobile = useIsMobile()
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [pushPrefs, setPushPrefs] = useState<PushNotificationPrefs | null>(null)
   const [pushSupported, setPushSupported] = useState(false)
@@ -110,6 +114,10 @@ export default function SettingsPage() {
         .single()
       if (profileError) throw profileError
       setProfile(profileData)
+
+      const isAdminByRole = profileData?.role === 'admin'
+      const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', userId).maybeSingle()
+      setIsAdmin(isAdminByRole || !!adminRow)
 
       const { data: pushPrefsData } = await supabase
         .from('push_notification_prefs')
@@ -440,6 +448,51 @@ export default function SettingsPage() {
     )
   }
 
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <NavigationTabs />
+        <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2 mb-6">
+            <Link href="/profile" className="p-1 -ml-1 rounded hover:bg-muted shrink-0" aria-label="Back to profile">
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+            <h1 className="text-2xl font-bold">Settings</h1>
+          </div>
+          <Card className="shadow-sm overflow-hidden">
+            <CardContent className="p-0 divide-y divide-border">
+              <div className="px-4 pt-2 pb-1">
+                <SettingsListRow href="/settings/appearance" icon={Moon} title="Appearance" description="Dark mode" />
+              </div>
+              <div className="px-4 py-1">
+                <SettingsListRow href="/settings/notifications" icon={Bell} title="Push Notifications" description="Waitlist, reminders, new events" />
+              </div>
+              {!isStandalone && (
+                <div className="px-4 py-1">
+                  <SettingsListRow href="/settings/install" icon={Download} title="Add to Home Screen" description="Install as app" />
+                </div>
+              )}
+              <div className="px-4 py-1">
+                <SettingsListRow href="/settings/faq" icon={HelpCircle} title="FAQ" description="Credits and events" />
+              </div>
+              <div className="px-4 py-1">
+                <SettingsListRow href="/settings/instagram" icon={Instagram} title="Instagram & Poster Auto-Post" description={instagramConnected ? (instagramUsername ? `@${instagramUsername}` : 'connected') : 'Connect account'} />
+              </div>
+              {isAdmin && (
+                <div className="px-4 py-1">
+                  <SettingsListRow href="/admin" icon={Settings2} title="Admin" description="Manage users, events, requests" />
+                </div>
+              )}
+              <div className="px-4 py-1 pb-2">
+                <SettingsListRow href="/settings/account" icon={User} title="Account" description="Sign out" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background pb-20">
       <NavigationTabs />
@@ -598,7 +651,7 @@ export default function SettingsPage() {
                 Add to Home Screen
               </CardTitle>
               <CardDescription>
-                Install Laal Button so it opens like a native app from your home screen.
+                Install One Mic Stand to your home screen and get 5 free credits.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -675,6 +728,25 @@ export default function SettingsPage() {
             <Badge variant="outline" className="w-fit">Moved from profile</Badge>
           </CardContent>
         </Card>
+
+        {isAdmin && (
+          <Card className="shadow-sm border-purple-200">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Settings2 className="h-5 w-5 text-purple-600" />
+                Admin
+              </CardTitle>
+              <CardDescription>Access the admin panel to manage users, events, and requests.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50">
+                <Link href="/admin">
+                  Open Admin Panel
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="shadow-sm">
           <CardHeader>
