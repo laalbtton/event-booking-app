@@ -9,7 +9,11 @@ function getAdminClient() {
   return createClient(supabaseUrl, serviceRoleKey)
 }
 
-async function getAdminUserIds(supabase: ReturnType<typeof createClient>): Promise<string[]> {
+type ProfileAdminRow = { id: string }
+type AdminUserRow = { user_id: string }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getAdminUserIds(supabase: any): Promise<string[]> {
   const ids = new Set<string>()
 
   const { data: profileAdmins } = await supabase
@@ -17,14 +21,14 @@ async function getAdminUserIds(supabase: ReturnType<typeof createClient>): Promi
     .select('id')
     .eq('role', 'admin')
   if (profileAdmins) {
-    for (const row of profileAdmins) ids.add(row.id)
+    for (const row of profileAdmins as ProfileAdminRow[]) ids.add(row.id)
   }
 
   const { data: adminUsers } = await supabase
     .from('admin_users')
     .select('user_id')
   if (adminUsers) {
-    for (const row of adminUsers) ids.add(row.user_id)
+    for (const row of adminUsers as AdminUserRow[]) ids.add(row.user_id)
   }
 
   return Array.from(ids)

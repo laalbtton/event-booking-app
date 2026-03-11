@@ -135,9 +135,10 @@ export async function POST(request: NextRequest) {
       const complimentaryUsed = booking.credits_complimentary_used ?? 0
       const hasLedgerSplit = purchasedUsed > 0 || complimentaryUsed > 0
 
+      const nowIso = new Date().toISOString()
       const profilePatch: Record<string, unknown> = {
         credits: Number(attendeeProfile.credits || 0) + refundedCredits,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       }
       if (hasLedgerSplit) {
         profilePatch.credits_purchased = (attendeeProfile.credits_purchased ?? 0) + purchasedUsed

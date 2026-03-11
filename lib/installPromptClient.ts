@@ -31,7 +31,9 @@ export function initInstallPromptCapture() {
 
 export function subscribeToInstallPromptChanges(callback: () => void) {
   subscribers.add(callback)
-  return () => subscribers.delete(callback)
+  return () => {
+    subscribers.delete(callback)
+  }
 }
 
 export function hasDeferredInstallPrompt() {

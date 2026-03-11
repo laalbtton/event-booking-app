@@ -11,12 +11,16 @@ function getAdminClient() {
   return createClient(supabaseUrl, serviceRoleKey)
 }
 
-async function resolveAdminUser(supabase: ReturnType<typeof createClient>, userId: string) {
-  const { data: profile } = await supabase
+type ProfileRoleRow = { id: string; role?: string } | null
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveAdminUser(supabase: any, userId: string) {
+  const { data } = await supabase
     .from('profiles')
-    .select('role')
+    .select('id, role')
     .eq('id', userId)
     .maybeSingle()
+  const profile = data as ProfileRoleRow
   if (profile?.role === 'admin') return true
   const { data: adminRow } = await supabase
     .from('admin_users')

@@ -106,7 +106,10 @@ export async function POST(request: NextRequest) {
     }
 
     const profileMap = new Map(
-      attendeeProfiles.map((row) => [String((row as { id: string }).id), row as { id: string; credits: number }])
+      attendeeProfiles.map((row) => [
+        String((row as { id: string }).id),
+        row as { id: string; credits: number; credits_complimentary?: number | null },
+      ])
     )
     const refundedByBooking = new Map<string, number>()
     for (const tx of priorRefunds || []) {
