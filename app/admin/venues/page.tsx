@@ -55,7 +55,7 @@ type RedemptionRow = {
   discount_cents: number
   order_total_cents: number | null
   notes: string | null
-  voucher_code: string
+  attendee_name: string
   event_title: string
   event_date: string
 }
@@ -136,7 +136,7 @@ export default function AdminVenuesPage() {
 
     let vouchersQuery = supabase
       .from('booking_vouchers')
-      .select('id, event_id, code, venue_id')
+      .select('id, event_id, user_id, venue_id')
       .eq('venue_id', venueId)
 
     if (eventId !== 'all') {
@@ -157,6 +157,7 @@ export default function AdminVenuesPage() {
 
     const voucherIds = voucherList.map((v) => v.id)
     const voucherMap = new Map(voucherList.map((v) => [v.id, v]))
+    const userIds = Array.from(new Set(voucherList.map((v: any) => v.user_id).filter(Boolean)))
 
     let redemptionsQuery = supabase
       .from('voucher_redemptions')
@@ -180,17 +181,27 @@ export default function AdminVenuesPage() {
     }
 
     const eventIds = Array.from(new Set(redemptions.map((r) => r.event_id)))
-    const { data: eventRows } = await supabase
-      .from('events')
-      .select('id, title, date')
-      .in('id', eventIds)
+    const [{ data: eventRows }, { data: profileRows }] = await Promise.all([
+      supabase
+        .from('events')
+        .select('id, title, date')
+        .in('id', eventIds),
+      userIds.length > 0
+        ? supabase.from('profiles').select('id, full_name, email').in('id', userIds)
+        : Promise.resolve({ data: [] as any[] } as any),
+    ])
 
     const eventMap = new Map((eventRows || []).map((e: any) => [e.id, e]))
+    const profileMap = new Map(
+      (profileRows || []).map((p: any) => [p.id, p as { full_name?: string | null; email?: string | null }])
+    )
     const mapped: RedemptionRow[] = redemptions
       .map((r: any) => {
         const voucher = voucherMap.get(r.voucher_id as string)
         const event = eventMap.get(r.event_id as string)
         if (!voucher || !event) return null
+        const profile = profileMap.get((voucher as any).user_id) as { full_name?: string | null; email?: string | null } | undefined
+        const attendeeName = profile?.full_name || profile?.email || 'Attendee'
         return {
           id: r.id,
           voucher_id: r.voucher_id,
@@ -199,7 +210,7 @@ export default function AdminVenuesPage() {
           discount_cents: Number(r.discount_cents || 0),
           order_total_cents: r.order_total_cents === null ? null : Number(r.order_total_cents),
           notes: r.notes || null,
-          voucher_code: String(voucher.code || ''),
+          attendee_name: String(attendeeName),
           event_title: String(event.title || 'Event'),
           event_date: String(event.date || ''),
         }
@@ -626,7 +637,7 @@ export default function AdminVenuesPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{row.event_title}</p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {row.voucher_code} • {formatDateTime(row.created_at)}
+                          {row.attendee_name} • {formatDateTime(row.created_at)}
                         </p>
                       </div>
                       <div className="text-right">

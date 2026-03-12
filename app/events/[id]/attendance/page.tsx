@@ -2174,7 +2174,7 @@ export default function AttendancePage() {
                             <div className="min-w-0">
                               <p className="text-sm font-medium truncate">{item.attendeeLabel}</p>
                               <p className="text-xs text-muted-foreground truncate">
-                                {item.code} • {formatDateTime(item.redeemedAt)}
+                                {formatDateTime(item.redeemedAt)}
                               </p>
                             </div>
                             <span className="text-sm font-medium">${(item.valueCents / 100).toFixed(2)}</span>

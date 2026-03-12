@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
+import { cn } from '@/lib/utils'
 
 type VenueOption = {
   id: string
@@ -32,7 +33,7 @@ type RedemptionRow = {
   discount_cents: number
   order_total_cents: number | null
   notes: string | null
-  voucher_code: string
+  attendee_name: string
   event_title: string
   event_date: string
 }
@@ -63,6 +64,11 @@ type IssuedVoucherRow = {
   expiresAt: string | null
 }
 
+type UnredeemedIssuedTotals = {
+  count: number
+  totalValueCents: number
+}
+
 type ScannerEngine = 'native' | 'html5' | null
 
 export default function VenueRedemptionsPage() {
@@ -90,6 +96,10 @@ export default function VenueRedemptionsPage() {
   const [issuedVouchers, setIssuedVouchers] = useState<IssuedVoucherRow[]>([])
   const [issuedLoading, setIssuedLoading] = useState(false)
   const [issuedSearch, setIssuedSearch] = useState('')
+  const [unredeemedIssuedTotals, setUnredeemedIssuedTotals] = useState<UnredeemedIssuedTotals>({
+    count: 0,
+    totalValueCents: 0,
+  })
   const [activeTab, setActiveTab] = useState<'redeem' | 'history'>('redeem')
 
   const [scannerActive, setScannerActive] = useState(false)
@@ -114,6 +124,7 @@ export default function VenueRedemptionsPage() {
       loadEventsForVenue(selectedVenueId)
       loadRedemptions(selectedVenueId, selectedEventId)
       loadIssuedVouchers(selectedVenueId, selectedEventId, issuedSearch)
+      loadUnredeemedIssuedTotals(selectedVenueId, selectedEventId)
     }
   }, [selectedVenueId, selectedEventId, fromDate, toDate, issuedSearch])
 
@@ -189,7 +200,7 @@ export default function VenueRedemptionsPage() {
     setRows([])
     let vouchersQuery = supabase
       .from('booking_vouchers')
-      .select('id, event_id, code, venue_id')
+      .select('id, event_id, user_id, venue_id')
       .eq('venue_id', venueId)
 
     if (eventId !== 'all') {
@@ -210,6 +221,7 @@ export default function VenueRedemptionsPage() {
 
     const voucherIds = voucherList.map((v) => v.id)
     const voucherMap = new Map(voucherList.map((v) => [v.id, v]))
+    const userIds = Array.from(new Set(voucherList.map((v: any) => v.user_id).filter(Boolean)))
 
     let redemptionsQuery = supabase
       .from('voucher_redemptions')
@@ -233,17 +245,27 @@ export default function VenueRedemptionsPage() {
     }
 
     const eventIds = Array.from(new Set(redemptions.map((r) => r.event_id)))
-    const { data: eventRows } = await supabase
-      .from('events')
-      .select('id, title, date')
-      .in('id', eventIds)
+    const [{ data: eventRows }, { data: profileRows }] = await Promise.all([
+      supabase
+        .from('events')
+        .select('id, title, date')
+        .in('id', eventIds),
+      userIds.length > 0
+        ? supabase.from('profiles').select('id, full_name, email').in('id', userIds)
+        : Promise.resolve({ data: [] as any[] } as any),
+    ])
 
     const eventMap = new Map((eventRows || []).map((e: any) => [e.id, e]))
+    const profileMap = new Map(
+      (profileRows || []).map((p: any) => [p.id, p as { full_name?: string | null; email?: string | null }])
+    )
     const mapped: RedemptionRow[] = redemptions
       .map((r: any) => {
         const voucher = voucherMap.get(r.voucher_id as string)
         const event = eventMap.get(r.event_id as string)
         if (!voucher || !event) return null
+        const profile = profileMap.get((voucher as any).user_id) as { full_name?: string | null; email?: string | null } | undefined
+        const attendeeName = profile?.full_name || profile?.email || 'Attendee'
         return {
           id: r.id,
           voucher_id: r.voucher_id,
@@ -252,7 +274,7 @@ export default function VenueRedemptionsPage() {
           discount_cents: Number(r.discount_cents || 0),
           order_total_cents: r.order_total_cents === null ? null : Number(r.order_total_cents),
           notes: r.notes || null,
-          voucher_code: String(voucher.code || ''),
+          attendee_name: String(attendeeName),
           event_title: String(event.title || 'Event'),
           event_date: String(event.date || ''),
         }
@@ -289,6 +311,27 @@ export default function VenueRedemptionsPage() {
       setIssuedVouchers([])
     } finally {
       setIssuedLoading(false)
+    }
+  }
+
+  async function loadUnredeemedIssuedTotals(venueId: string, eventId: string) {
+    try {
+      let query = supabase
+        .from('booking_vouchers')
+        .select('id, value_cents')
+        .eq('venue_id', venueId)
+        .eq('status', 'issued')
+
+      if (eventId !== 'all') {
+        query = query.eq('event_id', eventId)
+      }
+
+      const { data } = await query.limit(1000)
+      const rows = data || []
+      const totalValueCents = rows.reduce((sum: number, row: any) => sum + Number(row.value_cents || 0), 0)
+      setUnredeemedIssuedTotals({ count: rows.length, totalValueCents })
+    } catch {
+      setUnredeemedIssuedTotals({ count: 0, totalValueCents: 0 })
     }
   }
 
@@ -498,6 +541,7 @@ export default function VenueRedemptionsPage() {
       if (selectedVenueId) {
         await loadRedemptions(selectedVenueId, selectedEventId)
         await loadIssuedVouchers(selectedVenueId, selectedEventId, issuedSearch)
+        await loadUnredeemedIssuedTotals(selectedVenueId, selectedEventId)
       }
     } catch (error: any) {
       setRedeemError(error.message || 'Failed to redeem coupon')
@@ -693,7 +737,7 @@ export default function VenueRedemptionsPage() {
               <Input
                 value={issuedSearch}
                 onChange={(e) => setIssuedSearch(e.target.value)}
-                placeholder="Search attendee name, email, or coupon code"
+                placeholder="Search attendee name or email"
               />
               <Button
                 type="button"
@@ -711,15 +755,33 @@ export default function VenueRedemptionsPage() {
             ) : (
               <div className="space-y-2 max-h-80 overflow-auto pr-1">
                 {issuedVouchers.map((voucher) => (
-                  <div key={voucher.id} className="flex items-center justify-between gap-3 border rounded-md p-2">
+                  <div
+                    key={voucher.id}
+                    className={cn(
+                      'flex items-center justify-between gap-3 border rounded-md p-2',
+                      voucher.status === 'redeemed'
+                        ? 'border-green-300 bg-green-50/60'
+                        : 'border-red-300 bg-red-50/60'
+                    )}
+                  >
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{voucher.attendeeName}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {voucher.code} • {voucher.eventTitle}
+                        {voucher.eventTitle}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">${(voucher.valueCents / 100).toFixed(2)}</Badge>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          voucher.status === 'redeemed'
+                            ? 'text-green-700 border-green-600'
+                            : 'text-red-700 border-red-600'
+                        )}
+                      >
+                        {voucher.status === 'redeemed' ? 'Redeemed' : 'Issued'}
+                      </Badge>
                       <Button
                         type="button"
                         size="sm"
@@ -758,7 +820,7 @@ export default function VenueRedemptionsPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <Card>
                 <CardContent className="p-4">
                   <p className="text-xs text-muted-foreground">Redemptions</p>
@@ -775,6 +837,15 @@ export default function VenueRedemptionsPage() {
                 <CardContent className="p-4">
                   <p className="text-xs text-muted-foreground">Order Total Captured</p>
                   <p className="text-2xl font-semibold">${(totals.totalOrders / 100).toFixed(2)}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">Issued Not Redeemed</p>
+                  <p className="text-2xl font-semibold">{unredeemedIssuedTotals.count}</p>
+                  <p className="text-xs text-muted-foreground">
+                    ${ (unredeemedIssuedTotals.totalValueCents / 100).toFixed(2) } total value
+                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -823,7 +894,7 @@ export default function VenueRedemptionsPage() {
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{row.event_title}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {row.voucher_code} • {formatDateTime(row.created_at)}
+                        {row.attendee_name} • {formatDateTime(row.created_at)}
                       </p>
                     </div>
                     <div className="text-right">

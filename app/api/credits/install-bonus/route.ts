@@ -27,12 +27,17 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, credits, credits_complimentary, install_bonus_granted_at')
+      .select('id, role, credits, credits_complimentary, install_bonus_granted_at')
       .eq('id', authData.user.id)
       .single()
 
     if (profileError || !profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
+    }
+
+    // Install bonus is audience-only.
+    if ((profile as { role?: string }).role !== 'audience') {
+      return NextResponse.json({ success: true, alreadyGranted: true, audienceOnly: true, credits: profile.credits })
     }
 
     if ((profile as { install_bonus_granted_at?: string | null }).install_bonus_granted_at) {
