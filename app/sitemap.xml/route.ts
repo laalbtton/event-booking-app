@@ -46,8 +46,6 @@ function buildStaticPages(baseUrl: string): UrlEntry[] {
     { loc: `${baseUrl}/`, changefreq: 'monthly', priority: 0.8 },
     { loc: `${baseUrl}/contact`, changefreq: 'monthly', priority: 0.8 },
     { loc: `${baseUrl}/events`, changefreq: 'weekly', priority: 0.8 },
-    { loc: `${baseUrl}/login`, changefreq: 'monthly', priority: 0.8 },
-    { loc: `${baseUrl}/signup`, changefreq: 'monthly', priority: 0.8 },
   ]
 }
 
