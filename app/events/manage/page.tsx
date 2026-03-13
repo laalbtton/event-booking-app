@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { QrCode, Link as LinkIcon, Image as ImageIcon, Upload, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { appendSlugSuffix, buildEventSlugBase } from '@/lib/seo/slug'
 import { toast } from 'sonner'
 
 type Venue = {
@@ -120,6 +121,21 @@ export default function EventManagementPage() {
     const trimmed = input.trim()
     if (!trimmed) return ''
     return trimmed.replace(/\s+/g, ' ')
+  }
+
+  async function getUniqueEventSlug(baseSlug: string, currentEventId?: string): Promise<string> {
+    const base = baseSlug || 'event'
+    let candidate = base
+    let attempt = 0
+    while (attempt < 25) {
+      let query = supabase.from('events').select('id').eq('slug', candidate).limit(1)
+      if (currentEventId) query = query.neq('id', currentEventId)
+      const { data } = await query
+      if (!data || data.length === 0) return candidate
+      attempt += 1
+      candidate = appendSlugSuffix(base, String(attempt))
+    }
+    return appendSlugSuffix(base, String(Date.now()))
   }
 
   function addLanguageTag() {
@@ -457,7 +473,10 @@ export default function EventManagementPage() {
       const isBookedShow = formData.event_type === 'booked_show'
       const isTicketed = formData.tickets_enabled
       const normalizedLanguages = normalizeLanguages()
+      const slugBase = buildEventSlugBase(formData.title, location, new Date(formData.date).toISOString())
+      const slug = await getUniqueEventSlug(slugBase)
       const eventData = {
+        slug,
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
@@ -724,8 +743,11 @@ export default function EventManagementPage() {
       const isBookedShow = formData.event_type === 'booked_show'
       const isTicketed = formData.tickets_enabled
       const normalizedLanguages = normalizeLanguages()
+      const slugBase = buildEventSlugBase(formData.title, locationValue, new Date(formData.date).toISOString())
+      const slug = await getUniqueEventSlug(slugBase, editingEvent.id)
 
       const eventData = {
+        slug,
         title: formData.title,
         description: formData.description,
         theme: formData.theme || null,
@@ -1079,7 +1101,7 @@ export default function EventManagementPage() {
                       
                       <Button
                         onClick={() => {
-                          const publicUrl = `${window.location.origin}/event-public/${event.id}`
+                          const publicUrl = `${window.location.origin}/events/${event.slug || event.id}`
                           navigator.clipboard.writeText(publicUrl)
                           toast.success('Public link copied!')
                         }}

@@ -118,7 +118,7 @@ export default function EventDetailsPage() {
 
 
   function copyPublicLink() {
-    const publicUrl = `${window.location.origin}/event-public/${eventId}`
+    const publicUrl = `${window.location.origin}/events/${(event as any)?.slug || eventId}`
     navigator.clipboard.writeText(publicUrl)
     toast.success('Public link copied to clipboard!')
   }
@@ -269,15 +269,27 @@ export default function EventDetailsPage() {
         }
       }
 
-      // Load event details
-      const { data: eventData, error: eventError } = await supabase
+      // Load event details by id first, then fallback to slug.
+      let { data: eventData, error: eventError } = await supabase
         .from('events')
         .select('*')
         .eq('id', eventId)
-        .single()
-
-      if (eventError) throw eventError
+        .maybeSingle()
+      if (!eventData) {
+        const fallback = await supabase
+          .from('events')
+          .select('*')
+          .eq('slug', eventId)
+          .maybeSingle()
+        eventData = fallback.data
+        eventError = fallback.error
+      }
+      if (eventError || !eventData) throw eventError || new Error('Event not found')
       setEvent(eventData)
+      const resolvedEventId = eventData.id as string
+      if ((eventData as any).slug && eventId !== (eventData as any).slug) {
+        router.replace(`/events/${(eventData as any).slug}`)
+      }
 
       // Load venue details if present
       if (eventData.venue_id) {
@@ -326,7 +338,7 @@ export default function EventDetailsPage() {
           waitlist_position,
           profiles (id, full_name, email, avatar_url)
         `)
-        .eq('event_id', eventId)
+        .eq('event_id', resolvedEventId)
         .eq('status', 'confirmed')
         .order('booked_at', { ascending: true })
 
@@ -345,7 +357,7 @@ export default function EventDetailsPage() {
           waitlist_position,
           profiles (id, full_name, email, avatar_url)
         `)
-        .eq('event_id', eventId)
+        .eq('event_id', resolvedEventId)
         .eq('status', 'waitlist')
         .order('waitlist_position', { ascending: true })
 
@@ -360,7 +372,7 @@ export default function EventDetailsPage() {
         const { data: artRows } = await supabase
           .from('event_art_types')
           .select('id, art_type_name, slot_capacity')
-          .eq('event_id', eventId)
+          .eq('event_id', resolvedEventId)
           .order('created_at', { ascending: true })
 
         const options = (artRows || []).map((row: any) => {
@@ -388,7 +400,7 @@ export default function EventDetailsPage() {
       const { count: audienceCount } = await supabase
         .from('bookings')
         .select('id', { count: 'exact', head: true })
-        .eq('event_id', eventId)
+        .eq('event_id', resolvedEventId)
         .eq('booking_scope', 'audience')
         .in('status', ['confirmed', 'waitlist'])
 

@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
           eventTitle: event.title,
           eventDate: formatDateTime(event.date),
           creditsRefunded: booking.credits_used,
-          eventUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/event-public/${eventId}`,
+          eventUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/events/${eventId}`,
         })
 
         await sendEmail({

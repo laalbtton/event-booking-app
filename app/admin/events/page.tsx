@@ -947,7 +947,7 @@ export default function AdminEventsPage() {
 
                 <Button
                   onClick={() => {
-                    const publicUrl = `${window.location.origin}/event-public/${event.id}`
+                    const publicUrl = `${window.location.origin}/events/${(event as any).slug || event.id}`
                     navigator.clipboard.writeText(publicUrl)
                     toast.success('Public link copied!')
                   }}

@@ -20,6 +20,10 @@ type Venue = {
   id: string
   name: string
   address: string
+  city?: string | null
+  region?: string | null
+  postal_code?: string | null
+  country?: string | null
   parking_options: string | null
   accessibility: string | null
   food_drinks_available: boolean
@@ -87,6 +91,10 @@ export default function AdminVenuesPage() {
   const [formData, setFormData] = useState({
     name: '',
     address: '',
+    city: '',
+    region: '',
+    postal_code: '',
+    country: '',
     parking_options: '',
     accessibility: '',
     food_drinks_available: false,
@@ -313,6 +321,10 @@ export default function AdminVenuesPage() {
     setFormData({
       name: '',
       address: '',
+      city: '',
+      region: '',
+      postal_code: '',
+      country: '',
       parking_options: '',
       accessibility: '',
       food_drinks_available: false,
@@ -328,6 +340,10 @@ export default function AdminVenuesPage() {
       const venueData = {
         name: formData.name,
         address: formData.address,
+        city: formData.city || null,
+        region: formData.region || null,
+        postal_code: formData.postal_code || null,
+        country: formData.country || null,
         parking_options: formData.parking_options || null,
         accessibility: formData.accessibility || null,
         food_drinks_available: formData.food_drinks_available,
@@ -358,6 +374,10 @@ export default function AdminVenuesPage() {
     setFormData({
       name: venue.name,
       address: venue.address,
+      city: venue.city || '',
+      region: venue.region || '',
+      postal_code: venue.postal_code || '',
+      country: venue.country || '',
       parking_options: venue.parking_options || '',
       accessibility: venue.accessibility || '',
       food_drinks_available: venue.food_drinks_available,
@@ -376,6 +396,10 @@ export default function AdminVenuesPage() {
       const venueData = {
         name: formData.name,
         address: formData.address,
+        city: formData.city || null,
+        region: formData.region || null,
+        postal_code: formData.postal_code || null,
+        country: formData.country || null,
         parking_options: formData.parking_options || null,
         accessibility: formData.accessibility || null,
         food_drinks_available: formData.food_drinks_available,
@@ -483,6 +507,11 @@ export default function AdminVenuesPage() {
                     <div className="flex items-start gap-2">
                       <MapPin className="w-4 h-4 mt-0.5 text-muted-foreground flex-shrink-0" />
                       <p className="text-sm text-muted-foreground">{venue.address}</p>
+                      {(venue.city || venue.region || venue.country) && (
+                        <p className="text-xs text-muted-foreground">
+                          {[venue.city, venue.region, venue.postal_code, venue.country].filter(Boolean).join(', ')}
+                        </p>
+                      )}
                     </div>
                     
                     {venue.parking_options && (
@@ -689,6 +718,50 @@ export default function AdminVenuesPage() {
                 required
               />
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="create-city">City</Label>
+                <Input
+                  id="create-city"
+                  type="text"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  placeholder="City"
+                />
+              </div>
+              <div>
+                <Label htmlFor="create-region">Region/State</Label>
+                <Input
+                  id="create-region"
+                  type="text"
+                  value={formData.region}
+                  onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                  placeholder="Region"
+                />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="create-postal">Postal Code</Label>
+                <Input
+                  id="create-postal"
+                  type="text"
+                  value={formData.postal_code}
+                  onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
+                  placeholder="Postal code"
+                />
+              </div>
+              <div>
+                <Label htmlFor="create-country">Country</Label>
+                <Input
+                  id="create-country"
+                  type="text"
+                  value={formData.country}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  placeholder="Country"
+                />
+              </div>
+            </div>
 
             <div>
               <Label htmlFor="create-parking">Parking Options (Optional)</Label>
@@ -799,6 +872,46 @@ export default function AdminVenuesPage() {
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 required
               />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="edit-city">City</Label>
+                <Input
+                  id="edit-city"
+                  type="text"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-region">Region/State</Label>
+                <Input
+                  id="edit-region"
+                  type="text"
+                  value={formData.region}
+                  onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="edit-postal">Postal Code</Label>
+                <Input
+                  id="edit-postal"
+                  type="text"
+                  value={formData.postal_code}
+                  onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-country">Country</Label>
+                <Input
+                  id="edit-country"
+                  type="text"
+                  value={formData.country}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                />
+              </div>
             </div>
 
             <div>

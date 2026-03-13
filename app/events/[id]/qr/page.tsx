@@ -24,7 +24,7 @@ export default function EventQRCodePage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && eventId) {
-      setPublicUrl(`${window.location.origin}/event-public/${eventId}`)
+      setPublicUrl(`${window.location.origin}/events/${eventId}`)
     }
   }, [eventId])
 
@@ -136,7 +136,7 @@ export default function EventQRCodePage() {
                 Copy URL
               </button>
               <Link
-                href={`/event-public/${eventId}`}
+                href={`/events/${eventId}`}
                 target="_blank"
                 className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-medium"
               >

@@ -413,10 +413,8 @@ export default function VenueRedemptionsPage() {
       (decodedText: string) => {
         if (!decodedText) return
         const code = decodedText.trim()
-        setRedeemCode(code)
-        void lookupVoucher(code)
-        setScannerMessage('QR code detected. Ready to redeem.')
         stopScanner()
+        void redeemCoupon(code)
       },
       () => undefined
     )
@@ -453,10 +451,8 @@ export default function VenueRedemptionsPage() {
             const rawValue = barcodes[0]?.rawValue
             if (!rawValue) return
             const code = rawValue.trim()
-            setRedeemCode(code)
-            void lookupVoucher(code)
-            setScannerMessage('QR code detected. Ready to redeem.')
             stopScanner()
+            void redeemCoupon(code)
           } catch {
             // Keep polling.
           }
@@ -478,14 +474,16 @@ export default function VenueRedemptionsPage() {
     }
   }
 
-  async function redeemCoupon() {
-    if (!redeemCode.trim()) {
+  async function redeemCoupon(codeOverride?: string) {
+    const codeToRedeem = (codeOverride || redeemCode).trim().toUpperCase()
+    if (!codeToRedeem) {
       setRedeemError('Enter a coupon code to redeem.')
       return
     }
     setRedeemLoading(true)
     setRedeemError('')
     setRedeemMessage('')
+    setRedeemCode(codeToRedeem)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const accessToken = session?.access_token
@@ -498,7 +496,7 @@ export default function VenueRedemptionsPage() {
         throw new Error('Order total must be a valid non-negative amount.')
       }
 
-      const preview = redeemPreview || (await lookupVoucher(redeemCode))
+      const preview = redeemPreview?.code === codeToRedeem ? redeemPreview : (await lookupVoucher(codeToRedeem))
       if (!preview) {
         throw new Error('Please lookup a valid coupon first')
       }
@@ -525,7 +523,7 @@ export default function VenueRedemptionsPage() {
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          code: redeemCode.trim().toUpperCase(),
+          code: codeToRedeem,
           orderTotalCents: parsedOrderTotal,
           notes: redeemNotes.trim() || undefined,
         }),
@@ -559,6 +557,20 @@ export default function VenueRedemptionsPage() {
       totalOrders,
     }
   }, [rows])
+
+  const sortedIssuedVouchers = useMemo(() => {
+    const order = (status: string) => {
+      if (status === 'issued') return 0
+      if (status === 'redeemed') return 1
+      if (status === 'cancelled') return 2
+      return 3
+    }
+    return [...issuedVouchers].sort((a, b) => {
+      const byStatus = order(a.status) - order(b.status)
+      if (byStatus !== 0) return byStatus
+      return a.attendeeName.localeCompare(b.attendeeName)
+    })
+  }, [issuedVouchers])
 
   const eventSummaries = useMemo(() => {
     const map = new Map<string, { eventTitle: string; eventDate: string; count: number; totalDiscount: number }>()
@@ -719,7 +731,7 @@ export default function VenueRedemptionsPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Button onClick={redeemCoupon} disabled={redeemLoading}>
+              <Button onClick={() => void redeemCoupon()} disabled={redeemLoading}>
                 {redeemLoading ? 'Redeeming...' : 'Redeem coupon'}
               </Button>
               {redeemMessage && <span className="text-sm text-green-700">{redeemMessage}</span>}
@@ -750,11 +762,11 @@ export default function VenueRedemptionsPage() {
             </div>
             {issuedLoading ? (
               <p className="text-sm text-muted-foreground">Loading issued coupons...</p>
-            ) : issuedVouchers.length === 0 ? (
+            ) : sortedIssuedVouchers.length === 0 ? (
               <p className="text-sm text-muted-foreground">No coupons found for this scope.</p>
             ) : (
               <div className="space-y-2 max-h-80 overflow-auto pr-1">
-                {issuedVouchers.map((voucher) => (
+                {sortedIssuedVouchers.map((voucher) => (
                   <div
                     key={voucher.id}
                     className={cn(
@@ -772,16 +784,21 @@ export default function VenueRedemptionsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">${(voucher.valueCents / 100).toFixed(2)}</Badge>
-                      <Badge
-                        variant="outline"
+                      <span
                         className={cn(
-                          voucher.status === 'redeemed'
-                            ? 'text-green-700 border-green-600'
-                            : 'text-red-700 border-red-600'
+                          'inline-flex h-6 w-6 items-center justify-center rounded-full border text-sm font-bold',
+                          voucher.status === 'redeemed' && 'text-green-700 border-green-600 bg-green-100',
+                          voucher.status === 'issued' && 'text-red-700 border-red-600 bg-red-100',
+                          voucher.status === 'cancelled' && 'text-red-700 border-red-600 bg-red-100',
+                          voucher.status !== 'redeemed' &&
+                            voucher.status !== 'issued' &&
+                            voucher.status !== 'cancelled' &&
+                            'text-muted-foreground border-muted'
                         )}
+                        title={voucher.status}
                       >
-                        {voucher.status === 'redeemed' ? 'Redeemed' : 'Issued'}
-                      </Badge>
+                        {voucher.status === 'cancelled' ? 'x' : '✓'}
+                      </span>
                       <Button
                         type="button"
                         size="sm"

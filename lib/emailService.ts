@@ -205,7 +205,7 @@ export async function sendEventCancelledEmail(
       return false
     }
 
-    const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/event-public/${eventId}`
+    const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/events/${eventId}`
 
     const html = getEventCancelledEmail({
       userName: profile.full_name || 'there',

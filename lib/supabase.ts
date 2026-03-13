@@ -53,6 +53,7 @@ export type PublicProfile = {
 
 export type Event = {
   id: string
+  slug?: string | null
   title: string
   description: string | null
   theme: string | null

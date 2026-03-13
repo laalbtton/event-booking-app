@@ -6,7 +6,7 @@ import { QRCodeSVG } from 'qrcode.react'
 export default function EventQRCodePage() {
   const params = useParams()
   const eventId = params.id as string
-  const publicUrl = `${window.location.origin}/event-public/${eventId}`
+  const publicUrl = `${window.location.origin}/events/${eventId}`
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-8">

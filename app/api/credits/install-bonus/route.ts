@@ -48,7 +48,9 @@ export async function POST(request: NextRequest) {
     const nextComplimentary = (profile.credits_complimentary ?? 0) + INSTALL_BONUS_CREDITS
     const nowIso = new Date().toISOString()
 
-    const { error: updateError } = await supabase
+    // Atomic guard: only one request can grant bonus for this user.
+    // If another device/process already granted it, this update affects 0 rows.
+    const { data: updatedProfile, error: updateError } = await supabase
       .from('profiles')
       .update({
         credits: nextCredits,
@@ -57,8 +59,15 @@ export async function POST(request: NextRequest) {
         updated_at: nowIso,
       })
       .eq('id', authData.user.id)
+      .eq('role', 'audience')
+      .is('install_bonus_granted_at', null)
+      .select('credits')
+      .maybeSingle()
 
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+    if (!updatedProfile) {
+      return NextResponse.json({ success: true, alreadyGranted: true, credits: profile.credits })
+    }
 
     const { error: txError } = await supabase.from('credit_transactions').insert({
       user_id: authData.user.id,

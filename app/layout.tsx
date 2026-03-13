@@ -20,6 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'),
   title: "One Mic Stand Event Booking",
   description: "Book comedy shows and events with credits",
   manifest: "/manifest.json",
