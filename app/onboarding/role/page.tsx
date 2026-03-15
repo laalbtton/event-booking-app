@@ -78,6 +78,30 @@ export default function RoleOnboardingPage() {
         },
       })
 
+      // Auto-join all public active communities
+      try {
+        const { data: publicCommunities } = await supabase
+          .from('communities')
+          .select('id')
+          .eq('is_public', true)
+          .eq('status', 'active')
+
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        if (token && publicCommunities) {
+          await Promise.allSettled(
+            publicCommunities.map((c: { id: string }) =>
+              fetch(`/api/communities/${c.id}/join`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+              })
+            )
+          )
+        }
+      } catch {
+        // Non-blocking — onboarding continues regardless
+      }
+
       window.localStorage.removeItem('pending_role_onboarding')
       if (isStandaloneMode()) {
         router.replace('/dashboard')

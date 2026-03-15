@@ -268,3 +268,75 @@ export type SocialPostAttempt = {
   error_message: string | null
   created_at: string
 }
+
+// ─── Community types ─────────────────────────────────────────────────────────
+
+export type CommunityStatus = 'active' | 'archived'
+export type CommunityMemberRole = 'member' | 'event_creator' | 'co_admin' | 'admin'
+export type CommunityRequestStatus = 'pending' | 'approved' | 'rejected'
+export type EventCommunityStatus = 'approved' | 'pending' | 'rejected' | 'expired'
+
+export type Community = {
+  id: string
+  name: string
+  slug: string | null
+  description: string | null
+  location: string | null
+  language: string | null
+  avatar_url: string | null
+  banner_url: string | null
+  is_public: boolean
+  status: CommunityStatus
+  cant_wait_count: number
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type CommunityMember = {
+  id: string
+  community_id: string
+  user_id: string
+  role: CommunityMemberRole
+  joined_at: string
+}
+
+export type CommunityCreationRequest = {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  location: string | null
+  language: string | null
+  message: string | null
+  status: CommunityRequestStatus
+  reviewed_by: string | null
+  reviewed_at: string | null
+  admin_notes: string | null
+  created_at: string
+}
+
+export type CommunityEventCreatorRequest = {
+  id: string
+  community_id: string
+  user_id: string
+  message: string | null
+  status: CommunityRequestStatus
+  reviewed_by: string | null
+  reviewed_at: string | null
+  admin_notes: string | null
+  created_at: string
+}
+
+export type EventCommunity = {
+  id: string
+  event_id: string
+  community_id: string
+  is_primary: boolean
+  status: EventCommunityStatus
+  submitted_by: string | null
+  submitted_at: string
+  reviewed_by: string | null
+  reviewed_at: string | null
+  expires_at: string | null
+}

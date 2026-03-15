@@ -131,6 +131,16 @@ export default function AdminLayout({
             >
               Requests
             </Link>
+            <Link
+              href="/admin/communities"
+              className={`font-medium transition-colors ${
+                pathname.startsWith('/admin/communities')
+                  ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
+                  : 'text-gray-700 hover:text-gray-900'
+              }`}
+            >
+              Communities
+            </Link>
           </nav>
         </div>
       </div>

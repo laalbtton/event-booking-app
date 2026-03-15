@@ -23,7 +23,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User } from 'lucide-react'
+import { ChevronLeft, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { useIsMobile } from '@/hooks/useMediaQuery'
@@ -478,6 +478,9 @@ export default function SettingsPage() {
               <div className="px-4 py-1">
                 <SettingsListRow href="/settings/instagram" icon={Instagram} title="Instagram & Poster Auto-Post" description={instagramConnected ? (instagramUsername ? `@${instagramUsername}` : 'connected') : 'Connect account'} />
               </div>
+              <div className="px-4 py-1">
+                <SettingsListRow href="/settings/communities" icon={Users} title="Communities" description="Your communities & memberships" />
+              </div>
               {isAdmin && (
                 <div className="px-4 py-1">
                   <SettingsListRow href="/admin" icon={Settings2} title="Admin" description="Manage users, events, requests" />
@@ -726,6 +729,24 @@ export default function SettingsPage() {
             </div>
 
             <Badge variant="outline" className="w-fit">Moved from profile</Badge>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Communities
+            </CardTitle>
+            <CardDescription>Browse and manage your community memberships.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-2 flex-wrap">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/settings/communities">My Communities</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/communities">Browse All</Link>
+            </Button>
           </CardContent>
         </Card>
 

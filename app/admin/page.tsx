@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 import { SettingsListRow } from '@/components/SettingsListRow'
 import { Card, CardContent } from '@/components/ui/card'
-import { Users, Building2, CalendarCheck, CreditCard, FileText } from 'lucide-react'
+import { Users, Building2, CalendarCheck, CreditCard, FileText, Globe } from 'lucide-react'
 
 export default function AdminPage() {
   const router = useRouter()
@@ -41,8 +41,11 @@ export default function AdminPage() {
           <div className="px-4 py-1">
             <SettingsListRow href="/admin/transactions" icon={CreditCard} title="Transactions" description="Credits and reports" />
           </div>
-          <div className="px-4 py-1 pb-2">
+          <div className="px-4 py-1">
             <SettingsListRow href="/admin/requests" icon={FileText} title="Requests" description="Event creator requests" />
+          </div>
+          <div className="px-4 py-1 pb-2">
+            <SettingsListRow href="/admin/communities" icon={Globe} title="Communities" description="Manage communities" />
           </div>
         </CardContent>
       </Card>

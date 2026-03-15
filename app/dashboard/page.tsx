@@ -699,17 +699,48 @@ export default function Dashboard() {
       if (profileError) throw profileError
       setProfile(profileData)
 
-      // Load upcoming and in-progress events
+      // Load upcoming and in-progress events, scoped to communities the user belongs to
       const nowIso = new Date().toISOString()
-      const { data: eventsData, error: eventsError } = await supabase
-        .from('events')
-        .select('*')
-        .neq('status', 'cancelled')
-        .or(`date.gte.${nowIso},end_time.gte.${nowIso}`)
-        .order('date', { ascending: true })
 
-      if (eventsError) throw eventsError
-      setEvents(eventsData || [])
+      // Get user's community memberships
+      const { data: memberships } = await supabase
+        .from('community_members')
+        .select('community_id')
+        .eq('user_id', userId)
+
+      const communityIds = (memberships || []).map((m: { community_id: string }) => m.community_id)
+
+      let eventsData: Event[] = []
+
+      if (communityIds.length === 0) {
+        // No communities — empty dashboard
+        setEvents([])
+      } else {
+        // Get approved event IDs in those communities
+        const { data: eventLinks } = await supabase
+          .from('event_communities')
+          .select('event_id')
+          .in('community_id', communityIds)
+          .eq('status', 'approved')
+
+        const eventIds = [...new Set((eventLinks || []).map((e: { event_id: string }) => e.event_id))]
+
+        if (eventIds.length === 0) {
+          setEvents([])
+        } else {
+          const { data: fetchedEvents, error: eventsError } = await supabase
+            .from('events')
+            .select('*')
+            .in('id', eventIds)
+            .neq('status', 'cancelled')
+            .or(`date.gte.${nowIso},end_time.gte.${nowIso}`)
+            .order('date', { ascending: true })
+
+          if (eventsError) throw eventsError
+          eventsData = fetchedEvents || []
+          setEvents(eventsData)
+        }
+      }
 
       // Load confirmed booking counts for all events
       if (eventsData && eventsData.length > 0) {
@@ -1247,10 +1278,20 @@ export default function Dashboard() {
             if (filteredEvents.length === 0) {
               return (
                 <Card className="-mx-4 sm:mx-0 rounded-none sm:rounded-lg">
-                  <CardContent className="p-8 text-center text-muted-foreground">
-                    {(userRole !== 'audience' && eventTab === 'perform')
-                      ? 'No upcoming events available to perform'
-                      : 'No upcoming shows available to attend'}
+                  <CardContent className="p-8 text-center text-muted-foreground space-y-3">
+                    <p>
+                      {(userRole !== 'audience' && eventTab === 'perform')
+                        ? 'No upcoming events available to perform'
+                        : 'No upcoming shows available to attend'}
+                    </p>
+                    {events.length === 0 && (
+                      <div>
+                        <p className="text-xs mb-2">Join communities to see their events here.</p>
+                        <Link href="/communities">
+                          <Button variant="outline" size="sm">Browse Communities</Button>
+                        </Link>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )

@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { inviteToken } = await request.json()
+    const body = await request.json()
+    const { inviteToken, communityId } = body
     if (!inviteToken) {
       return NextResponse.json({ error: 'Missing invite token' }, { status: 400 })
     }
@@ -97,11 +98,28 @@ export async function POST(request: NextRequest) {
         .eq('id', link.id)
     }
 
+    // If a communityId was provided, auto-join that community
+    if (communityId) {
+      const { data: community } = await supabase
+        .from('communities')
+        .select('id, status, is_public')
+        .eq('id', communityId)
+        .single()
+
+      if (community && (community as { status: string; is_public: boolean }).status === 'active') {
+        await supabase
+          .from('community_members')
+          .insert({ community_id: communityId, user_id: authData.user.id, role: 'member' })
+          .then(() => null)
+          .catch(() => null) // Ignore duplicate-key errors
+      }
+    }
+
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error redeeming invite link:', error)
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
     )
   }

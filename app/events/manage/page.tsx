@@ -562,6 +562,32 @@ export default function EventManagementPage() {
         console.warn('Failed to auto-book creator as attendee:', bookingError)
       }
 
+      // Associate event with communities where the creator is an event_creator or above
+      try {
+        const { data: creatorMemberships } = await supabase
+          .from('community_members')
+          .select('community_id, role')
+          .eq('user_id', user.id)
+          .in('role', ['event_creator', 'co_admin', 'admin'])
+
+        if (creatorMemberships && creatorMemberships.length > 0) {
+          const commSession = await supabase.auth.getSession()
+          const accessToken = commSession.data.session?.access_token
+          if (accessToken) {
+            for (let idx = 0; idx < Math.min(creatorMemberships.length, 3); idx++) {
+              const membership = creatorMemberships[idx]
+              await fetch(`/api/communities/${membership.community_id}/submit-event`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ eventId: data.id, isPrimary: idx === 0 }),
+              }).catch(() => null)
+            }
+          }
+        }
+      } catch (communityErr) {
+        console.warn('Failed to link event to communities:', communityErr)
+      }
+
       // Send push notification to all users about the new event
       try {
         const { data: sessionData } = await supabase.auth.getSession()
