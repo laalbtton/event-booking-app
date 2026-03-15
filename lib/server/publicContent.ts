@@ -285,19 +285,253 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
   }
 }
 
+/**
+ * Efficient batch implementation — fetches all events in 5 queries instead of N×7.
+ * Replaces the old N+1 pattern that caused timeouts in production.
+ */
 export async function listPublicEvents(limit = 100): Promise<PublicEventDetails[]> {
   const supabase = getPublicServerClient()
-  const { data: rows } = await supabase
+
+  // 1. Fetch events with venue and host joined in one shot
+  const { data: events, error: eventsError } = await supabase
     .from('events')
-    .select('id')
+    .select(`${EVENT_SELECT}, venues!venue_id(id, name, address, city, region, postal_code, country), profiles!host_user_id(full_name)`)
+    .not('status', 'in', '("cancelled","archived","draft","private")')
     .order('date', { ascending: true })
     .limit(limit)
 
-  const ids = (rows || []).map((r: any) => r.id as string)
-  const details = await Promise.all(ids.map((id) => getPublicEventByIdentifier(id)))
-  return details
-    .filter((row): row is PublicEventDetails => !!row)
-    .filter((row) => !['cancelled', 'archived', 'draft', 'private'].includes(String(row.status || '').toLowerCase()))
+  if (eventsError || !events || events.length === 0) return []
+
+  const eventIds = events.map((e: any) => e.id as string)
+
+  // 2. Batch-fetch supporting data for all events in parallel
+  const [bookingsRes, ticketsRes, artTypesRes, communityRes] = await Promise.all([
+    supabase
+      .from('bookings')
+      .select('event_id, status, booking_scope, event_art_type_id, waitlist_position, profiles(id, full_name, avatar_url)')
+      .in('event_id', eventIds)
+      .in('status', ['confirmed', 'waitlist'])
+      .order('booked_at', { ascending: true }),
+    supabase
+      .from('event_tickets')
+      .select('event_id, price_cents, quantity, sold')
+      .in('event_id', eventIds),
+    supabase
+      .from('event_art_types')
+      .select('id, event_id, art_type_name, slot_capacity')
+      .in('event_id', eventIds),
+    supabase
+      .from('event_communities')
+      .select('event_id, communities(id, name, slug)')
+      .in('event_id', eventIds)
+      .eq('is_primary', true)
+      .eq('status', 'approved'),
+  ])
+
+  // Index by event_id for O(1) lookup
+  const bookingsByEvent = new Map<string, any[]>()
+  for (const b of (bookingsRes.data as any[]) || []) {
+    const arr = bookingsByEvent.get(b.event_id) || []
+    arr.push(b)
+    bookingsByEvent.set(b.event_id, arr)
+  }
+
+  const ticketByEvent = new Map<string, any>()
+  for (const t of (ticketsRes.data as any[]) || []) {
+    if (!ticketByEvent.has(t.event_id)) ticketByEvent.set(t.event_id, t)
+  }
+
+  const artTypesByEvent = new Map<string, Map<string, string>>()
+  for (const at of (artTypesRes.data as any[]) || []) {
+    const m = artTypesByEvent.get(at.event_id) || new Map<string, string>()
+    m.set(at.id as string, at.art_type_name as string)
+    artTypesByEvent.set(at.event_id, m)
+  }
+
+  const communityByEvent = new Map<string, { id: string; name: string; slug: string | null }>()
+  for (const ec of (communityRes.data as any[]) || []) {
+    const comm = ec.communities as { id: string; name: string; slug: string | null } | null
+    if (comm) communityByEvent.set(ec.event_id as string, comm)
+  }
+
+  // 3. Map events to PublicEventDetails
+  return events.map((eventData: any) => {
+    const inferred = inferCityRegionFromLocation(eventData.location || null)
+    const venueRaw = eventData.venues as any | null
+    const venue = venueRaw
+      ? {
+          name: venueRaw.name as string,
+          address: venueRaw.address as string,
+          city: (venueRaw.city as string) || inferred.city,
+          region: (venueRaw.region as string) || inferred.region,
+          postalCode: (venueRaw.postal_code as string) || '',
+          country: (venueRaw.country as string) || '',
+        }
+      : null
+
+    const hostRaw = eventData.profiles as any | null
+    const artMap = artTypesByEvent.get(eventData.id) || new Map<string, string>()
+    const bookings: BookingRow[] = bookingsByEvent.get(eventData.id) || []
+
+    const performerLineup = bookings
+      .filter((b) => b.booking_scope !== 'audience' && !!b.profiles)
+      .map((b) => ({
+        id: b.profiles!.id,
+        name: b.profiles!.full_name || 'Performer',
+        avatarUrl: b.profiles!.avatar_url,
+        status: (b.status === 'waitlist' ? 'waitlist' : 'confirmed') as 'confirmed' | 'waitlist',
+        waitlistPosition: b.waitlist_position,
+        artTypeId: b.event_art_type_id,
+        artTypeName: b.event_art_type_id ? artMap.get(b.event_art_type_id) || null : null,
+      }))
+
+    const spotsConfirmed = performerLineup.filter((p) => p.status === 'confirmed').length
+    const audienceExpectedCount = bookings.filter((b) => b.booking_scope === 'audience').length
+
+    const ticket = ticketByEvent.get(eventData.id) || null
+    const isFree = !eventData.tickets_enabled || (ticket ? Number(ticket.price_cents || 0) <= 0 : true)
+    const soldOut = !!ticket && Number(ticket.sold || 0) >= Number(ticket.quantity || 0) && Number(ticket.quantity || 0) > 0
+
+    const communityRow = communityByEvent.get(eventData.id) || null
+
+    return {
+      id: eventData.id as string,
+      slug: (eventData.slug as string | null) || null,
+      title: eventData.title as string,
+      description: (eventData.description as string) || '',
+      startDate: eventData.date as string,
+      endDate: (eventData.end_time as string | null) || null,
+      status: (eventData.status as string) || 'scheduled',
+      isCancelled: ((eventData.status as string) || '').toLowerCase() === 'cancelled',
+      ticketsEnabled: !!eventData.tickets_enabled,
+      isFree,
+      ticketUrl: (eventData.external_ticket_url as string | null) || null,
+      ticketPriceCents: ticket ? Number(ticket.price_cents || 0) : null,
+      ticketQuantity: ticket ? Number(ticket.quantity || 0) : null,
+      ticketSold: ticket ? Number(ticket.sold || 0) : null,
+      ticketAvailability: soldOut ? 'SoldOut' : 'InStock',
+      locationText: (eventData.location as string) || '',
+      venue,
+      organizerName: hostRaw?.full_name || 'One Mic Stand',
+      organizerId: (eventData.host_user_id as string | null) || null,
+      performerLineup,
+      spotsConfirmed,
+      audienceExpectedCount,
+      createdAt: eventData.created_at as string,
+      updatedAt: eventData.updated_at as string,
+      imageUrl: (eventData.poster_url as string | null) || null,
+      eventType: (eventData.event_type as string | null) || null,
+      openMicType: (eventData.open_mic_type as string | null) || null,
+      communityName: communityRow?.name || null,
+      communityId: communityRow?.id || null,
+      communitySlug: communityRow?.slug || null,
+    } satisfies PublicEventDetails
+  })
+}
+
+/**
+ * Batch-fetch full PublicEventDetails for an explicit list of event IDs.
+ * Uses the same 5-query batch approach as listPublicEvents — safe for any count.
+ */
+export async function fetchEventsByIds(eventIds: string[]): Promise<PublicEventDetails[]> {
+  if (eventIds.length === 0) return []
+  const supabase = getPublicServerClient()
+
+  const { data: events, error: eventsError } = await supabase
+    .from('events')
+    .select(`${EVENT_SELECT}, venues!venue_id(id, name, address, city, region, postal_code, country), profiles!host_user_id(full_name)`)
+    .in('id', eventIds)
+
+  if (eventsError || !events || events.length === 0) return []
+
+  const [bookingsRes, ticketsRes, artTypesRes, communityRes] = await Promise.all([
+    supabase
+      .from('bookings')
+      .select('event_id, status, booking_scope, event_art_type_id, waitlist_position, profiles(id, full_name, avatar_url)')
+      .in('event_id', eventIds)
+      .in('status', ['confirmed', 'waitlist'])
+      .order('booked_at', { ascending: true }),
+    supabase.from('event_tickets').select('event_id, price_cents, quantity, sold').in('event_id', eventIds),
+    supabase.from('event_art_types').select('id, event_id, art_type_name').in('event_id', eventIds),
+    supabase
+      .from('event_communities')
+      .select('event_id, communities(id, name, slug)')
+      .in('event_id', eventIds)
+      .eq('is_primary', true)
+      .eq('status', 'approved'),
+  ])
+
+  const bookingsByEvent = new Map<string, any[]>()
+  for (const b of (bookingsRes.data as any[]) || []) {
+    const arr = bookingsByEvent.get(b.event_id) || []
+    arr.push(b); bookingsByEvent.set(b.event_id, arr)
+  }
+  const ticketByEvent = new Map<string, any>()
+  for (const t of (ticketsRes.data as any[]) || []) {
+    if (!ticketByEvent.has(t.event_id)) ticketByEvent.set(t.event_id, t)
+  }
+  const artTypesByEvent = new Map<string, Map<string, string>>()
+  for (const at of (artTypesRes.data as any[]) || []) {
+    const m = artTypesByEvent.get(at.event_id) || new Map<string, string>()
+    m.set(at.id as string, at.art_type_name as string); artTypesByEvent.set(at.event_id, m)
+  }
+  const communityByEvent = new Map<string, { id: string; name: string; slug: string | null }>()
+  for (const ec of (communityRes.data as any[]) || []) {
+    const comm = ec.communities as { id: string; name: string; slug: string | null } | null
+    if (comm) communityByEvent.set(ec.event_id as string, comm)
+  }
+
+  return events.map((eventData: any) => {
+    const inferred = inferCityRegionFromLocation(eventData.location || null)
+    const venueRaw = eventData.venues as any | null
+    const venue = venueRaw
+      ? {
+          name: venueRaw.name as string, address: venueRaw.address as string,
+          city: (venueRaw.city as string) || inferred.city, region: (venueRaw.region as string) || inferred.region,
+          postalCode: (venueRaw.postal_code as string) || '', country: (venueRaw.country as string) || '',
+        }
+      : null
+    const hostRaw = eventData.profiles as any | null
+    const artMap = artTypesByEvent.get(eventData.id) || new Map<string, string>()
+    const bookings: BookingRow[] = bookingsByEvent.get(eventData.id) || []
+    const performerLineup = bookings
+      .filter((b) => b.booking_scope !== 'audience' && !!b.profiles)
+      .map((b) => ({
+        id: b.profiles!.id, name: b.profiles!.full_name || 'Performer', avatarUrl: b.profiles!.avatar_url,
+        status: (b.status === 'waitlist' ? 'waitlist' : 'confirmed') as 'confirmed' | 'waitlist',
+        waitlistPosition: b.waitlist_position, artTypeId: b.event_art_type_id,
+        artTypeName: b.event_art_type_id ? artMap.get(b.event_art_type_id) || null : null,
+      }))
+    const spotsConfirmed = performerLineup.filter((p) => p.status === 'confirmed').length
+    const ticket = ticketByEvent.get(eventData.id) || null
+    const isFree = !eventData.tickets_enabled || (ticket ? Number(ticket.price_cents || 0) <= 0 : true)
+    const soldOut = !!ticket && Number(ticket.sold || 0) >= Number(ticket.quantity || 0) && Number(ticket.quantity || 0) > 0
+    const communityRow = communityByEvent.get(eventData.id) || null
+    return {
+      id: eventData.id as string, slug: (eventData.slug as string | null) || null,
+      title: eventData.title as string, description: (eventData.description as string) || '',
+      startDate: eventData.date as string, endDate: (eventData.end_time as string | null) || null,
+      status: (eventData.status as string) || 'scheduled',
+      isCancelled: ((eventData.status as string) || '').toLowerCase() === 'cancelled',
+      ticketsEnabled: !!eventData.tickets_enabled, isFree,
+      ticketUrl: (eventData.external_ticket_url as string | null) || null,
+      ticketPriceCents: ticket ? Number(ticket.price_cents || 0) : null,
+      ticketQuantity: ticket ? Number(ticket.quantity || 0) : null,
+      ticketSold: ticket ? Number(ticket.sold || 0) : null,
+      ticketAvailability: soldOut ? 'SoldOut' : 'InStock',
+      locationText: (eventData.location as string) || '', venue,
+      organizerName: hostRaw?.full_name || 'One Mic Stand',
+      organizerId: (eventData.host_user_id as string | null) || null,
+      performerLineup, spotsConfirmed,
+      audienceExpectedCount: bookings.filter((b) => b.booking_scope === 'audience').length,
+      createdAt: eventData.created_at as string, updatedAt: eventData.updated_at as string,
+      imageUrl: (eventData.poster_url as string | null) || null,
+      eventType: (eventData.event_type as string | null) || null,
+      openMicType: (eventData.open_mic_type as string | null) || null,
+      communityName: communityRow?.name || null, communityId: communityRow?.id || null,
+      communitySlug: communityRow?.slug || null,
+    } satisfies PublicEventDetails
+  })
 }
 
 export async function listPublicPerformerProfiles(limit = 500) {

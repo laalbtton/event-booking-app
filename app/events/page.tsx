@@ -122,7 +122,7 @@ export default async function PublicEventsPage({
 }) {
   const [params, allEvents, geo] = await Promise.all([
     searchParams,
-    listPublicEvents(300),
+    listPublicEvents(100),
     getVisitorGeo(),
   ])
 

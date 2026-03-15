@@ -1,5 +1,5 @@
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
-import { getPublicEventByIdentifier } from '@/lib/server/publicContent'
+import { fetchEventsByIds } from '@/lib/server/publicContent'
 import type { PublicEventDetails } from '@/lib/server/publicContent'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -110,9 +110,8 @@ export async function getPublicCommunity(idOrSlug: string): Promise<PublicCommun
   const eventIds = ((eventLinksRes.data as any[]) || []).map((r) => r.event_id as string)
   const now = new Date()
 
-  const eventDetails = await Promise.all(eventIds.map((id) => getPublicEventByIdentifier(id)))
-  const upcomingEvents = eventDetails
-    .filter((e): e is PublicEventDetails => !!e)
+  const allEventDetails = await fetchEventsByIds(eventIds)
+  const upcomingEvents = allEventDetails
     .filter((e) => !['cancelled', 'archived', 'draft', 'private'].includes((e.status || '').toLowerCase()))
     .filter((e) => new Date(e.startDate) >= now)
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
