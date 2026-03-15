@@ -62,13 +62,15 @@ export default function AdminCommunitiesPage() {
   async function loadData() {
     setLoading(true)
     try {
-      // Pending creation requests
-      const { data: reqs } = await supabase
-        .from('community_creation_requests')
-        .select('id, user_id, name, description, location, language, message, status, created_at, profiles(full_name, email)')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-      setCreationRequests((reqs || []) as unknown as CreationRequest[])
+      // Pending creation requests — fetched via service-role API to bypass RLS
+      const token = await getToken()
+      const reqsRes = await fetch('/api/admin/communities/creation-requests', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (reqsRes.ok) {
+        const reqsJson = await reqsRes.json()
+        setCreationRequests((reqsJson.requests || []) as CreationRequest[])
+      }
 
       // All active communities
       const { data: comms } = await supabase
