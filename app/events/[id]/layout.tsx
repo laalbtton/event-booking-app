@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { getPublicEventByIdentifier } from '@/lib/server/publicContent'
-import { buildEventMetadata } from '@/lib/seo/metadata'
+import { buildEventMetadata, getSiteUrl } from '@/lib/seo/metadata'
+import { buildEventJsonLd } from '@/lib/seo/schemaEvent'
 import type { Metadata } from 'next'
 
 type Props = {
@@ -28,8 +29,17 @@ export default async function EventLayout({ children, params }: Props) {
     return <>{children}</>
   }
 
+  const jsonLd = buildEventJsonLd(event, getSiteUrl())
+
   return (
     <>
+      {/* JSON-LD structured data — rendered server-side in the HTML body.
+          Google reads JSON-LD from anywhere in the document, not just <head>. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      {/* Hidden section for crawlers with key event facts */}
       <section className="sr-only">
         <h1>{event.title}</h1>
         <p>{event.description}</p>
