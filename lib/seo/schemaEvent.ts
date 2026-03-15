@@ -6,8 +6,16 @@ type SchemaWithContext = Record<string, unknown> & { '@context': 'https://schema
 // icon-512.png is the PWA icon referenced in manifest.json and is always deployed.
 const DEFAULT_IMAGE = 'https://app.laalbutton.com/icon-512.png'
 
+// Default currency for the platform. Change this constant if the platform
+// expands to other regions.
+const DEFAULT_CURRENCY = 'CAD'
+
 function buildEventUrl(baseUrl: string, slugOrId: string) {
   return `${baseUrl.replace(/\/$/, '')}/events/${slugOrId}`
+}
+
+function buildProfileUrl(baseUrl: string, profileId: string) {
+  return `${baseUrl.replace(/\/$/, '')}/profile/${profileId}`
 }
 
 /**
@@ -134,6 +142,25 @@ export function buildEventJsonLd(event: PublicEventDetails, siteUrl: string): Sc
   // ── Offers ──────────────────────────────────────────────────────────────────
   const offerUrl = event.ticketUrl || url
   const price = event.isFree ? 0 : Number((event.ticketPriceCents || 0) / 100).toFixed(2)
+  // validFrom = when tickets/registration became available (event creation date)
+  const validFrom = event.createdAt
+    ? new Date(event.createdAt).toISOString()
+    : undefined
+
+  // ── Organizer ────────────────────────────────────────────────────────────────
+  // Hosts are individual people on this platform, so use schema.org/Person.
+  // If no individual host is identified, fall back to the platform Organisation.
+  const organizer = event.organizerId
+    ? {
+        '@type': 'Person',
+        name: event.organizerName || 'Host',
+        url: buildProfileUrl(siteUrl, event.organizerId),
+      }
+    : {
+        '@type': 'Organization',
+        name: event.organizerName || 'One Mic Stand',
+        url: siteUrl.replace(/\/$/, ''),
+      }
 
   // ── Performers ──────────────────────────────────────────────────────────────
   const performers = event.performerLineup.map((performer) => ({
@@ -158,15 +185,13 @@ export function buildEventJsonLd(event: PublicEventDetails, siteUrl: string): Sc
       name: event.venue?.name || event.locationText || 'Venue TBA',
       ...(locationAddress ? { address: locationAddress } : {}),
     },
-    organizer: {
-      '@type': 'Organization',
-      name: event.organizerName || 'One Mic Stand',
-    },
+    organizer,
     offers: {
       '@type': 'Offer',
       url: offerUrl,
       price,
-      priceCurrency: 'CAD',
+      priceCurrency: DEFAULT_CURRENCY,
+      validFrom,
       availability:
         event.ticketAvailability === 'SoldOut'
           ? 'https://schema.org/SoldOut'

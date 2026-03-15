@@ -16,6 +16,7 @@ type EventRow = {
   venue_id: string | null
   host_user_id: string | null
   updated_at: string
+  created_at: string
   poster_url: string | null
 }
 
@@ -83,6 +84,7 @@ export type PublicEventDetails = {
     country: string
   } | null
   organizerName: string
+  organizerId: string | null
   performerLineup: Array<{
     id: string
     name: string
@@ -93,6 +95,7 @@ export type PublicEventDetails = {
     artTypeName: string | null
   }>
   audienceExpectedCount: number
+  createdAt: string
   updatedAt: string
   imageUrl: string | null
 }
@@ -129,7 +132,7 @@ function inferCityRegionFromLocation(location: string | null): { city: string; r
 }
 
 const EVENT_SELECT =
-  'id, slug, title, description, date, end_time, status, tickets_enabled, external_event, external_ticket_url, credits_required, location, venue_id, host_user_id, updated_at, poster_url'
+  'id, slug, title, description, date, end_time, status, tickets_enabled, external_event, external_ticket_url, credits_required, location, venue_id, host_user_id, created_at, updated_at, poster_url'
 
 export async function getPublicEventByIdentifier(identifier: string): Promise<PublicEventDetails | null> {
   const supabase = getPublicServerClient()
@@ -246,8 +249,10 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
     locationText: eventData.location || '',
     venue,
     organizerName: hostRes.data?.full_name || 'One Mic Stand',
+    organizerId: eventData.host_user_id || null,
     performerLineup,
     audienceExpectedCount: audienceCountRes.count || 0,
+    createdAt: eventData.created_at,
     updatedAt: eventData.updated_at,
     imageUrl: eventData.poster_url || null,
   }
