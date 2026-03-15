@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import type { PublicEventDetails, PublicPerformerProfile } from '@/lib/server/publicContent'
+import type { PublicCommunity } from '@/lib/server/publicCommunities'
 
 const APP_NAME = 'One Mic Stand'
 
@@ -68,6 +69,43 @@ export function buildEventListMetadata(eventCount?: number): Metadata {
     title: `Open Mic Events - ${APP_NAME}`,
     description: trimTo(`Find upcoming open mics and performance events on ${APP_NAME}.${countText}`, 155),
     alternates: { canonical: '/events' },
+  }
+}
+
+export function buildCommunityMetadata(community: PublicCommunity): Metadata {
+  const siteUrl = getSiteUrl()
+  const pathPart = community.slug || community.id
+  const url = `${siteUrl.replace(/\/$/, '')}/communities/${pathPart}`
+  const title = `${community.name} - ${APP_NAME}`
+  const rawDescription = community.description?.trim() || `Join the ${community.name} community on ${APP_NAME} and discover upcoming events.`
+  const description = trimTo(rawDescription, 155)
+  const imageUrl = community.avatarUrl || `${siteUrl.replace(/\/$/, '')}/icon-512.png`
+
+  return {
+    title,
+    description,
+    alternates: { canonical: `/communities/${pathPart}` },
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: APP_NAME,
+      images: [{ url: imageUrl }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [imageUrl],
+    },
+  }
+}
+
+export function buildCommunityListMetadata(): Metadata {
+  return {
+    title: `Browse Communities - ${APP_NAME}`,
+    description: trimTo(`Discover comedy and performance communities near you on ${APP_NAME}. Join a community to see upcoming events.`, 155),
+    alternates: { canonical: '/communities' },
   }
 }
 

@@ -43,6 +43,12 @@ export default function RoleOnboardingPage() {
         return
       }
 
+      // Pre-select role if the user came from a public page CTA
+      const savedRole = typeof window !== 'undefined' ? window.sessionStorage.getItem('signup_role') : null
+      if (savedRole === 'performer' || savedRole === 'audience') {
+        setSelectedRole(savedRole)
+      }
+
       setLoading(false)
     }
 
@@ -103,6 +109,16 @@ export default function RoleOnboardingPage() {
       }
 
       window.localStorage.removeItem('pending_role_onboarding')
+
+      // If the user came from a public page (event or community), send them back there
+      const returnTo = typeof window !== 'undefined' ? window.sessionStorage.getItem('signup_returnTo') : null
+      if (returnTo) {
+        window.sessionStorage.removeItem('signup_returnTo')
+        window.sessionStorage.removeItem('signup_role')
+        router.replace(returnTo)
+        return
+      }
+
       if (isStandaloneMode()) {
         router.replace('/dashboard')
       } else {

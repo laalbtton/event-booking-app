@@ -32,6 +32,10 @@ function LoginContent() {
     if (inviteToken) {
       setPendingAppInviteToken(inviteToken)
     }
+    const returnTo = searchParams.get('returnTo')
+    if (returnTo && typeof window !== 'undefined') {
+      window.sessionStorage.setItem('signup_returnTo', returnTo)
+    }
   }, [searchParams])
 
   useEffect(() => {
@@ -124,6 +128,14 @@ function LoginContent() {
       if (shouldRouteToRoleOnboarding(data.user)) {
         window.localStorage.removeItem('pending_role_onboarding')
         router.push('/onboarding/role')
+        return
+      }
+
+      // Honour returnTo if set
+      const returnTo = typeof window !== 'undefined' ? window.sessionStorage.getItem('signup_returnTo') : null
+      if (returnTo) {
+        window.sessionStorage.removeItem('signup_returnTo')
+        router.push(returnTo)
         return
       }
 

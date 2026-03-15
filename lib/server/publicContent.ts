@@ -18,6 +18,8 @@ type EventRow = {
   updated_at: string
   created_at: string
   poster_url: string | null
+  event_type: string | null
+  open_mic_type: string | null
 }
 
 type VenueRow = {
@@ -94,10 +96,16 @@ export type PublicEventDetails = {
     artTypeId: string | null
     artTypeName: string | null
   }>
+  spotsConfirmed: number
   audienceExpectedCount: number
   createdAt: string
   updatedAt: string
   imageUrl: string | null
+  eventType: string | null
+  openMicType: string | null
+  communityName: string | null
+  communityId: string | null
+  communitySlug: string | null
 }
 
 export type PublicPerformerProfile = {
@@ -132,7 +140,7 @@ function inferCityRegionFromLocation(location: string | null): { city: string; r
 }
 
 const EVENT_SELECT =
-  'id, slug, title, description, date, end_time, status, tickets_enabled, external_event, external_ticket_url, credits_required, location, venue_id, host_user_id, created_at, updated_at, poster_url'
+  'id, slug, title, description, date, end_time, status, tickets_enabled, external_event, external_ticket_url, credits_required, location, venue_id, host_user_id, created_at, updated_at, poster_url, event_type, open_mic_type'
 
 export async function getPublicEventByIdentifier(identifier: string): Promise<PublicEventDetails | null> {
   const supabase = getPublicServerClient()
@@ -150,6 +158,7 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
     audienceCountRes,
     ticketRes,
     artTypesRes,
+    primaryCommunityRes,
   ] = await Promise.all([
     eventData.venue_id
       ? supabase
@@ -194,6 +203,14 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
       .select('id, art_type_name, slot_capacity')
       .eq('event_id', eventData.id)
       .order('created_at', { ascending: true }),
+    supabase
+      .from('event_communities')
+      .select('community_id, communities(id, name, slug)')
+      .eq('event_id', eventData.id)
+      .eq('is_primary', true)
+      .eq('status', 'approved')
+      .limit(1)
+      .maybeSingle(),
   ])
 
   const inferred = inferCityRegionFromLocation(eventData.location)
@@ -226,9 +243,13 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
       artTypeName: b.event_art_type_id ? artMap.get(b.event_art_type_id) || null : null,
     }))
 
+  const spotsConfirmed = performerLineup.filter((p) => p.status === 'confirmed').length
+
   const ticket = ticketRes.data || null
   const isFree = !eventData.tickets_enabled || (ticket ? Number(ticket.price_cents || 0) <= 0 : true)
   const soldOut = !!ticket && Number(ticket.sold || 0) >= Number(ticket.quantity || 0) && Number(ticket.quantity || 0) > 0
+
+  const communityRow = (primaryCommunityRes.data as any)?.communities as { id: string; name: string; slug: string | null } | null | undefined
 
   return {
     id: eventData.id,
@@ -251,10 +272,16 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
     organizerName: hostRes.data?.full_name || 'One Mic Stand',
     organizerId: eventData.host_user_id || null,
     performerLineup,
+    spotsConfirmed,
     audienceExpectedCount: audienceCountRes.count || 0,
     createdAt: eventData.created_at,
     updatedAt: eventData.updated_at,
     imageUrl: eventData.poster_url || null,
+    eventType: eventData.event_type || null,
+    openMicType: eventData.open_mic_type || null,
+    communityName: communityRow?.name || null,
+    communityId: communityRow?.id || null,
+    communitySlug: communityRow?.slug || null,
   }
 }
 

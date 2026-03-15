@@ -26,6 +26,15 @@ function SignupContent() {
     if (inviteToken) {
       setPendingAppInviteToken(inviteToken)
     }
+    // Persist returnTo and pre-selected role so onboarding can redirect back
+    const returnTo = searchParams.get('returnTo')
+    if (returnTo && typeof window !== 'undefined') {
+      window.sessionStorage.setItem('signup_returnTo', returnTo)
+    }
+    const role = searchParams.get('role')
+    if (role && typeof window !== 'undefined') {
+      window.sessionStorage.setItem('signup_role', role)
+    }
   }, [searchParams])
 
   // Email/password signup

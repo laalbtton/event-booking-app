@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+function generateCommunitySlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'community'
+}
+
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -67,11 +77,22 @@ export async function POST(request: NextRequest) {
       .eq('id', requestId)
 
     if (action === 'approved') {
+      const baseSlug = generateCommunitySlug(req.name)
+      // Check for slug collision and append request id suffix if needed
+      const { data: existingSlug } = await supabase
+        .from('communities')
+        .select('id')
+        .eq('slug', baseSlug)
+        .limit(1)
+        .maybeSingle()
+      const slug = existingSlug ? `${baseSlug}-${requestId.slice(0, 8)}` : baseSlug
+
       // Create the community
       const { data: newCommunity, error: communityError } = await supabase
         .from('communities')
         .insert({
           name: req.name,
+          slug,
           description: req.description,
           location: req.location,
           language: req.language,
