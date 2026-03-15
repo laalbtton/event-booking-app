@@ -8,7 +8,8 @@ function getAdminClient() {
   return createClient(url, key)
 }
 
-async function isSuperAdmin(supabase: ReturnType<typeof createClient>, userId: string): Promise<boolean> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function isSuperAdmin(supabase: any, userId: string): Promise<boolean> {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single()
   if ((profile as { role?: string } | null)?.role === 'admin') return true
   const { data: adminUser } = await supabase.from('admin_users').select('user_id').eq('user_id', userId).single()
