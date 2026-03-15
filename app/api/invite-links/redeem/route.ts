@@ -107,11 +107,11 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (community && (community as { status: string; is_public: boolean }).status === 'active') {
+        // Ignore duplicate-key errors (user already a member)
         await supabase
           .from('community_members')
           .insert({ community_id: communityId, user_id: authData.user.id, role: 'member' })
-          .then(() => null)
-          .catch(() => null) // Ignore duplicate-key errors
+          .then(null, () => null)
       }
     }
 
