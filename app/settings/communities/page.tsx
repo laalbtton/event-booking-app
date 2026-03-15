@@ -84,7 +84,7 @@ export default function SettingsCommunitiesPage() {
       }
 
       const enriched: MyCommunity[] = memberships.map((m) => {
-        const comm = m.communities as { id: string; name: string; description: string | null } | null
+        const comm = m.communities as unknown as { id: string; name: string; description: string | null } | null
         return {
           id: m.community_id,
           name: comm?.name || 'Unknown',
