@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import Image from 'next/image'
 import type { PublicEventDetails } from '@/lib/server/publicContent'
 
 function formatEventDate(dateIso: string): string {
@@ -45,27 +44,39 @@ export function PublicEventCard({ event, cityFilter }: Props) {
       className="group block rounded-xl border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow overflow-hidden"
     >
       {/* Event image */}
-      <div className="relative h-40 w-full bg-muted">
+      <div className="relative h-40 w-full overflow-hidden bg-muted">
         {event.imageUrl ? (
-          <Image
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
             src={event.imageUrl}
             alt={event.title}
-            fill
-            className="object-cover"
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            className="h-full w-full object-cover"
+            loading="lazy"
+            onError={(e) => {
+              const target = e.currentTarget
+              target.style.display = 'none'
+              const parent = target.parentElement
+              if (parent) {
+                const placeholder = parent.querySelector('[data-placeholder]') as HTMLElement | null
+                if (placeholder) placeholder.style.display = 'flex'
+              }
+            }}
           />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <svg
-              className="h-12 w-12 text-muted-foreground/30"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-          </div>
-        )}
+        ) : null}
+        <div
+          data-placeholder
+          className="flex h-full w-full items-center justify-center"
+          style={{ display: event.imageUrl ? 'none' : 'flex' }}
+        >
+          <svg
+            className="h-12 w-12 text-muted-foreground/30"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+          </svg>
+        </div>
         {isPast && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
             <span className="text-white text-sm font-medium bg-black/60 px-2 py-1 rounded">Past Event</span>
