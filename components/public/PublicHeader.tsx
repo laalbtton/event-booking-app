@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { Button } from '@/components/ui/button'
 
@@ -14,6 +15,13 @@ export function PublicHeader() {
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tight">
+          <Image
+            src="/mic-stool.png"
+            alt=""
+            width={28}
+            height={22}
+            className="h-7 w-auto grayscale opacity-80"
+          />
           One Mic Stand
         </Link>
 
