@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import Image from 'next/image'
 import type { Metadata } from 'next'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { PublicEventCard } from '@/components/public/PublicEventCard'
@@ -44,49 +43,34 @@ export default async function Home() {
       <PublicHeader />
 
       {/* ── Hero ─────────────────────────────────────────────────── */}
-      <section className="bg-gradient-to-br from-blue-600 to-purple-700 text-white py-16 px-4 overflow-hidden">
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center gap-8 md:gap-12">
-          {/* Text + CTAs */}
-          <div className="flex-1 text-center md:text-left">
-            <h1 className="text-5xl md:text-6xl font-bold mb-4 drop-shadow-lg tracking-tight">
-              One Mic Stand
-            </h1>
-            <p className="text-xl md:text-2xl mb-10 opacity-90 leading-relaxed">
-              Discover and perform at comedy &amp; open mic events across Canada
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-              <Link
-                href="/events"
-                className="bg-white text-blue-700 px-8 py-4 rounded-xl font-semibold hover:bg-blue-50 text-lg shadow-lg transition-colors"
-              >
-                Browse Events
-              </Link>
-              <Link
-                href="/signup"
-                className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-semibold hover:bg-white hover:text-blue-700 text-lg shadow-lg transition-colors"
-              >
-                Sign Up Free
-              </Link>
-            </div>
-            <p className="mt-6 text-sm opacity-75 text-center md:text-left">
-              Already have an account?{' '}
-              <Link href="/login" className="underline underline-offset-2 hover:opacity-100">
-                Log in
-              </Link>
-            </p>
+      <section className="bg-gradient-to-br from-blue-600 to-purple-700 text-white py-20 px-4">
+        <div className="max-w-3xl mx-auto text-center">
+          <h1 className="text-5xl md:text-6xl font-bold mb-4 drop-shadow-lg tracking-tight">
+            One Mic Stand
+          </h1>
+          <p className="text-xl md:text-2xl mb-10 opacity-90 leading-relaxed">
+            Discover and perform at comedy &amp; open mic events across Canada
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              href="/events"
+              className="bg-white text-blue-700 px-8 py-4 rounded-xl font-semibold hover:bg-blue-50 text-lg shadow-lg transition-colors"
+            >
+              Browse Events
+            </Link>
+            <Link
+              href="/signup"
+              className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-semibold hover:bg-white hover:text-blue-700 text-lg shadow-lg transition-colors"
+            >
+              Sign Up Free
+            </Link>
           </div>
-
-          {/* Brand illustration */}
-          <div className="shrink-0 w-64 md:w-80 lg:w-96 opacity-90 drop-shadow-2xl">
-            <Image
-              src="/mic-stool.png"
-              alt="Microphone and stool — One Mic Stand"
-              width={400}
-              height={300}
-              className="w-full h-auto object-contain"
-              priority
-            />
-          </div>
+          <p className="mt-6 text-sm opacity-75">
+            Already have an account?{' '}
+            <Link href="/login" className="underline underline-offset-2 hover:opacity-100">
+              Log in
+            </Link>
+          </p>
         </div>
       </section>
 

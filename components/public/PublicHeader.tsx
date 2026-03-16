@@ -20,7 +20,7 @@ export function PublicHeader() {
             alt=""
             width={28}
             height={22}
-            className="h-7 w-auto grayscale opacity-80"
+            className="h-7 w-auto grayscale invert mix-blend-multiply dark:invert-0 dark:mix-blend-screen dark:opacity-70"
           />
           One Mic Stand
         </Link>
