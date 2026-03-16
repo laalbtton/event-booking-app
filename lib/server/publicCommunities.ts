@@ -1,6 +1,17 @@
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
+import { getAdminClient } from '@/lib/server/supabaseAdmin'
 import { fetchEventsByIds } from '@/lib/server/publicContent'
 import type { PublicEventDetails } from '@/lib/server/publicContent'
+
+/**
+ * Returns a Supabase client that can read community_members.
+ * The community_members RLS policy is TO authenticated, so the anon key
+ * cannot read it. We use the service-role key (bypasses RLS) as a fallback
+ * until the public-read policy is added via SQL migration.
+ */
+function getMemberCountClient() {
+  return getAdminClient() ?? getPublicServerClient()
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -35,8 +46,10 @@ export async function listPublicCommunities(): Promise<PublicCommunity[]> {
 
   const communityIds = communities.map((c: any) => c.id as string)
 
+  const memberClient = getMemberCountClient()
+
   const [memberCountsRes, eventCountsRes] = await Promise.all([
-    supabase
+    memberClient
       .from('community_members')
       .select('community_id')
       .in('community_id', communityIds),
@@ -95,8 +108,10 @@ export async function getPublicCommunity(idOrSlug: string): Promise<PublicCommun
 
   const communityId = (community as any).id as string
 
+  const memberClient = getMemberCountClient()
+
   const [memberCountRes, eventLinksRes] = await Promise.all([
-    supabase
+    memberClient
       .from('community_members')
       .select('id', { count: 'exact', head: true })
       .eq('community_id', communityId),
