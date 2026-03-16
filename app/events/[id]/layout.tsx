@@ -5,6 +5,7 @@ import { buildEventJsonLd } from '@/lib/seo/schemaEvent'
 import { PublicEventCTA } from '@/components/public/PublicEventCTA'
 import { PublicInstallBanner } from '@/components/public/PublicInstallBanner'
 import { PublicHeader } from '@/components/public/PublicHeader'
+import { LayoutEventSummary } from '@/components/public/LayoutEventSummary'
 import type { Metadata } from 'next'
 
 // Cache event detail pages for 5 minutes — keeps spot counts reasonably fresh
@@ -82,80 +83,79 @@ export default async function EventLayout({ children, params }: Props) {
         )}
       </section>
 
-      {/* Server-rendered visible event summary for logged-out visitors.
-          The page.tsx client component renders the full interactive view after hydration.
-          This section is always visible immediately, before JS executes. */}
-      <div className="mx-auto max-w-2xl px-4 pt-6 pb-2 space-y-4" aria-hidden="false">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">{event.title}</h1>
-          {event.communityName && (
-            <p className="text-sm text-muted-foreground">{event.communityName}</p>
-          )}
-        </div>
+      {/* Server-rendered visible event summary — shown only to logged-out visitors.
+          LayoutEventSummary hides this once auth resolves and a user is detected,
+          preventing duplicate content for logged-in users. */}
+      <LayoutEventSummary>
+        <div className="mx-auto max-w-2xl px-4 pt-6 pb-2 space-y-4">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight">{event.title}</h1>
+            {event.communityName && (
+              <p className="text-sm text-muted-foreground">{event.communityName}</p>
+            )}
+          </div>
 
-        <div className="space-y-2 text-sm text-muted-foreground">
-          <p className="flex items-center gap-2">
-            <span>📅</span>
-            <span>{formatDate(event.startDate)} · {formatTime(event.startDate)}{event.endDate ? ` – ${formatTime(event.endDate)}` : ''}</span>
-          </p>
-          {(event.venue || event.locationText) && (
+          <div className="space-y-2 text-sm text-muted-foreground">
             <p className="flex items-center gap-2">
-              <span>📍</span>
+              <span>📅</span>
+              <span>{formatDate(event.startDate)} · {formatTime(event.startDate)}{event.endDate ? ` – ${formatTime(event.endDate)}` : ''}</span>
+            </p>
+            {(event.venue || event.locationText) && (
+              <p className="flex items-center gap-2">
+                <span>📍</span>
+                <span>
+                  {event.venue
+                    ? `${event.venue.name}, ${[event.venue.address, event.venue.city, event.venue.region].filter(Boolean).join(', ')}`
+                    : event.locationText}
+                </span>
+              </p>
+            )}
+            <p className="flex items-center gap-2">
+              <span>🎤</span>
+              <span>{event.spotsConfirmed} performer{event.spotsConfirmed !== 1 ? 's' : ''} signed up</span>
+            </p>
+            <p className="flex items-center gap-2">
+              <span>{event.isFree ? '🆓' : '🎟️'}</span>
               <span>
-                {event.venue
-                  ? `${event.venue.name}, ${[event.venue.address, event.venue.city, event.venue.region].filter(Boolean).join(', ')}`
-                  : event.locationText}
+                {event.isFree
+                  ? 'Free event'
+                  : event.ticketPriceCents
+                    ? `Tickets from $${(event.ticketPriceCents / 100).toFixed(2)}`
+                    : 'Ticketed event'}
               </span>
             </p>
-          )}
-          <p className="flex items-center gap-2">
-            <span>🎤</span>
-            <span>{event.spotsConfirmed} performer{event.spotsConfirmed !== 1 ? 's' : ''} signed up</span>
-          </p>
-          <p className="flex items-center gap-2">
-            <span>{event.isFree ? '🆓' : '🎟️'}</span>
-            <span>
-              {event.isFree
-                ? 'Free event'
-                : event.ticketPriceCents
-                  ? `Tickets from $${(event.ticketPriceCents / 100).toFixed(2)}`
-                  : 'Ticketed event'}
-            </span>
-          </p>
-        </div>
-
-        {event.description && (
-          <p className="text-sm leading-relaxed line-clamp-4">{event.description}</p>
-        )}
-
-        {/* Confirmed performer lineup */}
-        {event.performerLineup.filter((p) => p.status === 'confirmed').length > 0 && (
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Lineup</p>
-            <ul className="space-y-1">
-              {event.performerLineup
-                .filter((p) => p.status === 'confirmed')
-                .map((performer) => (
-                  <li key={performer.id} className="text-sm flex items-center gap-2">
-                    <span className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-xs">🎤</span>
-                    {performer.name}
-                    {performer.artTypeName && <span className="text-xs text-muted-foreground">({performer.artTypeName})</span>}
-                  </li>
-                ))}
-            </ul>
           </div>
-        )}
 
-        {/* Public CTA — shown to logged-out visitors; self-hides for logged-in users after hydration */}
-        <PublicEventCTA
-          eventSlug={eventSlug}
-          isCancelled={event.isCancelled}
-          isPast={isPast}
-        />
+          {event.description && (
+            <p className="text-sm leading-relaxed line-clamp-4">{event.description}</p>
+          )}
 
-        {/* PWA install banner for mobile */}
-        <PublicInstallBanner />
-      </div>
+          {event.performerLineup.filter((p) => p.status === 'confirmed').length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Lineup</p>
+              <ul className="space-y-1">
+                {event.performerLineup
+                  .filter((p) => p.status === 'confirmed')
+                  .map((performer) => (
+                    <li key={performer.id} className="text-sm flex items-center gap-2">
+                      <span className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-xs">🎤</span>
+                      {performer.name}
+                      {performer.artTypeName && <span className="text-xs text-muted-foreground">({performer.artTypeName})</span>}
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+
+          <PublicEventCTA
+            eventSlug={eventSlug}
+            isCancelled={event.isCancelled}
+            isPast={isPast}
+          />
+
+          <PublicInstallBanner />
+        </div>
+      </LayoutEventSummary>
 
       {/* The full interactive event page (client component) renders below */}
       {children}
