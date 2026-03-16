@@ -9,7 +9,7 @@ export default function AuthCallbackPage() {
   const router = useRouter()
 
   useEffect(() => {
-    async function ensureRoleOnboardingFlag(user: { user_metadata?: Record<string, any> }) {
+    async function ensureRoleOnboardingFlag(user: { user_metadata?: Record<string, unknown> }) {
       const pendingFromStorage = window.localStorage.getItem('pending_role_onboarding') === '1'
       const pendingFromMetadata = !!user.user_metadata?.onboarding_role_pending
       if (!pendingFromStorage || pendingFromMetadata) {
@@ -27,6 +27,81 @@ export default function AuthCallbackPage() {
         console.warn('Could not persist onboarding role flag:', error.message)
       }
       return true
+    }
+
+    /**
+     * Magic-link "attend" flow:
+     * - New users: set role=audience, auto-join communities, create booking
+     * - Existing users: create booking (idempotent — already-booked is ignored)
+     * - Redirects back to the event page either way
+     */
+    async function handleAttendIntent(
+      user: { id: string; user_metadata?: Record<string, unknown> },
+      session: { access_token: string },
+      eventId: string,
+      eventSlug: string,
+    ) {
+      // 1. Check if this is a new user without a role
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      const isNewUser = !profile?.role
+
+      if (isNewUser) {
+        // Set audience role directly — skip the role-selection onboarding screen
+        await supabase
+          .from('profiles')
+          .update({ role: 'audience', updated_at: new Date().toISOString() })
+          .eq('id', user.id)
+
+        await supabase.auth.updateUser({
+          data: { ...user.user_metadata, onboarding_role_pending: false },
+        })
+
+        // Auto-join all public active communities (same as normal onboarding)
+        try {
+          const { data: publicCommunities } = await supabase
+            .from('communities')
+            .select('id')
+            .eq('is_public', true)
+            .eq('status', 'active')
+
+          if (publicCommunities) {
+            await Promise.allSettled(
+              publicCommunities.map((c: { id: string }) =>
+                fetch(`/api/communities/${c.id}/join`, {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${session.access_token}` },
+                }),
+              ),
+            )
+          }
+        } catch {
+          // Non-blocking
+        }
+
+        window.localStorage.removeItem('pending_role_onboarding')
+      }
+
+      // 2. Create the audience booking (idempotent — ignore "already booked" errors)
+      try {
+        await fetch('/api/bookings/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ eventId }),
+        })
+      } catch {
+        // Non-blocking — redirect to event even if booking fails
+      }
+
+      // 3. Send them back to the event page with a welcome flag
+      router.replace(`/events/${eventSlug}?attended=1`)
     }
 
     async function handleAuthCallback() {
@@ -78,6 +153,17 @@ export default function AuthCallbackPage() {
           await redeemPendingAppInvite(session.access_token)
         }
 
+        // ── Magic-link attend intent ─────────────────────────────────────
+        const intent = url.searchParams.get('intent')
+        const eventId = url.searchParams.get('eventId')
+        const eventSlug = url.searchParams.get('eventSlug')
+
+        if (intent === 'attend' && eventId && eventSlug && session?.access_token) {
+          await handleAttendIntent(user, session, eventId, eventSlug)
+          return
+        }
+        // ────────────────────────────────────────────────────────────────
+
         const shouldShowRoleOnboarding = await ensureRoleOnboardingFlag(user)
         window.localStorage.removeItem('pending_role_onboarding')
 
@@ -97,7 +183,7 @@ export default function AuthCallbackPage() {
         if (!profileError && profile && !profile.avatar_url && avatarFromAuth) {
           await supabase
             .from('profiles')
-            .update({ avatar_url: avatarFromAuth, updated_at: new Date().toISOString() })
+            .update({ avatar_url: avatarFromAuth as string, updated_at: new Date().toISOString() })
             .eq('id', user.id)
         }
 
@@ -132,7 +218,7 @@ export default function AuthCallbackPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="text-lg">Signing you in...</div>
+      <div className="text-lg">Signing you in…</div>
     </div>
   )
 }

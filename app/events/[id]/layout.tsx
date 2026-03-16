@@ -189,6 +189,7 @@ export default async function EventLayout({ children, params }: Props) {
 
           <PublicEventCTA
             eventSlug={eventSlug}
+            eventId={event.id}
             isCancelled={event.isCancelled}
             isPast={isPast}
           />
