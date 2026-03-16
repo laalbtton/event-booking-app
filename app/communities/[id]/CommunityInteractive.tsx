@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Users, MapPin, Globe, Heart, UserCheck,
-  Clock, CheckCircle2, XCircle, AlertCircle
+  Clock, CheckCircle2, XCircle, AlertCircle, Link2, Copy
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -41,6 +41,22 @@ type CrossSubmission = {
   events: { title: string | null; slug: string | null } | null
 }
 
+type PendingEvent = {
+  id: string
+  title: string
+  date: string
+  created_by: string | null
+  profiles: { full_name: string | null; email: string | null } | null
+}
+
+type PendingVenue = {
+  id: string
+  name: string
+  address: string
+  requested_at: string | null
+  profiles: { full_name: string | null; email: string | null } | null
+}
+
 type Props = {
   communityId: string
   communityName: string
@@ -65,6 +81,10 @@ export function CommunityInteractive({
   const [members, setMembers] = useState<CommunityMemberRow[]>([])
   const [ecRequests, setEcRequests] = useState<ECRequest[]>([])
   const [crossSubmissions, setCrossSubmissions] = useState<CrossSubmission[]>([])
+  const [pendingEvents, setPendingEvents] = useState<PendingEvent[]>([])
+  const [pendingVenues, setPendingVenues] = useState<PendingVenue[]>([])
+  const [generatedInviteLink, setGeneratedInviteLink] = useState<string | null>(null)
+  const [inviteLinkLoading, setInviteLinkLoading] = useState(false)
   const [loadingRole, setLoadingRole] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [cantWaitLoading, setCantWaitLoading] = useState(false)
@@ -93,7 +113,7 @@ export function CommunityInteractive({
       setMyRole(role)
 
       if (['admin', 'co_admin'].includes(role || '')) {
-        const [memsRes, ecReqsRes, crossSubsRes] = await Promise.all([
+        const [memsRes, ecReqsRes, crossSubsRes, pendingEvLinksRes, pendingVenuesRes] = await Promise.all([
           supabase
             .from('community_members')
             .select('id, user_id, role, joined_at, profiles(full_name, email)')
@@ -109,10 +129,53 @@ export function CommunityInteractive({
             .select('id, event_id, status, submitted_at, expires_at, events(title, slug)')
             .eq('community_id', communityId)
             .eq('status', 'pending'),
+          // Pending events: events with status=pending_approval linked to this community
+          supabase
+            .from('event_communities')
+            .select('event_id, events(id, title, date, created_by, profiles(full_name, email))')
+            .eq('community_id', communityId),
+          // Pending venues for this community
+          supabase
+            .from('venues')
+            .select('id, name, address, requested_at, profiles:requested_by(full_name, email)')
+            .eq('community_id', communityId)
+            .eq('status', 'pending'),
         ])
+
         setMembers((memsRes.data || []) as unknown as CommunityMemberRow[])
         setEcRequests((ecReqsRes.data || []) as unknown as ECRequest[])
         setCrossSubmissions((crossSubsRes.data || []) as unknown as CrossSubmission[])
+
+        // Extract pending events from event_communities links
+        const pendingEvList: PendingEvent[] = []
+        for (const link of (pendingEvLinksRes.data || []) as any[]) {
+          const ev = link.events
+          if (ev && ev.id && ev.date) {
+            // We'll check event status via a separate query since we can't filter on joined table's column
+            pendingEvList.push({
+              id: ev.id,
+              title: ev.title || 'Untitled',
+              date: ev.date,
+              created_by: ev.created_by,
+              profiles: ev.profiles || null,
+            })
+          }
+        }
+
+        // Filter only pending_approval events
+        if (pendingEvList.length > 0) {
+          const { data: evStatusData } = await supabase
+            .from('events')
+            .select('id')
+            .in('id', pendingEvList.map(e => e.id))
+            .eq('status', 'pending_approval')
+          const pendingIds = new Set((evStatusData || []).map((e: any) => e.id))
+          setPendingEvents(pendingEvList.filter(e => pendingIds.has(e.id)))
+        } else {
+          setPendingEvents([])
+        }
+
+        setPendingVenues((pendingVenuesRes.data || []) as unknown as PendingVenue[])
       }
     } finally {
       setLoadingRole(false)
@@ -244,6 +307,63 @@ export function CommunityInteractive({
     }
   }
 
+  async function handleReviewPendingEvent(eventId: string, action: 'approved' | 'rejected') {
+    const token = await getToken()
+    if (!token) return
+    setActionLoading(`event-${eventId}`)
+    try {
+      const res = await fetch(`/api/events/${eventId}/review`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, communityId }),
+      })
+      const json = await res.json()
+      if (!res.ok) { toast.error(json.error || 'Failed'); return }
+      toast.success(action === 'approved' ? 'Event approved and is now live!' : 'Creator notified of required changes.')
+      setPendingEvents((prev) => prev.filter((e) => e.id !== eventId))
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleReviewPendingVenue(venueId: string, action: 'approved' | 'rejected') {
+    const token = await getToken()
+    if (!token) return
+    setActionLoading(`venue-${venueId}`)
+    try {
+      const res = await fetch(`/api/venues/${venueId}/review`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      const json = await res.json()
+      if (!res.ok) { toast.error(json.error || 'Failed'); return }
+      toast.success(action === 'approved' ? 'Venue approved!' : 'Venue rejected.')
+      setPendingVenues((prev) => prev.filter((v) => v.id !== venueId))
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleGenerateInviteLink() {
+    const token = await getToken()
+    if (!token) return
+    setInviteLinkLoading(true)
+    try {
+      const res = await fetch('/api/community-invite-links/create', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId, targetRole: 'event_creator', maxUses: 50, expiresInDays: 30 }),
+      })
+      const json = await res.json()
+      if (!res.ok) { toast.error(json.error || 'Failed to generate link'); return }
+      const url = `${window.location.origin}/join/${json.link.token}`
+      setGeneratedInviteLink(url)
+    } finally {
+      setInviteLinkLoading(false)
+    }
+  }
+
   function roleLabel(role: string) {
     return role === 'admin' ? 'Admin' : role === 'co_admin' ? 'Co-Admin' : role === 'event_creator' ? 'Event Creator' : 'Member'
   }
@@ -311,26 +431,45 @@ export function CommunityInteractive({
 
       {/* Admin management panel */}
       {isAdminOrCoAdmin && !isArchived && (
-        <Tabs defaultValue="members">
-          <TabsList className="grid grid-cols-3 w-full">
-            <TabsTrigger value="members">
+        <Tabs defaultValue={pendingEvents.length > 0 ? 'pending-events' : pendingVenues.length > 0 ? 'pending-venues' : 'members'}>
+          <TabsList className="flex flex-wrap h-auto gap-1 p-1">
+            <TabsTrigger value="members" className="text-xs">
               Members {members.length > 0 && `(${members.length})`}
             </TabsTrigger>
-            <TabsTrigger value="ec-requests">
+            <TabsTrigger value="ec-requests" className="text-xs">
               EC Requests
               {ecRequests.length > 0 && (
-                <Badge variant="destructive" className="ml-1.5 text-xs px-1.5 py-0.5">
+                <Badge variant="destructive" className="ml-1 text-xs px-1 py-0">
                   {ecRequests.length}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="submissions">
-              Events
+            <TabsTrigger value="submissions" className="text-xs">
+              Cross-Posts
               {crossSubmissions.length > 0 && (
-                <Badge variant="destructive" className="ml-1.5 text-xs px-1.5 py-0.5">
+                <Badge variant="destructive" className="ml-1 text-xs px-1 py-0">
                   {crossSubmissions.length}
                 </Badge>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="pending-events" className="text-xs">
+              New Events
+              {pendingEvents.length > 0 && (
+                <Badge variant="destructive" className="ml-1 text-xs px-1 py-0">
+                  {pendingEvents.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="pending-venues" className="text-xs">
+              Venues
+              {pendingVenues.length > 0 && (
+                <Badge variant="destructive" className="ml-1 text-xs px-1 py-0">
+                  {pendingVenues.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="invite" className="text-xs">
+              Invite
             </TabsTrigger>
           </TabsList>
 
@@ -467,6 +606,135 @@ export function CommunityInteractive({
             })}
             {crossSubmissions.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">No pending submissions.</p>
+            )}
+          </TabsContent>
+
+          {/* Pending new events from event creators */}
+          <TabsContent value="pending-events" className="space-y-2 mt-3">
+            {pendingEvents.map((ev) => (
+              <Card key={ev.id}>
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">{ev.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {new Date(ev.date).toLocaleDateString('en-CA', { dateStyle: 'medium' })}
+                        {ev.profiles?.full_name ? ` · by ${ev.profiles.full_name}` : ''}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="text-xs shrink-0">Pending</Badge>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="gap-1"
+                      disabled={actionLoading === `event-${ev.id}`}
+                      onClick={() => handleReviewPendingEvent(ev.id, 'approved')}
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      disabled={actionLoading === `event-${ev.id}`}
+                      onClick={() => handleReviewPendingEvent(ev.id, 'rejected')}
+                    >
+                      <XCircle className="w-3 h-3" />
+                      Send Back
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {pendingEvents.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">No events pending review.</p>
+            )}
+          </TabsContent>
+
+          {/* Pending venue requests */}
+          <TabsContent value="pending-venues" className="space-y-2 mt-3">
+            {pendingVenues.map((venue) => (
+              <Card key={venue.id}>
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">{venue.name}</p>
+                      <p className="text-xs text-muted-foreground">{venue.address}</p>
+                      {venue.profiles?.full_name && (
+                        <p className="text-xs text-muted-foreground mt-0.5">Requested by {venue.profiles.full_name}</p>
+                      )}
+                    </div>
+                    <Badge variant="secondary" className="text-xs shrink-0">Pending</Badge>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="gap-1"
+                      disabled={actionLoading === `venue-${venue.id}`}
+                      onClick={() => handleReviewPendingVenue(venue.id, 'approved')}
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      disabled={actionLoading === `venue-${venue.id}`}
+                      onClick={() => handleReviewPendingVenue(venue.id, 'rejected')}
+                    >
+                      <XCircle className="w-3 h-3" />
+                      Reject
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {pendingVenues.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">No pending venue requests.</p>
+            )}
+          </TabsContent>
+
+          {/* Invite link generator */}
+          <TabsContent value="invite" className="space-y-3 mt-3">
+            <p className="text-sm text-muted-foreground">
+              Generate a link to invite someone as an Event Creator. They&apos;ll auto-join this community when they sign up or log in.
+            </p>
+            {generatedInviteLink ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-2.5 text-sm break-all">
+                  <Link2 className="w-4 h-4 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 text-xs">{generatedInviteLink}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="gap-1"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedInviteLink)
+                      toast.success('Link copied!')
+                    }}
+                  >
+                    <Copy className="w-3 h-3" />
+                    Copy Link
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setGeneratedInviteLink(null)}>
+                    Generate New
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                className="gap-1"
+                disabled={inviteLinkLoading}
+                onClick={handleGenerateInviteLink}
+              >
+                <Link2 className="w-3 h-3" />
+                {inviteLinkLoading ? 'Generating…' : 'Generate Event Creator Invite Link'}
+              </Button>
             )}
           </TabsContent>
         </Tabs>

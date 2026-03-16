@@ -50,6 +50,12 @@ export default function EventManagementPage() {
   const [editVarietyOpen, setEditVarietyOpen] = useState(false)
   const [languageInput, setLanguageInput] = useState('')
   const [varietyArtTypes, setVarietyArtTypes] = useState<Array<{ id?: string; art_type_name: string; slot_capacity: string }>>([])
+
+  // Venue request state
+  const [showVenueRequestForm, setShowVenueRequestForm] = useState(false)
+  const [venueRequestName, setVenueRequestName] = useState('')
+  const [venueRequestAddress, setVenueRequestAddress] = useState('')
+  const [venueRequestSubmitting, setVenueRequestSubmitting] = useState(false)
   
   const [formData, setFormData] = useState({
     title: '',
@@ -271,10 +277,18 @@ export default function EventManagementPage() {
       return
     }
 
-    // Only event_creator and admin can access this page
-    if (profile.role !== 'event_creator' && profile.role !== 'admin') {
-      router.push('/dashboard')
-      return
+    // Allow platform event_creator/admin OR community-level event_creator/co_admin/admin
+    const isPlatformAllowed = profile.role === 'event_creator' || profile.role === 'admin'
+    if (!isPlatformAllowed) {
+      const { count } = await supabase
+        .from('community_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .in('role', ['event_creator', 'co_admin', 'admin'])
+      if (!count || count === 0) {
+        router.push('/dashboard')
+        return
+      }
     }
 
     setUserRole(profile.role)
@@ -361,11 +375,16 @@ export default function EventManagementPage() {
     try {
       const { data: venuesData, error: venuesError } = await supabase
         .from('venues')
-        .select('id, name, address')
+        .select('id, name, address, status')
+        .in('status', ['approved', 'pending'])
         .order('name', { ascending: true })
 
       if (venuesError) throw venuesError
-      setVenues(venuesData || [])
+      setVenues((venuesData || []).map((v: any) => ({
+        id: v.id,
+        name: v.status === 'pending' ? `${v.name} (pending approval)` : v.name,
+        address: v.address,
+      })))
     } catch (error: any) {
       console.error('Error loading venues:', error)
     }
@@ -514,8 +533,10 @@ export default function EventManagementPage() {
           : formData.registration_opens_at 
             ? new Date(formData.registration_opens_at).toISOString() 
             : null,
-        created_by: user.id, // Track who created the event
-        host_user_id: user.id // Assign creator as host by default
+        created_by: user.id,
+        host_user_id: user.id,
+        // Platform admins create events live; everyone else goes through approval
+        status: userRole === 'admin' ? 'active' : 'pending_approval',
       }
 
       const { data, error } = await supabase
@@ -588,25 +609,61 @@ export default function EventManagementPage() {
         console.warn('Failed to link event to communities:', communityErr)
       }
 
-      // Send push notification to all users about the new event
-      try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        const accessToken = sessionData.session?.access_token
-        if (accessToken) {
-          await fetch('/api/events/notify-new', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({ eventId: data.id }),
-          })
-        }
-      } catch (pushErr) {
-        console.warn('Failed to send new event push notification:', pushErr)
+      // If event is pending approval, notify community admins for review
+      if (userRole !== 'admin') {
+        try {
+          const { data: creatorMembershipsForNotif } = await supabase
+            .from('community_members')
+            .select('community_id')
+            .eq('user_id', user.id)
+            .in('role', ['event_creator', 'co_admin', 'admin'])
+            .limit(1)
+          const primaryCommunityId = (creatorMembershipsForNotif || [])[0]?.community_id
+          if (primaryCommunityId) {
+            const { data: communityAdmins } = await supabase
+              .from('community_members')
+              .select('user_id')
+              .eq('community_id', primaryCommunityId)
+              .in('role', ['admin', 'co_admin'])
+            for (const admin of (communityAdmins || []) as { user_id: string }[]) {
+              await supabase.rpc('create_notification', {
+                p_user_id: admin.user_id,
+                p_type: 'event_pending_approval',
+                p_title: 'New Event Awaiting Approval',
+                p_message: `"${(formData as any).title}" has been submitted and is waiting for your review.`,
+                p_related_booking_id: null,
+                p_related_event_id: data.id,
+              }).then(null, () => null)
+            }
+          }
+        } catch { /* non-blocking */ }
       }
 
-      toast.success('Event created successfully!')
+      // Only notify users if the event is live (admin-created); pending events notify after approval
+      if (userRole === 'admin') {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession()
+          const accessToken = sessionData.session?.access_token
+          if (accessToken) {
+            await fetch('/api/events/notify-new', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({ eventId: data.id }),
+            })
+          }
+        } catch (pushErr) {
+          console.warn('Failed to send new event push notification:', pushErr)
+        }
+      }
+
+      if (userRole === 'admin') {
+        toast.success('Event created successfully!')
+      } else {
+        toast.success('Event submitted for review! You\'ll be notified within 24 hours once approved.')
+      }
       setShowCreateForm(false)
       setCreateStep('details')
       resetFormData()
@@ -1462,7 +1519,7 @@ export default function EventManagementPage() {
                   </div>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="create-venue">Venue *</Label>
                   <select
                     id="create-venue"
@@ -1478,6 +1535,76 @@ export default function EventManagementPage() {
                       </option>
                     ))}
                   </select>
+
+                  {!showVenueRequestForm ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowVenueRequestForm(true)}
+                      className="text-sm text-primary underline underline-offset-2 hover:opacity-80"
+                    >
+                      My venue isn&apos;t listed &mdash; request it
+                    </button>
+                  ) : (
+                    <div className="rounded-md border border-border p-3 space-y-3 bg-muted/30">
+                      <p className="text-sm font-medium">Request a new venue</p>
+                      <p className="text-xs text-muted-foreground">
+                        A community admin will review it. Your event will also be held for review.
+                      </p>
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Venue name *"
+                          value={venueRequestName}
+                          onChange={(e) => setVenueRequestName(e.target.value)}
+                        />
+                        <Input
+                          placeholder="Full address *"
+                          value={venueRequestAddress}
+                          onChange={(e) => setVenueRequestAddress(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={venueRequestSubmitting || !venueRequestName.trim() || !venueRequestAddress.trim()}
+                          onClick={async () => {
+                            setVenueRequestSubmitting(true)
+                            try {
+                              const { data: sessionData } = await supabase.auth.getSession()
+                              const accessToken = sessionData.session?.access_token
+                              if (!accessToken) throw new Error('Not authenticated')
+                              const currentUser = (await supabase.auth.getUser()).data.user
+                              const { data: memberships } = await supabase
+                                .from('community_members')
+                                .select('community_id')
+                                .eq('user_id', currentUser?.id || '')
+                                .in('role', ['event_creator', 'co_admin', 'admin'])
+                                .limit(1)
+                              const communityId = (memberships || [])[0]?.community_id || null
+                              const res = await fetch('/api/venues/request', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                                body: JSON.stringify({ name: venueRequestName.trim(), address: venueRequestAddress.trim(), communityId }),
+                              })
+                              const json = await res.json()
+                              if (!res.ok) throw new Error(json.error || 'Failed to submit venue')
+                              setVenues(prev => [...prev, { id: json.venue.id, name: json.venue.name, address: json.venue.address }])
+                              setFormData(prev => ({ ...prev, venue_id: json.venue.id }))
+                              setShowVenueRequestForm(false)
+                              setVenueRequestName('')
+                              setVenueRequestAddress('')
+                              toast.success('Venue submitted for review and selected for this event.')
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : 'Failed to submit venue')
+                            } finally { setVenueRequestSubmitting(false) }
+                          }}
+                        >
+                          {venueRequestSubmitting ? 'Submitting…' : 'Submit Venue Request'}
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => { setShowVenueRequestForm(false); setVenueRequestName(''); setVenueRequestAddress('') }}>Cancel</Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { isStandaloneMode } from '@/lib/installPromptClient'
+import { redeemPendingCommunityInvite } from '@/lib/communityInviteClient'
 
 export default function RoleOnboardingPage() {
   const router = useRouter()
@@ -109,6 +110,17 @@ export default function RoleOnboardingPage() {
       }
 
       window.localStorage.removeItem('pending_role_onboarding')
+
+      // Redeem a pending community invite link (e.g. from /join/[token])
+      try {
+        const { data: sessionForInvite } = await supabase.auth.getSession()
+        const inviteToken = sessionForInvite.session?.access_token
+        if (inviteToken) {
+          await redeemPendingCommunityInvite(inviteToken)
+        }
+      } catch {
+        // Non-blocking
+      }
 
       // If the user came from a public page (event or community), send them back there
       const returnTo = typeof window !== 'undefined' ? window.sessionStorage.getItem('signup_returnTo') : null

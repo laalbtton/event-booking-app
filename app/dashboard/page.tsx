@@ -64,6 +64,8 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [roleRequestStatus, setRoleRequestStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null)
+  const [isCommunityEventCreator, setIsCommunityEventCreator] = useState(false)
+  const [hasCreatedEvents, setHasCreatedEvents] = useState(false)
   const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
   const [eventTab, setEventTab] = useState<'perform' | 'attend'>('perform')
   const [invitedEventIds, setInvitedEventIds] = useState<Set<string>>(new Set())
@@ -680,6 +682,23 @@ export default function Dashboard() {
         setRoleRequestStatus(requestData.status)
       }
 
+      // Check if user is a community-level event_creator
+      const { count: communityCreatorCount } = await supabase
+        .from('community_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .in('role', ['event_creator', 'co_admin', 'admin'])
+
+      setIsCommunityEventCreator((communityCreatorCount || 0) > 0)
+
+      // Check if user has ever created events
+      const { count: createdEventsCount } = await supabase
+        .from('events')
+        .select('id', { count: 'exact', head: true })
+        .eq('created_by', userId)
+
+      setHasCreatedEvents((createdEventsCount || 0) > 0)
+
       loadData(userId)
     } catch (error: any) {
       setError(error.message || 'Failed to restore your session')
@@ -732,7 +751,7 @@ export default function Dashboard() {
             .from('events')
             .select('*')
             .in('id', eventIds)
-            .neq('status', 'cancelled')
+            .eq('status', 'active')
             .or(`date.gte.${nowIso},end_time.gte.${nowIso}`)
             .order('date', { ascending: true })
 
@@ -1112,8 +1131,8 @@ export default function Dashboard() {
       <NavigationTabs />
 
       <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 pb-28">
-        {/* Role Request Status / Apply Section */}
-        {userRole === 'performer' && (
+        {/* Role Request Status / Apply Section — only for performers who aren't community event_creators */}
+        {userRole === 'performer' && !isCommunityEventCreator && (
           <div className="mb-6">
             {roleRequestStatus === 'pending' && (
               <Card className="border-yellow-200 bg-yellow-50/50 shadow-sm">
@@ -1569,6 +1588,23 @@ export default function Dashboard() {
             )
           })()}
         </div>
+
+        {/* Create your first event CTA — shown to community event_creators who haven't created events yet */}
+        {(userRole === 'event_creator' || isCommunityEventCreator) && !hasCreatedEvents && (
+          <Card className="mt-6 border-emerald-200 bg-emerald-50/50 shadow-sm">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="space-y-1">
+                <CardTitle className="text-base sm:text-lg font-semibold text-emerald-900">Ready to host your first event?</CardTitle>
+                <p className="text-sm text-emerald-700 leading-relaxed">
+                  You&apos;re set up as an event creator. Submit your first event and the community admin will review it within 24 hours.
+                </p>
+              </div>
+              <Button asChild className="bg-emerald-600 hover:bg-emerald-700 shrink-0">
+                <Link href="/events/manage">Create Your First Event</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
       </div>
     </div>

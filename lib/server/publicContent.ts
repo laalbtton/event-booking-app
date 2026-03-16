@@ -296,7 +296,7 @@ export async function listPublicEvents(limit = 100): Promise<PublicEventDetails[
   const { data: events, error: eventsError } = await supabase
     .from('events')
     .select(`${EVENT_SELECT}, venues!venue_id(id, name, address, city, region, postal_code, country), profiles!host_user_id(full_name)`)
-    .not('status', 'in', '("cancelled","archived","draft","private")')
+    .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
     .order('date', { ascending: true })
     .limit(limit)
 
