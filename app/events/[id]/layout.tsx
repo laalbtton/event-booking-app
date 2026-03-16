@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import Link from 'next/link'
 import { getPublicEventByIdentifier } from '@/lib/server/publicContent'
 import { buildEventMetadata, getSiteUrl } from '@/lib/seo/metadata'
 import { buildEventJsonLd } from '@/lib/seo/schemaEvent'
@@ -142,18 +143,47 @@ export default async function EventLayout({ children, params }: Props) {
 
           {event.performerLineup.filter((p) => p.status === 'confirmed').length > 0 && (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Lineup</p>
-              <ul className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                Lineup ({event.performerLineup.filter((p) => p.status === 'confirmed').length})
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {event.performerLineup
                   .filter((p) => p.status === 'confirmed')
-                  .map((performer) => (
-                    <li key={performer.id} className="text-sm flex items-center gap-2">
-                      <span className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-xs">🎤</span>
-                      {performer.name}
-                      {performer.artTypeName && <span className="text-xs text-muted-foreground">({performer.artTypeName})</span>}
-                    </li>
+                  .map((performer, index) => (
+                    <Link
+                      key={performer.id}
+                      href={`/profile/${performer.id}`}
+                      className="flex items-center gap-2 p-2 bg-muted/40 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/60 transition-all"
+                    >
+                      {/* Position number */}
+                      <span className="h-8 w-8 rounded-full bg-foreground text-background flex items-center justify-center text-xs font-bold shrink-0 ring-2 ring-muted-foreground/40">
+                        {index + 1}
+                      </span>
+
+                      {/* Name + art type */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate hover:text-primary transition-colors">
+                          {performer.name}
+                        </p>
+                        {performer.artTypeName && (
+                          <p className="text-xs text-muted-foreground truncate">{performer.artTypeName}</p>
+                        )}
+                      </div>
+
+                      {/* Avatar */}
+                      <div className="h-8 w-8 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center text-xs font-medium">
+                        {performer.avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={performer.avatarUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <span>
+                            {performer.name.split(/\s+/).map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?'}
+                          </span>
+                        )}
+                      </div>
+                    </Link>
                   ))}
-              </ul>
+              </div>
             </div>
           )}
 
