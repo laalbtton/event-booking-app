@@ -67,9 +67,11 @@ export default function AdminCommunitiesPage() {
       const reqsRes = await fetch('/api/admin/communities/creation-requests', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
+      const reqsJson = await reqsRes.json()
       if (reqsRes.ok) {
-        const reqsJson = await reqsRes.json()
         setCreationRequests((reqsJson.requests || []) as CreationRequest[])
+      } else {
+        toast.error(`Failed to load requests: ${reqsJson.error || reqsRes.status}`)
       }
 
       // All active communities

@@ -10,7 +10,7 @@ function getAdminClient() {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function isSuperAdmin(supabase: any, userId: string): Promise<boolean> {
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single()
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle()
   if ((profile as { role?: string } | null)?.role === 'admin') return true
   const { data: adminUser } = await supabase.from('admin_users').select('user_id').eq('user_id', userId).maybeSingle()
   return Boolean(adminUser)
@@ -32,15 +32,37 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Super admin access required' }, { status: 403 })
     }
 
-    const { data: requests, error } = await supabase
+    // Fetch pending requests without FK join to avoid PostgREST schema-cache issues
+    const { data: rawRequests, error } = await supabase
       .from('community_creation_requests')
-      .select('id, user_id, name, description, location, language, message, status, created_at, profiles(full_name, email)')
+      .select('id, user_id, name, description, location, language, message, status, created_at')
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    return NextResponse.json({ requests: requests || [] })
+    if (!rawRequests || rawRequests.length === 0) {
+      return NextResponse.json({ requests: [] })
+    }
+
+    // Fetch requester profiles separately
+    const userIds = [...new Set(rawRequests.map((r: { user_id: string }) => r.user_id))]
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', userIds)
+
+    const profileMap: Record<string, { full_name: string | null; email: string | null }> = {}
+    for (const p of (profiles || []) as { id: string; full_name: string | null; email: string | null }[]) {
+      profileMap[p.id] = { full_name: p.full_name, email: p.email }
+    }
+
+    const requests = rawRequests.map((r: { user_id: string; [key: string]: unknown }) => ({
+      ...r,
+      profiles: profileMap[r.user_id] ?? null,
+    }))
+
+    return NextResponse.json({ requests })
   } catch (err: unknown) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal server error' },
