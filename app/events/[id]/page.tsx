@@ -592,13 +592,9 @@ export default function EventDetailsPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl">Loading event details...</div>
-      </div>
-    )
-  }
+  // While loading, show nothing — the layout's public summary is already visible.
+  // Once loading completes we'll either render the authenticated view or return null.
+  if (loading) return null
 
   if (!event) {
     return (
@@ -613,6 +609,10 @@ export default function EventDetailsPage() {
       </div>
     )
   }
+
+  // Logged-out visitors are served by the layout's LayoutEventSummary (public view).
+  // Returning null here prevents the authenticated page shell from rendering on top of it.
+  if (!currentUser) return null
 
   const spotsAvailable = event.max_attendees 
     ? event.max_attendees - confirmedBookings.length 

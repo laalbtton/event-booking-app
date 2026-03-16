@@ -271,6 +271,9 @@ export default function NavigationTabs() {
     }
   }
 
+  // Don't render the bottom nav for logged-out visitors
+  if (!authResolved || !user) return null
+
   const isActive = (path: string) => pathname === path || pathname?.startsWith(path + '/')
   const navItemClass =
     'flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors'
