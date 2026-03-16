@@ -88,6 +88,16 @@ export default async function EventLayout({ children, params }: Props) {
           preventing duplicate content for logged-in users. */}
       <LayoutEventSummary>
         <div className="mx-auto max-w-2xl px-4 pt-6 pb-2 space-y-4">
+          {/* Event poster */}
+          {event.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={event.imageUrl}
+              alt={`${event.title} poster`}
+              className="w-full rounded-xl object-cover max-h-72"
+            />
+          )}
+
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight">{event.title}</h1>
             {event.communityName && (
