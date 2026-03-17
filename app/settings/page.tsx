@@ -647,10 +647,10 @@ export default function SettingsPage() {
         </Card>
 
         {!isStandalone && (
-          <Card className="shadow-sm border-blue-200">
+          <Card className="shadow-sm border-yellow-400/30">
             <CardHeader>
               <CardTitle className="text-xl flex items-center gap-2">
-                <Download className="h-5 w-5 text-blue-600" />
+                <Download className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                 Add to Home Screen
               </CardTitle>
               <CardDescription>

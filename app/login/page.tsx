@@ -193,11 +193,11 @@ function LoginContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 sm:py-16">
-      <Card className="max-w-md w-full shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 px-4 py-12 sm:py-16">
+      <Card className="max-w-md w-full shadow-2xl border-zinc-700 bg-zinc-900 text-stone-100">
         <CardHeader className="space-y-2 pb-6">
-          <CardTitle className="text-3xl font-bold text-center tracking-tight">Login</CardTitle>
-          <CardDescription className="text-center text-base">Sign in to manage your performances and event bookings</CardDescription>
+          <CardTitle className="text-3xl font-bold text-center tracking-tight text-yellow-400">Login</CardTitle>
+          <CardDescription className="text-center text-base text-stone-400">Sign in to manage your performances and event bookings</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {error && (
@@ -211,7 +211,7 @@ function LoginContent() {
             onClick={handleGoogleLogin}
             disabled={loading}
             variant="outline"
-            className="w-full h-11 text-base font-medium"
+            className="w-full h-11 text-base font-medium border-zinc-600 bg-zinc-800 text-stone-100 hover:bg-zinc-700 hover:text-stone-50"
             type="button"
           >
             <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -224,16 +224,16 @@ function LoginContent() {
           </Button>
 
           <div className="relative my-6">
-            <Separator />
+            <Separator className="bg-zinc-700" />
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="bg-card px-3 text-sm text-muted-foreground font-medium">Or continue with email</span>
+              <span className="bg-zinc-900 px-3 text-sm text-stone-400 font-medium">Or continue with email</span>
             </div>
           </div>
 
           {/* Email/password form */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2.5">
-              <Label htmlFor="email" className="text-sm font-semibold">Email</Label>
+              <Label htmlFor="email" className="text-sm font-semibold text-stone-200">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -241,12 +241,12 @@ function LoginContent() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your@email.com"
                 required
-                className="h-11"
+                className="h-11 bg-zinc-800 border-zinc-600 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
               />
             </div>
 
             <div className="space-y-2.5">
-              <Label htmlFor="password" className="text-sm font-semibold">Password</Label>
+              <Label htmlFor="password" className="text-sm font-semibold text-stone-200">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -254,23 +254,23 @@ function LoginContent() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                className="h-11"
+                className="h-11 bg-zinc-800 border-zinc-600 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
               />
             </div>
 
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-11 text-base font-semibold"
+              className="w-full h-11 text-base font-semibold bg-yellow-400 text-zinc-950 hover:bg-yellow-300"
             >
               {loading ? 'Logging in...' : 'Login with Email'}
             </Button>
           </form>
 
           <div className="pt-2">
-            <p className="text-center text-sm text-muted-foreground">
+            <p className="text-center text-sm text-stone-400">
               Don't have an account?{' '}
-              <Link href="/signup" className="text-primary hover:underline font-semibold transition-colors">
+              <Link href="/signup" className="text-yellow-400 hover:text-yellow-300 underline underline-offset-2 font-semibold transition-colors">
                 Sign up
               </Link>
             </p>
@@ -284,8 +284,8 @@ function LoginContent() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 sm:py-16">
-        <div className="text-muted-foreground">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 px-4 py-12 sm:py-16">
+        <div className="text-stone-400">Loading...</div>
       </div>
     }>
       <LoginContent />

@@ -75,15 +75,15 @@ export default function CreditsHistoryPage() {
           </div>
         </div>
 
-        <Card className="border-blue-200 bg-blue-50/50 shadow-sm">
+        <Card className="border-yellow-400/30 bg-yellow-400/10 shadow-sm">
           <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              <p className="text-sm text-blue-800">Current balance</p>
-              <p className="text-2xl font-bold text-blue-900">{currentBalance ?? '--'} credits</p>
+              <p className="text-sm text-yellow-700 dark:text-yellow-400">Current balance</p>
+              <p className="text-2xl font-bold text-stone-900 dark:text-stone-100">{currentBalance ?? '--'} credits</p>
             </div>
             <Link
               href="/buy-credits"
-              className="text-sm font-semibold text-blue-700 hover:text-blue-900 underline underline-offset-4"
+              className="text-sm font-semibold text-yellow-600 hover:text-yellow-500 underline underline-offset-4"
             >
               Buy more credits
             </Link>

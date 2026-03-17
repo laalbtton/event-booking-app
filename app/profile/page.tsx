@@ -457,7 +457,7 @@ export default function ProfilePage() {
             <Badge
               variant="outline"
               className={cn(
-                coupon.status === 'issued' && 'text-blue-600 border-blue-600',
+                coupon.status === 'issued' && 'text-yellow-600 border-yellow-500',
                 coupon.status === 'redeemed' && 'text-green-600 border-green-600',
                 coupon.status === 'expired' && 'text-amber-600 border-amber-600',
                 coupon.status === 'cancelled' && 'text-muted-foreground'

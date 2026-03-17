@@ -43,85 +43,92 @@ export function PublicEventCard({ event, cityFilter }: Props) {
   return (
     <Link
       href={href}
-      className="group block rounded-xl border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+      className="group block rounded-xl border border-zinc-700 bg-zinc-900 text-stone-100 shadow-sm hover:shadow-lg hover:border-zinc-500 transition-all overflow-hidden"
     >
-      {/* Event image */}
-      <div className="relative h-40 w-full overflow-hidden bg-muted">
-        {event.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
+      {/* Event image — square aspect ratio with object-contain when poster exists; compact fixed height when no poster */}
+      {event.imageUrl ? (
+        <div className="relative w-full aspect-square overflow-hidden bg-zinc-800">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={event.imageUrl}
             alt={event.title}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
             loading="lazy"
             onError={(e) => {
               const target = e.currentTarget
-              target.style.display = 'none'
               const parent = target.parentElement
               if (parent) {
+                target.style.display = 'none'
+                parent.classList.add('h-40')
+                parent.classList.remove('aspect-square')
                 const placeholder = parent.querySelector('[data-placeholder]') as HTMLElement | null
                 if (placeholder) placeholder.style.display = 'flex'
               }
             }}
           />
-        ) : null}
-        <div
-          data-placeholder
-          className="flex h-full w-full items-center justify-center"
-          style={{ display: event.imageUrl ? 'none' : 'flex' }}
-        >
-          <svg
-            className="h-12 w-12 text-muted-foreground/30"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+          <div
+            data-placeholder
+            className="absolute inset-0 hidden items-center justify-center"
           >
+            <svg className="h-12 w-12 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          </div>
+          {isPast && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <span className="text-white text-sm font-medium bg-black/70 px-3 py-1 rounded-full">Past Event</span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="relative h-40 w-full flex items-center justify-center bg-zinc-800">
+          <svg className="h-12 w-12 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
+          {isPast && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <span className="text-white text-sm font-medium bg-black/70 px-3 py-1 rounded-full">Past Event</span>
+            </div>
+          )}
         </div>
-        {isPast && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <span className="text-white text-sm font-medium bg-black/60 px-2 py-1 rounded">Past Event</span>
-          </div>
-        )}
-      </div>
+      )}
 
       <div className="p-4 space-y-2">
         {/* Type badge + free/ticketed */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-400/15 text-yellow-400">
             {typeLabel}
           </span>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${event.isFree ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${event.isFree ? 'bg-green-900/40 text-green-400' : 'bg-amber-900/40 text-amber-400'}`}>
             {event.isFree ? 'Free' : event.ticketPriceCents ? `$${(event.ticketPriceCents / 100).toFixed(0)}` : 'Ticketed'}
           </span>
           {event.ticketAvailability === 'SoldOut' && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-900/40 text-red-400">
               Sold Out
             </span>
           )}
         </div>
 
         {/* Title */}
-        <h3 className="font-semibold text-base leading-snug group-hover:text-primary transition-colors line-clamp-2">
+        <h3 className="font-semibold text-base leading-snug text-stone-100 group-hover:text-yellow-400 transition-colors line-clamp-2">
           {event.title}
         </h3>
 
         {/* Date + time */}
-        <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+        <p className="text-sm text-stone-400 flex items-center gap-1.5">
           <CalendarIcon />
           {dateStr} · {timeStr}
         </p>
 
         {/* Venue + city */}
-        <p className={`text-sm flex items-center gap-1.5 ${highlightCity ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+        <p className={`text-sm flex items-center gap-1.5 ${highlightCity ? 'text-yellow-400 font-medium' : 'text-stone-400'}`}>
           <LocationIcon />
           <span className="truncate">{venueName}{city && city !== venueName ? ` · ${city}` : ''}</span>
         </p>
 
         {/* Spots */}
         {!isPast && (
-          <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+          <p className="text-sm text-stone-400 flex items-center gap-1.5">
             <MicIcon />
             {event.spotsConfirmed} performer{event.spotsConfirmed !== 1 ? 's' : ''} signed up
           </p>
@@ -129,7 +136,7 @@ export function PublicEventCard({ event, cityFilter }: Props) {
 
         {/* Community */}
         {event.communityName && (
-          <p className="text-xs text-muted-foreground truncate">
+          <p className="text-xs text-stone-500 truncate">
             {event.communityName}
           </p>
         )}

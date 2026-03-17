@@ -142,7 +142,7 @@ export default function InstallOnboardingPage() {
           </div>
 
           {showManualHelp && platform !== 'android' && (
-            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+            <div className="rounded-md border border-yellow-400/30 bg-yellow-400/10 px-3 py-2 text-sm text-stone-700 dark:text-stone-300">
               Follow the install steps above, then return to continue.
             </div>
           )}

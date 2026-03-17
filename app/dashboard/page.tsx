@@ -1161,13 +1161,13 @@ export default function Dashboard() {
               </Card>
             )}
             {!roleRequestStatus && (
-              <Card className="border-blue-200 bg-blue-50/50 shadow-sm">
+              <Card className="border-yellow-400/30 bg-yellow-400/10 shadow-sm">
                 <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div className="space-y-1">
-                    <CardTitle className="text-base sm:text-lg font-semibold text-blue-900">Become an Event Creator</CardTitle>
-                    <p className="text-sm text-blue-700 leading-relaxed">Create and manage your own events! Apply now.</p>
+                    <CardTitle className="text-base sm:text-lg font-semibold text-yellow-700 dark:text-yellow-400">Become an Event Creator</CardTitle>
+                    <p className="text-sm text-stone-600 dark:text-stone-300 leading-relaxed">Create and manage your own events! Apply now.</p>
                   </div>
-                  <Button asChild className="shrink-0">
+                  <Button asChild className="shrink-0 bg-yellow-400 text-zinc-950 hover:bg-yellow-300">
                     <Link href="/apply-event-creator">Apply Now</Link>
                   </Button>
                 </CardContent>
@@ -1177,19 +1177,19 @@ export default function Dashboard() {
         )}
 
         {showInstallBanner && (
-          <Card className="mb-6 border-blue-200 bg-blue-50/50 shadow-sm">
+          <Card className="mb-6 border-yellow-400/30 bg-yellow-400/10 shadow-sm">
             <CardContent className="p-4 sm:p-5 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <CardTitle className="text-base sm:text-lg font-semibold text-blue-900">Install app for quicker access</CardTitle>
-                  <p className="text-sm text-blue-700 mt-1">
+                  <CardTitle className="text-base sm:text-lg font-semibold text-yellow-700 dark:text-yellow-400">Install app for quicker access</CardTitle>
+                  <p className="text-sm text-stone-600 dark:text-stone-300 mt-1">
                     Add One Mic Stand to your home screen and get 5 free credits.
                   </p>
                 </div>
-                <Download className="h-5 w-5 text-blue-700 shrink-0 mt-0.5" />
+                <Download className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button onClick={handleInstallFromBanner} disabled={installActionLoading}>
+                <Button onClick={handleInstallFromBanner} disabled={installActionLoading} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-300">
                   {installActionLoading ? 'Opening...' : 'Install App'}
                 </Button>
                 <Button variant="outline" onClick={dismissInstallBanner}>
@@ -1197,7 +1197,7 @@ export default function Dashboard() {
                 </Button>
               </div>
               {showInstallHelp && (
-                <div className="rounded-md border border-blue-200 bg-white p-3 text-sm text-blue-900">
+                <div className="rounded-md border border-yellow-400/30 bg-yellow-400/5 p-3 text-sm text-stone-700 dark:text-stone-300">
                   {installPlatform === 'ios' ? (
                     <p>
                       On iPhone: open Safari Share menu, tap <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.
@@ -1378,7 +1378,7 @@ export default function Dashboard() {
                             </CardTitle>
                             <div className="flex items-center gap-2">
                               {isInProgress && (
-                                <Badge variant="outline" className="text-blue-600 border-blue-600 whitespace-nowrap">
+                                <Badge variant="outline" className="text-yellow-600 border-yellow-500 whitespace-nowrap">
                                   In Progress
                                 </Badge>
                               )}

@@ -771,7 +771,7 @@ export default function EventDetailsPage() {
             </Badge>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-base md:text-lg text-muted-foreground">{event.description}</p>
+            <p className="text-base md:text-lg text-muted-foreground whitespace-pre-wrap">{event.description}</p>
 
             <div className="flex flex-wrap gap-2">
               {event.theme && (

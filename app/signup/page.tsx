@@ -111,29 +111,29 @@ function SignupContent() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4 py-8">
-        <Card className="max-w-md w-full text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 px-4 py-8">
+        <Card className="max-w-md w-full text-center shadow-2xl border-zinc-700 bg-zinc-900 text-stone-100">
           <CardHeader>
             <div className="text-6xl mb-4">📧</div>
-            <CardTitle className="text-2xl">Check Your Email!</CardTitle>
+            <CardTitle className="text-2xl text-yellow-400">Check Your Email!</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
-              <p className="text-sm mb-3">
-                We've sent a verification email to <strong>{email}</strong>
+            <div className="bg-yellow-400/10 border border-yellow-400/30 rounded-lg p-4 text-left">
+              <p className="text-sm mb-3 text-stone-200">
+                We've sent a verification email to <strong className="text-yellow-400">{email}</strong>
               </p>
-              <p className="text-sm text-muted-foreground mb-3">
+              <p className="text-sm text-stone-400 mb-3">
                 Please click the link in the email to verify your account before you continue onboarding.
               </p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-stone-400">
                 Once verified, you will choose whether you want to join as a performer or audience member.
               </p>
             </div>
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-stone-400">
                 Didn't receive the email? Check your spam folder or try signing up again.
               </p>
-              <Button asChild className="w-full">
+              <Button asChild className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-300 font-semibold">
                 <Link href="/login">Go to Login</Link>
               </Button>
             </div>
@@ -144,11 +144,11 @@ function SignupContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 sm:py-16">
-      <Card className="max-w-md w-full shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 px-4 py-12 sm:py-16">
+      <Card className="max-w-md w-full shadow-2xl border-zinc-700 bg-zinc-900 text-stone-100">
         <CardHeader className="space-y-2 pb-6">
-          <CardTitle className="text-3xl font-bold text-center tracking-tight">Sign Up</CardTitle>
-          <CardDescription className="text-center text-base">
+          <CardTitle className="text-3xl font-bold text-center tracking-tight text-yellow-400">Sign Up</CardTitle>
+          <CardDescription className="text-center text-base text-stone-400">
             Join to perform on stage or attend live performance events
           </CardDescription>
         </CardHeader>
@@ -164,7 +164,7 @@ function SignupContent() {
             onClick={handleGoogleSignup}
             disabled={loading}
             variant="outline"
-            className="w-full h-11 text-base font-medium"
+            className="w-full h-11 text-base font-medium border-zinc-600 bg-zinc-800 text-stone-100 hover:bg-zinc-700 hover:text-stone-50"
             type="button"
           >
             <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -177,16 +177,16 @@ function SignupContent() {
           </Button>
 
           <div className="relative my-6">
-            <Separator />
+            <Separator className="bg-zinc-700" />
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="bg-card px-3 text-sm text-muted-foreground font-medium">Or sign up with email</span>
+              <span className="bg-zinc-900 px-3 text-sm text-stone-400 font-medium">Or sign up with email</span>
             </div>
           </div>
 
           {/* Email/Password Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2.5">
-              <Label htmlFor="fullName" className="text-sm font-semibold">Full Name</Label>
+              <Label htmlFor="fullName" className="text-sm font-semibold text-stone-200">Full Name</Label>
               <Input
                 id="fullName"
                 type="text"
@@ -194,12 +194,12 @@ function SignupContent() {
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="John Smith"
                 required
-                className="h-11"
+                className="h-11 bg-zinc-800 border-zinc-600 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
               />
             </div>
 
             <div className="space-y-2.5">
-              <Label htmlFor="email" className="text-sm font-semibold">Email</Label>
+              <Label htmlFor="email" className="text-sm font-semibold text-stone-200">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -207,12 +207,12 @@ function SignupContent() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your@email.com"
                 required
-                className="h-11"
+                className="h-11 bg-zinc-800 border-zinc-600 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
               />
             </div>
 
             <div className="space-y-2.5">
-              <Label htmlFor="password" className="text-sm font-semibold">Password</Label>
+              <Label htmlFor="password" className="text-sm font-semibold text-stone-200">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -221,36 +221,36 @@ function SignupContent() {
                 placeholder="••••••••"
                 required
                 minLength={6}
-                className="h-11"
+                className="h-11 bg-zinc-800 border-zinc-600 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
               />
-              <p className="text-xs text-muted-foreground leading-relaxed">At least 6 characters</p>
+              <p className="text-xs text-stone-500 leading-relaxed">At least 6 characters</p>
             </div>
 
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-11 text-base font-semibold"
+              className="w-full h-11 text-base font-semibold bg-yellow-400 text-zinc-950 hover:bg-yellow-300"
             >
               {loading ? 'Creating account...' : 'Sign Up with Email'}
             </Button>
           </form>
 
           <div className="pt-2 space-y-3">
-            <p className="text-center text-sm text-muted-foreground">
+            <p className="text-center text-sm text-stone-400">
               Already have an account?{' '}
-              <Link href="/login" className="text-primary hover:underline font-semibold transition-colors">
+              <Link href="/login" className="text-yellow-400 hover:text-yellow-300 underline underline-offset-2 font-semibold transition-colors">
                 Login
               </Link>
             </p>
 
             {/* Terms */}
-            <p className="text-center text-xs text-muted-foreground leading-relaxed">
+            <p className="text-center text-xs text-stone-500 leading-relaxed">
               By signing up, you agree to our{' '}
-              <Link href="/terms" className="text-primary hover:underline">
+              <Link href="/terms" className="text-yellow-400 hover:text-yellow-300 underline">
                 Terms of Service
               </Link>
               {' '}and{' '}
-              <Link href="/privacy" className="text-primary hover:underline">
+              <Link href="/privacy" className="text-yellow-400 hover:text-yellow-300 underline">
                 Privacy Policy
               </Link>
             </p>
@@ -264,8 +264,8 @@ function SignupContent() {
 export default function SignupPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 sm:py-16">
-        <div className="text-muted-foreground">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 px-4 py-12 sm:py-16">
+        <div className="text-stone-400">Loading...</div>
       </div>
     }>
       <SignupContent />

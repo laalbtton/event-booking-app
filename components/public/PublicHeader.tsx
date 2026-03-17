@@ -11,26 +11,26 @@ export function PublicHeader() {
   if (authResolved && user) return null
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-40 w-full border-b border-zinc-800 bg-zinc-950/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/80">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tight">
+        <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tight text-yellow-400">
           One Mic Stand
         </Link>
 
         <nav className="hidden sm:flex items-center gap-6 text-sm font-medium">
-          <Link href="/events" className="hover:text-foreground/80 transition-colors">
+          <Link href="/events" className="text-stone-300 hover:text-stone-100 transition-colors">
             Events
           </Link>
-          <Link href="/communities" className="hover:text-foreground/80 transition-colors">
+          <Link href="/communities" className="text-stone-300 hover:text-stone-100 transition-colors">
             Communities
           </Link>
         </nav>
 
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" asChild>
+          <Button variant="ghost" size="sm" asChild className="text-stone-300 hover:text-stone-100 hover:bg-zinc-800">
             <Link href="/login">Log in</Link>
           </Button>
-          <Button size="sm" asChild>
+          <Button size="sm" asChild className="bg-yellow-400 text-zinc-950 hover:bg-yellow-300 font-semibold">
             <Link href="/signup">Sign up</Link>
           </Button>
         </div>
@@ -38,10 +38,10 @@ export function PublicHeader() {
 
       {/* Mobile nav links */}
       <div className="flex sm:hidden items-center gap-5 px-4 pb-2 text-sm font-medium">
-        <Link href="/events" className="hover:text-foreground/80 transition-colors">
+        <Link href="/events" className="text-stone-300 hover:text-stone-100 transition-colors">
           Events
         </Link>
-        <Link href="/communities" className="hover:text-foreground/80 transition-colors">
+        <Link href="/communities" className="text-stone-300 hover:text-stone-100 transition-colors">
           Communities
         </Link>
       </div>

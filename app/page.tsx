@@ -43,31 +43,31 @@ export default async function Home() {
       <PublicHeader />
 
       {/* ── Hero ─────────────────────────────────────────────────── */}
-      <section className="bg-gradient-to-br from-blue-600 to-purple-700 text-white py-20 px-4">
+      <section className="bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 text-white py-20 px-4">
         <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-5xl md:text-6xl font-bold mb-4 drop-shadow-lg tracking-tight">
+          <h1 className="text-5xl md:text-6xl font-bold mb-4 tracking-tight text-yellow-400 drop-shadow-lg">
             One Mic Stand
           </h1>
-          <p className="text-xl md:text-2xl mb-10 opacity-90 leading-relaxed">
+          <p className="text-xl md:text-2xl mb-10 text-stone-300 leading-relaxed">
             Discover and perform at comedy &amp; open mic events across Canada
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/events"
-              className="bg-white text-blue-700 px-8 py-4 rounded-xl font-semibold hover:bg-blue-50 text-lg shadow-lg transition-colors"
+              className="bg-yellow-400 text-zinc-950 px-8 py-4 rounded-xl font-semibold hover:bg-yellow-300 text-lg shadow-lg transition-colors"
             >
               Browse Events
             </Link>
             <Link
               href="/signup"
-              className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-xl font-semibold hover:bg-white hover:text-blue-700 text-lg shadow-lg transition-colors"
+              className="bg-transparent border-2 border-yellow-400 text-yellow-400 px-8 py-4 rounded-xl font-semibold hover:bg-yellow-400 hover:text-zinc-950 text-lg shadow-lg transition-colors"
             >
               Sign Up Free
             </Link>
           </div>
-          <p className="mt-6 text-sm opacity-75">
+          <p className="mt-6 text-sm text-stone-400">
             Already have an account?{' '}
-            <Link href="/login" className="underline underline-offset-2 hover:opacity-100">
+            <Link href="/login" className="text-yellow-400 underline underline-offset-2 hover:text-yellow-300">
               Log in
             </Link>
           </p>
@@ -183,21 +183,21 @@ export default async function Home() {
       )}
 
       {/* ── Bottom CTA ────────────────────────────────────────────── */}
-      <section className="py-16 px-4 bg-gradient-to-br from-blue-600 to-purple-700 text-white text-center">
-        <h2 className="text-3xl font-bold mb-3">Ready to take the mic?</h2>
-        <p className="text-lg opacity-90 mb-8 max-w-xl mx-auto">
+      <section className="py-16 px-4 bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 text-white text-center">
+        <h2 className="text-3xl font-bold mb-3 text-yellow-400">Ready to take the mic?</h2>
+        <p className="text-lg text-stone-300 mb-8 max-w-xl mx-auto">
           Join performers and fans finding their stage across Canada.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
             href="/signup"
-            className="bg-white text-blue-700 px-8 py-3 rounded-xl font-semibold hover:bg-blue-50 shadow-lg transition-colors text-lg"
+            className="bg-yellow-400 text-zinc-950 px-8 py-3 rounded-xl font-semibold hover:bg-yellow-300 shadow-lg transition-colors text-lg"
           >
             Sign Up Free
           </Link>
           <Link
             href="/login"
-            className="border-2 border-white text-white px-8 py-3 rounded-xl font-semibold hover:bg-white hover:text-blue-700 transition-colors text-lg"
+            className="border-2 border-yellow-400 text-yellow-400 px-8 py-3 rounded-xl font-semibold hover:bg-yellow-400 hover:text-zinc-950 transition-colors text-lg"
           >
             Log In
           </Link>

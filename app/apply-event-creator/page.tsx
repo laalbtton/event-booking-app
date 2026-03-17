@@ -294,12 +294,12 @@ export default function ApplyEventCreatorPage() {
                 </p>
               </div>
 
-              <Card className="border-blue-200 bg-blue-50/50">
+              <Card className="border-yellow-400/30 bg-yellow-400/10">
                 <CardContent className="pt-6">
-                  <p className="text-sm font-medium text-blue-800 mb-2">
+                  <p className="text-sm font-medium text-yellow-700 dark:text-yellow-400 mb-2">
                     What you'll be able to do:
                   </p>
-                  <ul className="list-disc list-inside text-sm text-blue-700 space-y-1">
+                  <ul className="list-disc list-inside text-sm text-stone-700 dark:text-stone-300 space-y-1">
                     <li>Create and manage your own events</li>
                     <li>Set event themes, dates, and registration times</li>
                     <li>Manage attendee lists and mark attendance</li>

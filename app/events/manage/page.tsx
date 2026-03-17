@@ -1137,7 +1137,7 @@ export default function EventManagementPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground line-clamp-2">{event.description}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-wrap break-words">{event.description}</p>
                     
                     <div className="text-sm text-muted-foreground space-y-1.5">
                       <p>📅 {formatDateTime(event.date)}</p>

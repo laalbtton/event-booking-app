@@ -143,16 +143,16 @@ export default async function PublicEventsPage({
   const cityFilter = city || geo.city || null
 
   return (
-    <>
+    <div className="min-h-screen bg-zinc-950">
       <PublicHeader />
 
       <main className="mx-auto max-w-5xl px-4 pb-24 pt-6 space-y-6">
         {/* Page heading */}
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-2xl font-bold tracking-tight text-yellow-400">
             {geo.city ? `Events near ${geo.city}` : 'Upcoming Events'}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-stone-400">
             Discover comedy open mics, showcases, and live performances.
           </p>
         </div>
@@ -173,9 +173,9 @@ export default async function PublicEventsPage({
             </div>
           </section>
         ) : (
-          <div className="rounded-xl border bg-muted/30 py-16 text-center">
-            <p className="text-lg font-medium">No upcoming events found</p>
-            <p className="mt-2 text-sm text-muted-foreground">
+          <div className="rounded-xl border border-zinc-700 bg-zinc-800/40 py-16 text-center">
+            <p className="text-lg font-medium text-stone-200">No upcoming events found</p>
+            <p className="mt-2 text-sm text-stone-400">
               {hasActiveFilters
                 ? 'Try adjusting your filters or clear them to see all events.'
                 : 'Check back soon — new events are added regularly.'}
@@ -183,7 +183,7 @@ export default async function PublicEventsPage({
             {hasActiveFilters && (
               <a
                 href="/events"
-                className="mt-4 inline-block text-sm font-medium text-primary underline"
+                className="mt-4 inline-block text-sm font-medium text-yellow-400 underline hover:text-yellow-300"
               >
                 Clear all filters
               </a>
@@ -194,7 +194,7 @@ export default async function PublicEventsPage({
         {/* Past events (shown only when no active filters) */}
         {!hasActiveFilters && past.length > 0 && (
           <section>
-            <h2 className="text-base font-semibold text-muted-foreground mb-3">Past Events</h2>
+            <h2 className="text-base font-semibold text-stone-500 mb-3">Past Events</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {past.slice(0, 12).map((event) => (
                 <PublicEventCard key={event.id} event={event} cityFilter={null} />
@@ -203,6 +203,6 @@ export default async function PublicEventsPage({
           </section>
         )}
       </main>
-    </>
+    </div>
   )
 }

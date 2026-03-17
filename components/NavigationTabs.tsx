@@ -287,7 +287,7 @@ export default function NavigationTabs() {
               href="/profile"
               className={`${navItemClass} ${
                 isActive('/profile') && !pathname?.startsWith('/profile/')
-                  ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400'
+                  ? 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400'
                   : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
               }`}
             >
@@ -299,7 +299,7 @@ export default function NavigationTabs() {
               href="/dashboard"
               className={`${navItemClass} ${
                 isActive('/dashboard')
-                  ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400'
+                  ? 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400'
                   : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
               }`}
             >
@@ -350,7 +350,7 @@ export default function NavigationTabs() {
               href="/notifications"
               className={`relative ${navItemClass} ${
                 isActive('/notifications')
-                  ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400'
+                  ? 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400'
                   : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
               }`}
             >

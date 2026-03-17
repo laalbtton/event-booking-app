@@ -88,113 +88,117 @@ export default async function EventLayout({ children, params }: Props) {
           LayoutEventSummary hides this once auth resolves and a user is detected,
           preventing duplicate content for logged-in users. */}
       <LayoutEventSummary>
-        <div className="mx-auto max-w-2xl px-4 pt-6 pb-2 space-y-4">
-          {/* Event poster */}
-          {event.imageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={event.imageUrl}
-              alt={`${event.title} poster`}
-              className="w-full rounded-xl object-cover max-h-72"
-            />
-          )}
-
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight">{event.title}</h1>
-            {event.communityName && (
-              <p className="text-sm text-muted-foreground">{event.communityName}</p>
+        <div className="min-h-screen bg-zinc-950">
+          <div className="mx-auto max-w-2xl px-4 pt-6 pb-10 space-y-5">
+            {/* Event poster — full-fit with dark letterbox matte */}
+            {event.imageUrl && (
+              <div className="w-full rounded-xl overflow-hidden bg-zinc-800">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={event.imageUrl}
+                  alt={`${event.title} poster`}
+                  className="w-full object-contain"
+                />
+              </div>
             )}
-          </div>
 
-          <div className="space-y-2 text-sm text-muted-foreground">
-            <p className="flex items-center gap-2">
-              <span>📅</span>
-              <span>{formatDate(event.startDate)} · {formatTime(event.startDate)}{event.endDate ? ` – ${formatTime(event.endDate)}` : ''}</span>
-            </p>
-            {(event.venue || event.locationText) && (
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold tracking-tight text-yellow-400">{event.title}</h1>
+              {event.communityName && (
+                <p className="text-sm text-stone-400">{event.communityName}</p>
+              )}
+            </div>
+
+            <div className="space-y-2 text-sm text-stone-400">
               <p className="flex items-center gap-2">
-                <span>📍</span>
+                <span>📅</span>
+                <span>{formatDate(event.startDate)} · {formatTime(event.startDate)}{event.endDate ? ` – ${formatTime(event.endDate)}` : ''}</span>
+              </p>
+              {(event.venue || event.locationText) && (
+                <p className="flex items-center gap-2">
+                  <span>📍</span>
+                  <span>
+                    {event.venue
+                      ? `${event.venue.name}, ${[event.venue.address, event.venue.city, event.venue.region].filter(Boolean).join(', ')}`
+                      : event.locationText}
+                  </span>
+                </p>
+              )}
+              <p className="flex items-center gap-2">
+                <span>🎤</span>
+                <span>{event.spotsConfirmed} performer{event.spotsConfirmed !== 1 ? 's' : ''} signed up</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <span>{event.isFree ? '🆓' : '🎟️'}</span>
                 <span>
-                  {event.venue
-                    ? `${event.venue.name}, ${[event.venue.address, event.venue.city, event.venue.region].filter(Boolean).join(', ')}`
-                    : event.locationText}
+                  {event.isFree
+                    ? 'Free event'
+                    : event.ticketPriceCents
+                      ? `Tickets from $${(event.ticketPriceCents / 100).toFixed(2)}`
+                      : 'Ticketed event'}
                 </span>
               </p>
-            )}
-            <p className="flex items-center gap-2">
-              <span>🎤</span>
-              <span>{event.spotsConfirmed} performer{event.spotsConfirmed !== 1 ? 's' : ''} signed up</span>
-            </p>
-            <p className="flex items-center gap-2">
-              <span>{event.isFree ? '🆓' : '🎟️'}</span>
-              <span>
-                {event.isFree
-                  ? 'Free event'
-                  : event.ticketPriceCents
-                    ? `Tickets from $${(event.ticketPriceCents / 100).toFixed(2)}`
-                    : 'Ticketed event'}
-              </span>
-            </p>
-          </div>
-
-          {event.description && (
-            <p className="text-sm leading-relaxed line-clamp-4">{event.description}</p>
-          )}
-
-          {event.performerLineup.filter((p) => p.status === 'confirmed').length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                Lineup ({event.performerLineup.filter((p) => p.status === 'confirmed').length})
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {event.performerLineup
-                  .filter((p) => p.status === 'confirmed')
-                  .map((performer, index) => (
-                    <Link
-                      key={performer.id}
-                      href={`/profile/${performer.id}`}
-                      className="flex items-center gap-2 p-2 bg-muted/40 rounded-lg border border-border hover:border-muted-foreground/40 hover:bg-muted/60 transition-all"
-                    >
-                      {/* Position number */}
-                      <span className="h-8 w-8 rounded-full bg-foreground text-background flex items-center justify-center text-xs font-bold shrink-0 ring-2 ring-muted-foreground/40">
-                        {index + 1}
-                      </span>
-
-                      {/* Name + art type */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate hover:text-primary transition-colors">
-                          {performer.name}
-                        </p>
-                        {performer.artTypeName && (
-                          <p className="text-xs text-muted-foreground truncate">{performer.artTypeName}</p>
-                        )}
-                      </div>
-
-                      {/* Avatar */}
-                      <div className="h-8 w-8 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center text-xs font-medium">
-                        {performer.avatarUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={performer.avatarUrl} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                          <span>
-                            {performer.name.split(/\s+/).map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?'}
-                          </span>
-                        )}
-                      </div>
-                    </Link>
-                  ))}
-              </div>
             </div>
-          )}
 
-          <PublicEventCTA
-            eventSlug={eventSlug}
-            eventId={event.id}
-            isCancelled={event.isCancelled}
-            isPast={isPast}
-          />
+            {event.description && (
+              <p className="text-sm text-stone-300 leading-relaxed whitespace-pre-wrap break-words">{event.description}</p>
+            )}
 
-          <PublicInstallBanner />
+            {event.performerLineup.filter((p) => p.status === 'confirmed').length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 mb-3">
+                  Lineup ({event.performerLineup.filter((p) => p.status === 'confirmed').length})
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {event.performerLineup
+                    .filter((p) => p.status === 'confirmed')
+                    .map((performer, index) => (
+                      <Link
+                        key={performer.id}
+                        href={`/profile/${performer.id}`}
+                        className="flex items-center gap-2 p-2 bg-zinc-800/60 rounded-lg border border-zinc-700 hover:border-zinc-500 hover:bg-zinc-800 transition-all"
+                      >
+                        {/* Position number */}
+                        <span className="h-8 w-8 rounded-full bg-zinc-700 text-stone-100 flex items-center justify-center text-xs font-bold shrink-0 ring-2 ring-zinc-600">
+                          {index + 1}
+                        </span>
+
+                        {/* Name + art type */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-stone-200 truncate hover:text-yellow-400 transition-colors">
+                            {performer.name}
+                          </p>
+                          {performer.artTypeName && (
+                            <p className="text-xs text-stone-500 truncate">{performer.artTypeName}</p>
+                          )}
+                        </div>
+
+                        {/* Avatar */}
+                        <div className="h-8 w-8 rounded-full bg-zinc-700 overflow-hidden shrink-0 flex items-center justify-center text-xs font-medium text-stone-300">
+                          {performer.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={performer.avatarUrl} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <span>
+                              {performer.name.split(/\s+/).map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?'}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            <PublicEventCTA
+              eventSlug={eventSlug}
+              eventId={event.id}
+              isCancelled={event.isCancelled}
+              isPast={isPast}
+            />
+
+            <PublicInstallBanner />
+          </div>
         </div>
       </LayoutEventSummary>
 
