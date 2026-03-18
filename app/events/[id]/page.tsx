@@ -16,6 +16,7 @@ import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider
 import { cn } from '@/lib/utils'
 import { ChevronLeft, ChevronDown, ChevronUp, Copy } from 'lucide-react'
 import { toast } from 'sonner'
+import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 
 
 
@@ -771,7 +772,11 @@ export default function EventDetailsPage() {
             </Badge>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-base md:text-lg text-muted-foreground whitespace-pre-wrap">{event.description}</p>
+            <ExpandableEventDescription
+              text={event.description}
+              collapsedLines={4}
+              textClassName="text-base md:text-lg text-muted-foreground whitespace-pre-wrap"
+            />
 
             <div className="flex flex-wrap gap-2">
               {event.theme && (

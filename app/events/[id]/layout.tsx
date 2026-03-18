@@ -7,6 +7,7 @@ import { PublicEventCTA } from '@/components/public/PublicEventCTA'
 import { PublicInstallBanner } from '@/components/public/PublicInstallBanner'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { LayoutEventSummary } from '@/components/public/LayoutEventSummary'
+import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 import type { Metadata } from 'next'
 
 // Cache event detail pages for 5 minutes — keeps spot counts reasonably fresh
@@ -141,7 +142,12 @@ export default async function EventLayout({ children, params }: Props) {
             </div>
 
             {event.description && (
-              <p className="text-sm text-stone-300 leading-relaxed whitespace-pre-wrap break-words">{event.description}</p>
+              <ExpandableEventDescription
+                text={event.description}
+                collapsedLines={4}
+                textClassName="text-sm text-stone-300 leading-relaxed whitespace-pre-wrap break-words"
+                buttonClassName="text-yellow-400 hover:text-yellow-300 underline underline-offset-2"
+              />
             )}
 
             {event.performerLineup.filter((p) => p.status === 'confirmed').length > 0 && (
