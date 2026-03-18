@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import Link from 'next/link'
 import { ConfirmDialogProvider } from '@/components/providers/confirm-dialog-provider'
@@ -54,6 +55,17 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
       >
+        {/* Google tag (gtag.js) - Google Analytics */}
+        <Script async src="https://www.googletagmanager.com/gtag/js?id=G-LTDFKZ4J5V" />
+        <Script id="google-analytics">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-LTDFKZ4J5V');
+          `}
+        </Script>
+
         <ThemeProvider>
         <ConfirmDialogProvider>
           <AuthBootstrapProvider>
