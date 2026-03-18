@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
-import { ChevronLeft, ChevronDown, ChevronUp, Copy } from 'lucide-react'
+import { ChevronLeft, ChevronDown, ChevronUp, Copy, Instagram } from 'lucide-react'
 import { toast } from 'sonner'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 
@@ -76,6 +76,7 @@ type AttendeeBooking = {
     full_name: string
     email: string
     avatar_url?: string | null
+    instagram_link?: string | null
   }
 }
 
@@ -139,6 +140,66 @@ export default function EventDetailsPage() {
 
     navigator.clipboard.writeText(text)
     toast.success('Attendee list copied!')
+  }
+
+  function extractInstagramUsername(instagramLink: string | null | undefined): string | null {
+    const raw = (instagramLink || '').trim()
+    if (!raw) return null
+
+    // If stored as "@username"
+    if (raw.startsWith('@')) {
+      const u = raw.slice(1).trim()
+      return u || null
+    }
+
+    // If stored as username only
+    if (/^[A-Za-z0-9._]{1,30}$/.test(raw)) return raw
+
+    // Common URL forms: https://www.instagram.com/username/ or instagram.com/username
+    const urlMatch = raw.match(/instagram\.com\/(?:@)?([^\/\?\#\s]+)/i)
+    if (urlMatch?.[1]) return urlMatch[1]
+
+    try {
+      const url = new URL(raw)
+      const parts = (url.pathname || '').split('/').filter(Boolean)
+      if (parts.length > 0) {
+        const first = parts[0].replace(/^@/, '')
+        return first || null
+      }
+    } catch {
+      // Ignore parse errors; fall back to regex above.
+    }
+
+    return null
+  }
+
+  function copyPerformerInstagramHandles() {
+    const confirmed = Array.from(
+      new Set(
+        confirmedBookings
+          .map((booking) => extractInstagramUsername(booking.profiles.instagram_link))
+          .filter(Boolean)
+      )
+    ) as string[]
+
+    const waitlist = Array.from(
+      new Set(
+        waitlistBookings
+          .map((booking) => extractInstagramUsername(booking.profiles.instagram_link))
+          .filter(Boolean)
+      )
+    ) as string[]
+
+    const confirmedLines = confirmed.map((u) => `@${u}`)
+    const waitlistLines = waitlist.map((u) => `@${u}`)
+
+    let text = `Confirmed Performers (${confirmedLines.length})\n${confirmedLines.join('\n') || 'None'}`
+    if (waitlistLines.length > 0) {
+      text += `\n\nWaitlist Performers (${waitlistLines.length})\n${waitlistLines.join('\n')}`
+    }
+
+    navigator.clipboard.writeText(text)
+    toast.success('Instagram handles copied!')
   }
 
   function copyPosterLink() {
@@ -337,7 +398,7 @@ export default function EventDetailsPage() {
           booking_scope,
           event_art_type_id,
           waitlist_position,
-          profiles (id, full_name, email, avatar_url)
+          profiles (id, full_name, email, avatar_url, instagram_link)
         `)
         .eq('event_id', resolvedEventId)
         .eq('status', 'confirmed')
@@ -356,7 +417,7 @@ export default function EventDetailsPage() {
           booking_scope,
           event_art_type_id,
           waitlist_position,
-          profiles (id, full_name, email, avatar_url)
+          profiles (id, full_name, email, avatar_url, instagram_link)
         `)
         .eq('event_id', resolvedEventId)
         .eq('status', 'waitlist')
@@ -979,9 +1040,27 @@ export default function EventDetailsPage() {
             <CardTitle className="text-lg md:text-xl">
               Confirmed Attendees ({confirmedBookings.length})
             </CardTitle>
-            <Button variant="outline" size="icon" onClick={copyAttendeeList} aria-label="Copy attendee list">
-              <Copy className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={copyAttendeeList}
+                aria-label="Copy attendee list"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={copyPerformerInstagramHandles}
+                aria-label="Copy performer Instagram handles"
+              >
+                <span className="relative inline-flex items-center justify-center">
+                  <Copy className="h-4 w-4" />
+                  <Instagram className="absolute -top-1 -right-1 h-3 w-3 text-pink-400 bg-white/0" />
+                </span>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
 
