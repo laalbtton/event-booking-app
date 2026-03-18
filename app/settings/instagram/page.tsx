@@ -18,11 +18,19 @@ export default function SettingsInstagramPage() {
   const [instagramUsername, setInstagramUsername] = useState<string | null>(null)
   const [globalAutoPostEnabled, setGlobalAutoPostEnabled] = useState(false)
   const [autopostLoading, setAutopostLoading] = useState(false)
+  const [copyInstagramHandlesEnabled, setCopyInstagramHandlesEnabled] = useState(false)
 
   useEffect(() => {
     if (!authResolved || !user) return
     void loadData(user.id)
   }, [authResolved, user])
+
+  useEffect(() => {
+    // This preference is intentionally stored on-device. Default is OFF.
+    const key = 'copy_instagram_handles_enabled'
+    const val = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null
+    setCopyInstagramHandlesEnabled(val === '1')
+  }, [])
 
   async function loadData(userId: string) {
     setLoading(true)
@@ -117,6 +125,11 @@ export default function SettingsInstagramPage() {
     }
   }
 
+  function updateCopyInstagramHandlesEnabled(enabled: boolean) {
+    setCopyInstagramHandlesEnabled(enabled)
+    window.localStorage.setItem('copy_instagram_handles_enabled', enabled ? '1' : '0')
+  }
+
   if (!authResolved || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -169,6 +182,19 @@ export default function SettingsInstagramPage() {
                 checked={globalAutoPostEnabled}
                 disabled={!instagramConnected || autopostLoading}
                 onChange={(e) => updateGlobalAutoPost(e.target.checked)}
+                className="h-4 w-4"
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div>
+                <p className="text-sm font-medium">Show Instagram handle copy on event pages</p>
+                <p className="text-xs text-muted-foreground">Default is off. Copies @handles for confirmed + waitlisted performers.</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={copyInstagramHandlesEnabled}
+                onChange={(e) => updateCopyInstagramHandlesEnabled(e.target.checked)}
                 className="h-4 w-4"
               />
             </div>

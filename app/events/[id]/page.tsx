@@ -97,6 +97,7 @@ export default function EventDetailsPage() {
   const [event, setEvent] = useState<EventDetails | null>(null)
   const [confirmedBookings, setConfirmedBookings] = useState<AttendeeBooking[]>([])
   const [waitlistBookings, setWaitlistBookings] = useState<AttendeeBooking[]>([])
+  const [copyInstagramHandlesEnabled, setCopyInstagramHandlesEnabled] = useState(false)
   const [audienceExpectedCount, setAudienceExpectedCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
@@ -280,6 +281,13 @@ export default function EventDetailsPage() {
   useEffect(() => {
     loadEventDetails()
   }, [eventId])
+
+  useEffect(() => {
+    // Default OFF (matches settings). Preference is stored on-device.
+    const key = 'copy_instagram_handles_enabled'
+    const val = window.localStorage.getItem(key)
+    setCopyInstagramHandlesEnabled(val === '1')
+  }, [])
 
   async function loadEventDetails() {
     setLoading(true)
@@ -1049,17 +1057,19 @@ export default function EventDetailsPage() {
               >
                 <Copy className="h-4 w-4" />
               </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={copyPerformerInstagramHandles}
-                aria-label="Copy performer Instagram handles"
-              >
-                <span className="relative inline-flex items-center justify-center">
-                  <Copy className="h-4 w-4" />
-                  <Instagram className="absolute -top-1 -right-1 h-3 w-3 text-pink-400 bg-white/0" />
-                </span>
-              </Button>
+              {copyInstagramHandlesEnabled && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={copyPerformerInstagramHandles}
+                  aria-label="Copy performer Instagram handles"
+                >
+                  <span className="relative inline-flex items-center justify-center">
+                    <Copy className="h-4 w-4" />
+                    <Instagram className="absolute -top-1 -right-1 h-3 w-3 text-pink-400 bg-white/0" />
+                  </span>
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
