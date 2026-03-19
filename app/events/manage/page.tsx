@@ -48,6 +48,7 @@ export default function EventManagementPage() {
   const router = useRouter()
   const [createStep, setCreateStep] = useState<'details' | 'tickets' | 'variety'>('details')
   const [editVarietyOpen, setEditVarietyOpen] = useState(false)
+  const [editTicketsOpen, setEditTicketsOpen] = useState(false)
   const [languageInput, setLanguageInput] = useState('')
   const [varietyArtTypes, setVarietyArtTypes] = useState<Array<{ id?: string; art_type_name: string; slot_capacity: string }>>([])
 
@@ -750,6 +751,7 @@ export default function EventManagementPage() {
       }))
     )
     setEditVarietyOpen(false)
+    setEditTicketsOpen(false)
     setShowEditForm(true)
   }
 
@@ -2473,14 +2475,38 @@ export default function EventManagementPage() {
                             external_event: nextValue ? formData.external_event : false,
                             external_ticket_url: nextValue ? formData.external_ticket_url : '',
                           })
+                          if (!nextValue) setEditTicketsOpen(false)
                         }}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                       />
                       Add tickets
                     </label>
 
-                    {formData.tickets_enabled && (
-                      <div className="space-y-4">
+                    {formData.tickets_enabled && !editTicketsOpen && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditTicketsOpen(true)}
+                      >
+                        Configure tickets
+                      </Button>
+                    )}
+
+                    {formData.tickets_enabled && editTicketsOpen && (
+                      <div className="space-y-4 pt-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-lg font-semibold text-gray-900">Ticket Settings</h4>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditTicketsOpen(false)}
+                          >
+                            Back
+                          </Button>
+                        </div>
+
                         <label className="flex items-center gap-2 text-sm text-gray-700">
                           <input
                             type="checkbox"
