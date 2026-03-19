@@ -265,7 +265,7 @@ export default function NotificationsPage() {
     return (
       <div className="min-h-screen bg-background">
         <NavigationTabs />
-        <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8 pb-20">
+          <div className="max-w-4xl mx-auto -mx-4 sm:mx-0 px-0 py-6 sm:py-8 pb-20">
           <Card>
             <CardHeader>
               <Skeleton className="h-8 w-48" />
@@ -285,7 +285,7 @@ export default function NotificationsPage() {
     <div className="min-h-screen bg-background pb-20">
       <NavigationTabs />
 
-      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto -mx-4 sm:mx-0 px-0 py-6 sm:py-8">
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">Notifications</CardTitle>
