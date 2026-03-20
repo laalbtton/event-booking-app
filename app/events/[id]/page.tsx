@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { ChevronLeft, ChevronDown, ChevronUp, Copy, Instagram } from 'lucide-react'
 import { toast } from 'sonner'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
+import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 
 
 
@@ -90,6 +91,7 @@ type VarietyArtOption = {
 
 export default function EventDetailsPage() {
   const { confirm } = useConfirmDialog()
+  const { authResolved, user: authBootstrapUser } = useAuthBootstrap()
   const params = useParams()
   const router = useRouter()
   const eventId = params.id as string
@@ -297,46 +299,18 @@ export default function EventDetailsPage() {
       const { data: { user } } = await supabase.auth.getUser()
       setCurrentUser(user)
 
-      if (user) {
+      if (!user) {
+        setProfile(null)
+        setUserBooking(null)
+        setEventAutoPostEnabled(false)
+        setAlertSet(false)
+      } else {
         const { data: profileData } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
           .single()
         if (profileData) setProfile(profileData)
-
-        const { data: userBookingData } = await supabase
-          .from('bookings')
-          .select('id, status')
-          .eq('event_id', eventId)
-          .eq('user_id', user.id)
-          .in('status', ['confirmed', 'waitlist'])
-          .maybeSingle()
-        setUserBooking(userBookingData || null)
-
-        const { data: prefData } = await supabase
-          .from('poster_auto_post_prefs')
-          .select('auto_post_enabled')
-          .eq('user_id', user.id)
-          .eq('event_id', eventId)
-          .maybeSingle()
-        setEventAutoPostEnabled(!!prefData?.auto_post_enabled)
-
-        const { data: alertsData, error: alertsError } = await supabase
-          .from('registration_alerts')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('event_id', eventId)
-          .maybeSingle()
-        if (alertsError) {
-          const missingTable = alertsError.code === '42P01' || alertsError.message?.includes('registration_alerts')
-          if (!missingTable) {
-            console.warn('Error loading registration alert:', alertsError)
-          }
-          setAlertSet(false)
-        } else {
-          setAlertSet(!!alertsData)
-        }
       }
 
       // Load event details by id first, then fallback to slug.
@@ -476,6 +450,43 @@ export default function EventDetailsPage() {
 
       setAudienceExpectedCount(audienceCount || 0)
 
+      // User-specific rows must use the resolved UUID — URL param may be a public slug, not event_id.
+      if (user) {
+        const { data: userBookingData } = await supabase
+          .from('bookings')
+          .select('id, status')
+          .eq('event_id', resolvedEventId)
+          .eq('user_id', user.id)
+          .in('status', ['confirmed', 'waitlist'])
+          .order('booked_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        setUserBooking(userBookingData || null)
+
+        const { data: prefData } = await supabase
+          .from('poster_auto_post_prefs')
+          .select('auto_post_enabled')
+          .eq('user_id', user.id)
+          .eq('event_id', resolvedEventId)
+          .maybeSingle()
+        setEventAutoPostEnabled(!!prefData?.auto_post_enabled)
+
+        const { data: alertsData, error: alertsError } = await supabase
+          .from('registration_alerts')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('event_id', resolvedEventId)
+          .maybeSingle()
+        if (alertsError) {
+          const missingTable = alertsError.code === '42P01' || alertsError.message?.includes('registration_alerts')
+          if (!missingTable) {
+            console.warn('Error loading registration alert:', alertsError)
+          }
+          setAlertSet(false)
+        } else {
+          setAlertSet(!!alertsData)
+        }
+      }
     } catch (error: any) {
       console.error('Error loading event details:', error)
       toast.error('Error loading event details')
@@ -503,7 +514,7 @@ export default function EventDetailsPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ eventId }),
+        body: JSON.stringify({ eventId: event?.id ?? eventId }),
       })
 
       if (!response.ok) {
@@ -662,8 +673,18 @@ export default function EventDetailsPage() {
     }
   }
 
-  // While loading, show nothing — the layout's public summary is already visible.
-  // Once loading completes we'll either render the authenticated view or return null.
+  // While loading: logged-out visitors rely on the layout's public summary.
+  // Logged-in users should still see bottom nav (fixes blank shell during fetch; slug URLs load longer).
+  if (loading && authResolved && (authBootstrapUser || currentUser)) {
+    return (
+      <>
+        <div className="min-h-screen flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-background pb-28 text-muted-foreground">
+          <p>Loading event…</p>
+        </div>
+        <NavigationTabs />
+      </>
+    )
+  }
   if (loading) return null
 
   if (!event) {
@@ -1014,6 +1035,10 @@ export default function EventDetailsPage() {
                       {alertSet ? 'Alert Set' : settingAlert ? 'Setting...' : 'Alert Me'}
                     </Button>
                   </div>
+                ) : isAlreadyBooked && userBooking?.id ? (
+                  <Button asChild size="sm" variant="default">
+                    <Link href={`/bookings/${userBooking.id}`}>Go to booking</Link>
+                  </Button>
                 ) : !canAfford ? (
                   <Link href="/buy-credits">
                     <Button size="sm">Buy Credits</Button>
@@ -1021,16 +1046,10 @@ export default function EventDetailsPage() {
                 ) : (
                   <Button
                     onClick={() => handleBookEvent(event)}
-                    disabled={bookingLoading || isAlreadyBooked}
+                    disabled={bookingLoading}
                     size="sm"
                   >
-                    {bookingLoading
-                      ? 'Booking...'
-                      : isAlreadyBooked
-                        ? userBooking?.status === 'waitlist'
-                          ? 'On Waitlist'
-                          : 'Booked'
-                        : bookingLabel}
+                    {bookingLoading ? 'Booking...' : bookingLabel}
                   </Button>
                 )
               )}
@@ -1173,9 +1192,9 @@ export default function EventDetailsPage() {
         <Link
           href={`/bookings/${userBooking.id}`}
           className="fixed left-0 right-0 z-40 flex items-center justify-center py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm shadow-lg"
-          style={{ bottom: 64 }}
+          style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
         >
-          View booking details
+          Go to booking
         </Link>
       )}
 

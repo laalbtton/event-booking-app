@@ -1328,16 +1328,18 @@ export default function Dashboard() {
                       </div>
                       <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {bucketEvents.map((event) => {
-                  const activeBooking = myBookings.find(
-                    (b) =>
-                      b.event_id === event.id &&
-                      (b.status === 'confirmed' || b.status === 'waitlist')
-                  )
+                  const isAudienceUser = userRole === 'audience'
+                  const activeBooking = myBookings.find((b) => {
+                    if (b.event_id !== event.id) return false
+                    if (b.status !== 'confirmed' && b.status !== 'waitlist') return false
+                    if (isAudienceUser) return b.booking_scope === 'audience'
+                    if (eventTab === 'perform') return b.booking_scope !== 'audience'
+                    return b.booking_scope === 'audience'
+                  })
                   const isBooked = !!activeBooking
                   const effectiveCreditsRequired = getEffectiveCreditsRequired(event)
                   const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 1))
                   const audienceHasFreePass = Number(profile?.audience_free_passes_remaining || 0) > 0
-                  const isAudienceUser = userRole === 'audience'
                   const creditsRequiredForCard = isAudienceUser
                     ? (audienceHasFreePass ? 0 : audienceDepositCredits)
                     : effectiveCreditsRequired
@@ -1478,16 +1480,15 @@ export default function Dashboard() {
                                     />
                                   </div>
                                 )}
-                                {isBooked ? (
-                                  activeBooking?.status === 'waitlist' ? (
-                                    <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-                                      ⏳ Waitlisted
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-green-600 border-green-600">
-                                      ✓ Booked
-                                    </Badge>
-                                  )
+                                {isBooked && activeBooking?.id ? (
+                                  <Button asChild size="sm" className="text-xs shrink-0">
+                                    <Link
+                                      href={`/bookings/${activeBooking.id}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      Go to booking
+                                    </Link>
+                                  </Button>
                                 ) : event.status === 'cancelled' ? (
                                   <Badge variant="destructive">Cancelled</Badge>
                                 ) : !isRegistrationOpen ? (
