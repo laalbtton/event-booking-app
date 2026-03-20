@@ -18,6 +18,7 @@ import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { cn } from '@/lib/utils'
 import { ChevronDown, Download } from 'lucide-react'
+import { EventCardSkeleton } from '@/components/skeletons/EventCardSkeleton'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { PushPermissionPrePrompt } from '@/components/notifications/push-permission-preprompt'
@@ -59,6 +60,7 @@ export default function Dashboard() {
   const [myBookings, setMyBookings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [bookingLoading, setBookingLoading] = useState<string | null>(null)
+  const [optimisticBookings, setOptimisticBookings] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
   const [currentTime, setCurrentTime] = useState(new Date())
   const [isAdmin, setIsAdmin] = useState(false)
@@ -561,7 +563,7 @@ export default function Dashboard() {
           
           // Reload data to reflect changes
           if (profile) {
-            loadData(profile.id)
+            loadData(profile.id, null)
           }
         }
       )
@@ -646,16 +648,18 @@ export default function Dashboard() {
 
   async function checkAuth(userId: string) {
     try {
-      // Check user role
-      const { data: profile, error: profileError } = await supabase
+      // Fetch full profile and role metadata in one query (avoids duplicate fetch in loadData)
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('role')
+        .select('*')
         .eq('id', userId)
         .single()
 
-      if (!profileError && profile) {
-        setUserRole(profile.role)
-        setIsAdmin(profile.role === 'admin')
+      let resolvedRole: string = 'performer'
+      if (!profileError && profileData) {
+        resolvedRole = profileData.role
+        setUserRole(profileData.role)
+        setIsAdmin(profileData.role === 'admin')
       } else {
         // Fallback: check admin_users table for backward compatibility
         const { data: adminData } = await supabase
@@ -665,58 +669,57 @@ export default function Dashboard() {
           .single()
 
         setIsAdmin(!!adminData)
-        setUserRole(adminData ? 'admin' : 'performer')
+        resolvedRole = adminData ? 'admin' : 'performer'
+        setUserRole(resolvedRole)
       }
 
-      // Check for existing role change request
-      const { data: requestData } = await supabase
-        .from('role_change_requests')
-        .select('status')
-        .eq('user_id', userId)
-        .eq('requested_role', 'event_creator')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      // Fetch role metadata in parallel — all three only need userId
+      const [requestResult, creatorCountResult, createdCountResult] = await Promise.all([
+        supabase
+          .from('role_change_requests')
+          .select('status')
+          .eq('user_id', userId)
+          .eq('requested_role', 'event_creator')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('community_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .in('role', ['event_creator', 'co_admin', 'admin']),
+        supabase
+          .from('events')
+          .select('id', { count: 'exact', head: true })
+          .eq('created_by', userId),
+      ])
 
-      if (requestData) {
-        setRoleRequestStatus(requestData.status)
-      }
+      if (requestResult.data) setRoleRequestStatus(requestResult.data.status)
+      setIsCommunityEventCreator((creatorCountResult.count || 0) > 0)
+      setHasCreatedEvents((createdCountResult.count || 0) > 0)
 
-      // Check if user is a community-level event_creator
-      const { count: communityCreatorCount } = await supabase
-        .from('community_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .in('role', ['event_creator', 'co_admin', 'admin'])
-
-      setIsCommunityEventCreator((communityCreatorCount || 0) > 0)
-
-      // Check if user has ever created events
-      const { count: createdEventsCount } = await supabase
-        .from('events')
-        .select('id', { count: 'exact', head: true })
-        .eq('created_by', userId)
-
-      setHasCreatedEvents((createdEventsCount || 0) > 0)
-
-      loadData(userId)
+      // Pass the already-loaded profile to loadData to avoid a duplicate fetch
+      loadData(userId, profileData || null)
     } catch (error: any) {
       setError(error.message || 'Failed to restore your session')
       setLoading(false)
     }
   }
 
-  async function loadData(userId: string) {
+  async function loadData(userId: string, preloadedProfile: any) {
     try {
-      // Load profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
-      if (profileError) throw profileError
-      setProfile(profileData)
+      // Use the profile already loaded in checkAuth — no duplicate fetch needed
+      if (preloadedProfile) {
+        setProfile(preloadedProfile)
+      } else {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single()
+        if (profileError) throw profileError
+        setProfile(profileData)
+      }
 
       // Load upcoming and in-progress events, scoped to communities the user belongs to
       const nowIso = new Date().toISOString()
@@ -780,46 +783,47 @@ export default function Dashboard() {
         }
       }
 
-      // Load user's bookings (confirmed, waitlist, cancelled)
-      const { data: bookingsData, error: bookingsError } = await supabase
-        .from('bookings')
-        .select(`
-          *,
-          events (*)
-        `)
-        .eq('user_id', userId)
-        .in('status', ['confirmed', 'waitlist', 'cancelled'])
+      // Load user-specific data in parallel — all four only need userId
+      const [bookingsResult, inviteResult, alertsResult, pushPrefsResult] = await Promise.all([
+        supabase
+          .from('bookings')
+          .select('*, events (*)')
+          .eq('user_id', userId)
+          .in('status', ['confirmed', 'waitlist', 'cancelled']),
+        supabase
+          .from('event_invites')
+          .select('event_id, status')
+          .eq('invited_user_id', userId)
+          .in('status', ['pending', 'accepted']),
+        supabase
+          .from('registration_alerts')
+          .select('event_id')
+          .eq('user_id', userId),
+        supabase
+          .from('push_notification_prefs')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle(),
+      ])
 
-      if (bookingsError) throw bookingsError
-      setMyBookings(bookingsData || [])
+      if (bookingsResult.error) throw bookingsResult.error
+      setMyBookings(bookingsResult.data || [])
 
-      const { data: inviteData, error: inviteError } = await supabase
-        .from('event_invites')
-        .select('event_id, status')
-        .eq('invited_user_id', userId)
-        .in('status', ['pending', 'accepted'])
-
-      if (!inviteError && inviteData) {
-        setInvitedEventIds(new Set(inviteData.map((invite: any) => invite.event_id)))
+      if (!inviteResult.error && inviteResult.data) {
+        setInvitedEventIds(new Set(inviteResult.data.map((invite: any) => invite.event_id)))
       }
 
-      // Load existing registration alerts
-      const { data: alertsData, error: alertsError } = await supabase
-        .from('registration_alerts')
-        .select('event_id')
-        .eq('user_id', userId)
-
-      if (alertsError) {
-        const missingTable = alertsError.code === '42P01' || alertsError.message?.includes('registration_alerts')
-        if (!missingTable) {
-          console.warn('Error loading registration alerts:', alertsError)
-        }
+      if (alertsResult.error) {
+        const missingTable = alertsResult.error.code === '42P01' || alertsResult.error.message?.includes('registration_alerts')
+        if (!missingTable) console.warn('Error loading registration alerts:', alertsResult.error)
         setAlertSet(new Set())
-      } else if (alertsData) {
-        setAlertSet(new Set(alertsData.map(a => a.event_id)))
+      } else if (alertsResult.data) {
+        setAlertSet(new Set(alertsResult.data.map((a: any) => a.event_id)))
       }
 
-      await loadPushPrefs(userId)
+      if (!pushPrefsResult.error) {
+        setPushPrefs((pushPrefsResult.data || null) as PushNotificationPrefs | null)
+      }
 
     } catch (error: any) {
       setError(error.message)
@@ -948,7 +952,7 @@ export default function Dashboard() {
       }
 
       const isAudienceUser = userRole === 'audience'
-      const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 1))
+      const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 0))
       const audienceHasFreePass = Number(profile.audience_free_passes_remaining || 0) > 0
       const effectiveCreditsRequired = isAudienceUser
         ? (audienceHasFreePass ? 0 : audienceDepositCredits)
@@ -982,7 +986,9 @@ export default function Dashboard() {
         })
       }
 
-      await loadData(profile.id)
+      await loadData(profile.id, null)
+      // Clear optimistic state now that real data is loaded
+      setOptimisticBookings(prev => { const s = new Set(prev); s.delete(event.id); return s })
 
       if (result.bookingStatus === 'waitlist') {
         toast.success('Event is full. You have been added to the waitlist. You will be notified if a spot opens up.')
@@ -1040,8 +1046,13 @@ export default function Dashboard() {
 
   if (!authResolved || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl">Loading...</div>
+      <div className="min-h-screen bg-background pb-20">
+        <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+          <EventCardSkeleton />
+          <EventCardSkeleton />
+          <EventCardSkeleton />
+        </div>
+        <NavigationTabs />
       </div>
     )
   }
@@ -1336,14 +1347,15 @@ export default function Dashboard() {
                     if (eventTab === 'perform') return b.booking_scope !== 'audience'
                     return b.booking_scope === 'audience'
                   })
-                  const isBooked = !!activeBooking
+                  const isBooked = !!activeBooking || optimisticBookings.has(event.id)
                   const effectiveCreditsRequired = getEffectiveCreditsRequired(event)
-                  const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 1))
+                  const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 0))
                   const audienceHasFreePass = Number(profile?.audience_free_passes_remaining || 0) > 0
                   const creditsRequiredForCard = isAudienceUser
                     ? (audienceHasFreePass ? 0 : audienceDepositCredits)
                     : effectiveCreditsRequired
                   const hasRedeemableCredits = event.tickets_enabled && Number((event as any).audience_deposit_credits || 0) > 0
+                  const isCashTicketed = isAudienceUser && event.tickets_enabled && creditsRequiredForCard === 0 && !audienceHasFreePass
                   const showRedeemableHelpDot = hasRedeemableCredits && isAudienceUser
                   const languageSummary = formatEventLanguages(event)
                   const canAfford = (profile?.credits || 0) >= creditsRequiredForCard
@@ -1386,9 +1398,15 @@ export default function Dashboard() {
                               )}
                               {event.event_type !== 'booked_show' && (
                                 <div className="inline-flex items-center gap-1.5">
-                                  <Badge variant="secondary" className="whitespace-nowrap">
-                                    {creditsRequiredForCard} Cr
-                                  </Badge>
+                                  {isCashTicketed ? (
+                                    <Badge variant="secondary" className="whitespace-nowrap text-amber-600 border-amber-400">
+                                      Ticketed
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="secondary" className="whitespace-nowrap">
+                                      {creditsRequiredForCard} Cr
+                                    </Badge>
+                                  )}
                                   {showRedeemableHelpDot && (
                                     <button
                                       type="button"
@@ -1525,10 +1543,21 @@ export default function Dashboard() {
                                   </Link>
                                 ) : (
                                   <Button
-                                    onClick={(e) => {
+                                    onClick={async (e) => {
                                       e.preventDefault()
                                       e.stopPropagation()
-                                      handleBookEvent(event)
+                                      // Optimistic: immediately show booked state
+                                      setOptimisticBookings(prev => new Set(prev).add(event.id))
+                                      try {
+                                        await handleBookEvent(event)
+                                      } catch {
+                                        // handleBookEvent already shows a toast; revert optimistic state
+                                        setOptimisticBookings(prev => {
+                                          const s = new Set(prev)
+                                          s.delete(event.id)
+                                          return s
+                                        })
+                                      }
                                     }}
                                     disabled={isBooking}
                                     size="sm"

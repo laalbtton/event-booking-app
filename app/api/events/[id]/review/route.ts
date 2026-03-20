@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { revalidatePath } from 'next/cache'
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -135,6 +136,10 @@ export async function POST(
         .update({ status: 'cancelled' })
         .eq('id', eventId)
     }
+
+    // Invalidate public caches so the events listing and detail pages reflect the change immediately
+    revalidatePath('/events')
+    revalidatePath('/events/[slug]', 'page')
 
     return NextResponse.json({ success: true })
   } catch (err: unknown) {

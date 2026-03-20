@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { useTheme } from 'next-themes'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
+import { SettingsSkeleton } from '@/components/skeletons/SettingsSkeleton'
 import { getPushClientState, subscribeCurrentUserToPush, unsubscribeCurrentUserFromPush } from '@/lib/pushClient'
 import {
   getInstallPlatform,
@@ -107,6 +108,7 @@ export default function SettingsPage() {
   async function loadSettings(userId: string) {
     setLoading(true)
     try {
+      // Profile must load first to determine isAdminByRole
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -115,35 +117,35 @@ export default function SettingsPage() {
       if (profileError) throw profileError
       setProfile(profileData)
 
-      const isAdminByRole = profileData?.role === 'admin'
-      const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', userId).maybeSingle()
-      setIsAdmin(isAdminByRole || !!adminRow)
+      // All four remaining queries are independent — run in parallel
+      const [adminResult, pushPrefsResult, socialResult, prefResult] = await Promise.all([
+        supabase.from('admin_users').select('user_id').eq('user_id', userId).maybeSingle(),
+        supabase
+          .from('push_notification_prefs')
+          .select('user_id, preprompt_dismissed_at, preprompt_dismissed_until, native_permission_denied_at, subscribed_at, booking_updates_enabled, event_reminders_enabled, new_events_enabled')
+          .eq('user_id', userId)
+          .maybeSingle(),
+        supabase
+          .from('social_accounts')
+          .select('account_username, is_active')
+          .eq('user_id', userId)
+          .eq('provider', 'instagram')
+          .eq('is_active', true)
+          .limit(1),
+        supabase
+          .from('poster_auto_post_prefs')
+          .select('auto_post_enabled')
+          .eq('user_id', userId)
+          .is('event_id', null)
+          .limit(1),
+      ])
 
-      const { data: pushPrefsData } = await supabase
-        .from('push_notification_prefs')
-        .select('user_id, preprompt_dismissed_at, preprompt_dismissed_until, native_permission_denied_at, subscribed_at, booking_updates_enabled, event_reminders_enabled, new_events_enabled')
-        .eq('user_id', userId)
-        .maybeSingle()
-      setPushPrefs((pushPrefsData || null) as PushNotificationPrefs | null)
-
-      const { data: socialRows } = await supabase
-        .from('social_accounts')
-        .select('account_username, is_active')
-        .eq('user_id', userId)
-        .eq('provider', 'instagram')
-        .eq('is_active', true)
-        .limit(1)
-      const social = socialRows && socialRows[0]
+      setIsAdmin((profileData?.role === 'admin') || !!adminResult.data)
+      setPushPrefs((pushPrefsResult.data || null) as PushNotificationPrefs | null)
+      const social = socialResult.data?.[0]
       setInstagramConnected(!!social)
       setInstagramUsername(social?.account_username || null)
-
-      const { data: prefRows } = await supabase
-        .from('poster_auto_post_prefs')
-        .select('auto_post_enabled')
-        .eq('user_id', userId)
-        .is('event_id', null)
-        .limit(1)
-      setGlobalAutoPostEnabled(!!prefRows?.[0]?.auto_post_enabled)
+      setGlobalAutoPostEnabled(!!prefResult.data?.[0]?.auto_post_enabled)
     } catch (error: any) {
       toast.error(error?.message || 'Failed to load settings')
     } finally {
@@ -442,8 +444,11 @@ export default function SettingsPage() {
 
   if (!authResolved || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl">Loading settings...</div>
+      <div className="min-h-screen bg-background pb-20">
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          <SettingsSkeleton />
+        </div>
+        <NavigationTabs />
       </div>
     )
   }

@@ -226,32 +226,30 @@ export default function ProfilePage() {
         twitter_link: profileData.twitter_link || ''
       })
 
-      // Load all bookings where credits were used (attended, cancelled, no_show, etc.)
-      const { data: bookingsData, error: bookingsError } = await supabase
-        .from('bookings')
-        .select(`
-          id,
-          event_id,
-          credits_used,
-          status,
-          attendance_status,
-          waitlist_position,
-          booked_at,
-          events (
-            id,
-            title,
-            date,
-            location,
-            status
-          )
-        `)
-        .eq('user_id', userId)
-        .gt('credits_used', 0)
-        .order('booked_at', { ascending: false })
+      // Load all three booking/invite datasets in parallel — all only need userId
+      const [bookingsResult, invitesResult, bookingsFullResult] = await Promise.all([
+        supabase
+          .from('bookings')
+          .select('id, event_id, credits_used, status, attendance_status, waitlist_position, booked_at, events (id, title, date, location, status)')
+          .eq('user_id', userId)
+          .gt('credits_used', 0)
+          .order('booked_at', { ascending: false }),
+        supabase
+          .from('event_invites')
+          .select('id, status, created_at, events (id, title, date, location)')
+          .eq('invited_user_id', userId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('bookings')
+          .select('*, events (*)')
+          .eq('user_id', userId)
+          .in('status', ['confirmed', 'waitlist', 'cancelled']),
+      ])
 
-      if (bookingsError) throw bookingsError
-      
-      const events = (bookingsData || []).map((b: any) => ({
+      if (bookingsResult.error) throw bookingsResult.error
+      const bookingsData = bookingsResult.data || []
+      const events = bookingsData.map((b: any) => ({
         id: b.id,
         event_id: b.events.id,
         title: b.events.title,
@@ -265,46 +263,14 @@ export default function ProfilePage() {
         event_status: b.events.status
       }))
       setEventBookings(events)
+      setAttendedCount(events.filter((e: any) => e.attendance_status === 'attended').length)
 
-      // Get attended count
-      const attended = events.filter(e => e.attendance_status === 'attended').length
-      setAttendedCount(attended)
+      if (!invitesResult.error) setInvites(invitesResult.data as any)
 
-      const { data: invitesData, error: invitesError } = await supabase
-        .from('event_invites')
-        .select(`
-          id,
-          status,
-          created_at,
-          events (
-            id,
-            title,
-            date,
-            location
-          )
-        `)
-        .eq('invited_user_id', userId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-
-      if (!invitesError) {
-        setInvites(invitesData as any)
-      }
-
-      // Load user's bookings (confirmed, waitlist, cancelled) for Bookings tab
-      const { data: bookingsFullData, error: bookingsFullError } = await supabase
-        .from('bookings')
-        .select(`
-          *,
-          events (*)
-        `)
-        .eq('user_id', userId)
-        .in('status', ['confirmed', 'waitlist', 'cancelled'])
-
-      if (!bookingsFullError) {
-        setMyBookings(bookingsFullData || [])
-        // Load confirmed counts for events in myBookings
-        const eventIds = [...new Set((bookingsFullData || []).map((b: any) => b.event_id))]
+      if (!bookingsFullResult.error) {
+        setMyBookings(bookingsFullResult.data || [])
+        // Confirmed counts depend on bookingsFullData eventIds — kept sequential
+        const eventIds = [...new Set((bookingsFullResult.data || []).map((b: any) => b.event_id))]
         if (eventIds.length > 0) {
           const { data: countsData } = await supabase
             .from('bookings')
@@ -322,17 +288,18 @@ export default function ProfilePage() {
         }
       }
 
-      await loadMyCoupons(userId)
+      // Load coupons, push prefs, and poster automation in parallel
+      const [, pushPrefsResult] = await Promise.all([
+        loadMyCoupons(userId),
+        supabase
+          .from('push_notification_prefs')
+          .select('user_id, preprompt_dismissed_at, preprompt_dismissed_until, native_permission_denied_at, subscribed_at')
+          .eq('user_id', userId)
+          .maybeSingle(),
+        loadPosterAutomationState(userId),
+      ])
 
-      const { data: pushPrefsData } = await supabase
-        .from('push_notification_prefs')
-        .select('user_id, preprompt_dismissed_at, preprompt_dismissed_until, native_permission_denied_at, subscribed_at')
-        .eq('user_id', userId)
-        .maybeSingle()
-
-      setPushPrefs((pushPrefsData || null) as PushNotificationPrefs | null)
-
-      await loadPosterAutomationState(userId)
+      setPushPrefs((pushPrefsResult.data || null) as PushNotificationPrefs | null)
 
     } catch (error: any) {
       console.error('Error loading profile:', error)
@@ -574,29 +541,30 @@ export default function ProfilePage() {
   }
 
   async function loadPosterAutomationState(userId: string) {
-    const { data: socialRows } = await supabase
-      .from('social_accounts')
-      .select('account_username, is_active')
-      .eq('user_id', userId)
-      .eq('provider', 'instagram')
-      .eq('is_active', true)
-      .limit(1)
+    // Fetch social account and poster prefs in parallel
+    const [socialResult, prefResult, sessionResult] = await Promise.all([
+      supabase
+        .from('social_accounts')
+        .select('account_username, is_active')
+        .eq('user_id', userId)
+        .eq('provider', 'instagram')
+        .eq('is_active', true)
+        .limit(1),
+      supabase
+        .from('poster_auto_post_prefs')
+        .select('auto_post_enabled')
+        .eq('user_id', userId)
+        .is('event_id', null)
+        .limit(1),
+      supabase.auth.getSession(),
+    ])
 
-    const social = socialRows && socialRows[0]
+    const social = socialResult.data?.[0]
     setInstagramConnected(!!social)
     setInstagramUsername(social?.account_username || null)
+    setGlobalAutoPostEnabled(!!prefResult.data?.[0]?.auto_post_enabled)
 
-    const { data: prefRows } = await supabase
-      .from('poster_auto_post_prefs')
-      .select('auto_post_enabled')
-      .eq('user_id', userId)
-      .is('event_id', null)
-      .limit(1)
-
-    setGlobalAutoPostEnabled(!!prefRows?.[0]?.auto_post_enabled)
-
-    const { data: sessionData } = await supabase.auth.getSession()
-    const accessToken = sessionData.session?.access_token
+    const accessToken = sessionResult.data.session?.access_token
     if (!accessToken) {
       setAutopostJobs([])
       return

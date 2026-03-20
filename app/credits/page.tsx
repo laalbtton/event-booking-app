@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase'
 import type { CreditTransaction } from '@/lib/supabase'
 import { formatDateTime, formatTime } from '@/lib/dateUtils'
+import { CreditHistorySkeleton } from '@/components/skeletons/CreditHistorySkeleton'
 
 export default function CreditsHistoryPage() {
   const [transactions, setTransactions] = useState<CreditTransaction[]>([])
@@ -27,29 +28,21 @@ export default function CreditsHistoryPage() {
           return
         }
 
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('credits')
-          .eq('id', authData.user.id)
-          .single()
+        // Fetch profile balance and transaction history in parallel
+        const [profileResult, transactionsResult] = await Promise.all([
+          supabase.from('profiles').select('credits').eq('id', authData.user.id).single(),
+          supabase
+            .from('credit_transactions')
+            .select('*')
+            .eq('user_id', authData.user.id)
+            .order('created_at', { ascending: false }),
+        ])
 
-        if (profileError) {
-          throw profileError
-        }
+        if (profileResult.error) throw profileResult.error
+        if (transactionsResult.error) throw transactionsResult.error
 
-        setCurrentBalance(profileData?.credits ?? null)
-
-        const { data: transactionsData, error: transactionError } = await supabase
-          .from('credit_transactions')
-          .select('*')
-          .eq('user_id', authData.user.id)
-          .order('created_at', { ascending: false })
-
-        if (transactionError) {
-          throw transactionError
-        }
-
-        setTransactions(transactionsData || [])
+        setCurrentBalance(profileResult.data?.credits ?? null)
+        setTransactions(transactionsResult.data || [])
       } catch (err: any) {
         setError(err.message || 'Unable to load credits history.')
       } finally {
@@ -91,9 +84,7 @@ export default function CreditsHistoryPage() {
         </Card>
 
         {loading ? (
-          <Card>
-            <CardContent className="p-6 text-sm text-muted-foreground">Loading credits history…</CardContent>
-          </Card>
+          <CreditHistorySkeleton />
         ) : error ? (
           <Card className="border-red-200 bg-red-50/50">
             <CardContent className="p-6 text-sm text-red-700">{error}</CardContent>

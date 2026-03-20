@@ -231,8 +231,11 @@ export default function AdminEventsPage() {
 
     if (!error && data) {
       setEvents(data)
-      await loadPosterJobSummary((data || []).map((item: any) => item.id))
-      await loadPosterPublishMeta((data || []).map((item: any) => item.id))
+      const eventIds = (data || []).map((item: any) => item.id)
+      await Promise.all([
+        loadPosterJobSummary(eventIds),
+        loadPosterPublishMeta(eventIds),
+      ])
     }
     setLoading(false)
   }
@@ -1255,7 +1258,7 @@ export default function AdminEventsPage() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="edit-credits">Credits Required *</Label>
+                <Label htmlFor="edit-credits">Credits Req'd *</Label>
                 <Input
                   id="edit-credits"
                   type="number"
@@ -1843,7 +1846,7 @@ export default function AdminEventsPage() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="create-credits">Credits Required *</Label>
+                <Label htmlFor="create-credits">Credits Req'd *</Label>
                 <Input
                   id="create-credits"
                     type="number"

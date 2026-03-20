@@ -507,8 +507,8 @@ export default function VenueRedemptionsPage() {
       const amountText = `$${(Math.max(0, Number(preview.valueCents || 0)) / 100).toFixed(2)}`
       const shouldRedeem = await confirm({
         title: 'Confirm coupon redemption',
-        message: `Redeem ${amountText} for ${preview.attendeeName}?\n\nCoupon: ${preview.code}`,
-        confirmText: `Redeem ${amountText}`,
+        message: `Redeem ${amountText} coupon for ${preview.attendeeName}?\n\nCoupon: ${preview.code}\n\n⚠️ Only redeem if this person is physically present and using their coupon right now.\n\nConfirming will return ${amountText} in credits to the attendee's account.`,
+        confirmText: `Yes, redeem ${amountText}`,
         cancelText: 'Cancel',
       })
       if (!shouldRedeem) {

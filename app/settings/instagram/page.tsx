@@ -35,24 +35,26 @@ export default function SettingsInstagramPage() {
   async function loadData(userId: string) {
     setLoading(true)
     try {
-      const { data: socialRows } = await supabase
-        .from('social_accounts')
-        .select('account_username, is_active')
-        .eq('user_id', userId)
-        .eq('provider', 'instagram')
-        .eq('is_active', true)
-        .limit(1)
-      const social = socialRows && socialRows[0]
+      // Both queries only need userId — run in parallel
+      const [socialResult, prefResult] = await Promise.all([
+        supabase
+          .from('social_accounts')
+          .select('account_username, is_active')
+          .eq('user_id', userId)
+          .eq('provider', 'instagram')
+          .eq('is_active', true)
+          .limit(1),
+        supabase
+          .from('poster_auto_post_prefs')
+          .select('auto_post_enabled')
+          .eq('user_id', userId)
+          .is('event_id', null)
+          .limit(1),
+      ])
+      const social = socialResult.data?.[0]
       setInstagramConnected(!!social)
       setInstagramUsername(social?.account_username || null)
-
-      const { data: prefRows } = await supabase
-        .from('poster_auto_post_prefs')
-        .select('auto_post_enabled')
-        .eq('user_id', userId)
-        .is('event_id', null)
-        .limit(1)
-      setGlobalAutoPostEnabled(!!prefRows?.[0]?.auto_post_enabled)
+      setGlobalAutoPostEnabled(!!prefResult.data?.[0]?.auto_post_enabled)
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'Failed to load')
     } finally {

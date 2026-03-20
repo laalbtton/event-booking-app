@@ -56,12 +56,27 @@ export async function POST(request: NextRequest) {
 
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, created_by, host_user_id, venue_id')
+      .select('id, created_by, host_user_id, venue_id, date, end_time')
       .eq('id', voucher.event_id)
       .single()
 
     if (eventError || !event) {
       return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+    }
+
+    // Block redemption if the event ended more than 6 hours ago.
+    // This prevents accidental bulk redemption after an event has closed.
+    const REDEMPTION_CUTOFF_HOURS = 24
+    const eventEndRaw = (event as any).end_time || (event as any).date
+    if (eventEndRaw) {
+      const eventEnd = new Date(eventEndRaw)
+      const cutoff = new Date(eventEnd.getTime() + REDEMPTION_CUTOFF_HOURS * 60 * 60 * 1000)
+      if (new Date() > cutoff) {
+        return NextResponse.json(
+          { error: `Coupon redemption window has closed. Vouchers for this event can only be redeemed within ${REDEMPTION_CUTOFF_HOURS} hours of the event ending.` },
+          { status: 400 }
+        )
+      }
     }
 
     const { data: profile } = await supabase

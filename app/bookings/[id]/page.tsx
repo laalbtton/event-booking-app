@@ -8,6 +8,7 @@ import NavigationTabs from '@/components/NavigationTabs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { BookingDetailSkeleton } from '@/components/skeletons/BookingDetailSkeleton'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { ChevronLeft } from 'lucide-react'
@@ -214,8 +215,9 @@ export default function BookingDetailsPage() {
 
   if (!authResolved || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-2xl">Loading booking...</div>
+      <div className="min-h-screen bg-background">
+        <BookingDetailSkeleton />
+        <NavigationTabs />
       </div>
     )
   }

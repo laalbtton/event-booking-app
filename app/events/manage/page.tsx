@@ -523,10 +523,10 @@ export default function EventManagementPage() {
         audience_deposit_credits: isTicketed && formData.tickets_redeemable_credits_enabled
           ? parseInt(formData.tickets_redeemable_credits_amount || '5')
           : 0,
-        food_coupon_enabled: !isBookedShow && !isTicketed && !!formData.food_coupon_enabled,
-        spot_fee_credits: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.spot_fee_credits || '0') : 0,
-        food_coupon_value_cents: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_value_cents || '0') : 0,
-        food_coupon_expires_hours: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_expires_hours || '24') : 24,
+        food_coupon_enabled: !isBookedShow && !!formData.food_coupon_enabled,
+        spot_fee_credits: !isBookedShow && formData.food_coupon_enabled ? parseInt(formData.spot_fee_credits || '0') : 0,
+        food_coupon_value_cents: !isBookedShow && formData.food_coupon_enabled ? parseInt(formData.food_coupon_value_cents || '0') : 0,
+        food_coupon_expires_hours: !isBookedShow && formData.food_coupon_enabled ? parseInt(formData.food_coupon_expires_hours || '24') : 24,
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
         cancellation_hours: isBookedShow ? 0 : parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
@@ -858,10 +858,10 @@ export default function EventManagementPage() {
         audience_deposit_credits: isTicketed && formData.tickets_redeemable_credits_enabled
           ? parseInt(formData.tickets_redeemable_credits_amount || '5')
           : 0,
-        food_coupon_enabled: !isBookedShow && !isTicketed && !!formData.food_coupon_enabled,
-        spot_fee_credits: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.spot_fee_credits || '0') : 0,
-        food_coupon_value_cents: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_value_cents || '0') : 0,
-        food_coupon_expires_hours: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_expires_hours || '24') : 24,
+        food_coupon_enabled: !isBookedShow && !!formData.food_coupon_enabled,
+        spot_fee_credits: !isBookedShow && formData.food_coupon_enabled ? parseInt(formData.spot_fee_credits || '0') : 0,
+        food_coupon_value_cents: !isBookedShow && formData.food_coupon_enabled ? parseInt(formData.food_coupon_value_cents || '0') : 0,
+        food_coupon_expires_hours: !isBookedShow && formData.food_coupon_enabled ? parseInt(formData.food_coupon_expires_hours || '24') : 24,
         max_attendees: nextMax,
         cancellation_hours: isBookedShow ? 0 : parseInt(formData.cancellation_hours),
         registration_opens_at: formData.open_registration_now 
@@ -891,12 +891,15 @@ export default function EventManagementPage() {
       if (formData.tickets_enabled && !formData.external_event) {
         const ticketPrice = Math.round(parseFloat(formData.ticket_price) * 100)
         const ticketQuantity = parseInt(formData.ticket_quantity)
-        await supabase.from('event_tickets').upsert({
-          event_id: editingEvent.id,
-          name: 'General Admission',
-          price_cents: ticketPrice,
-          quantity: ticketQuantity,
-        })
+        await supabase.from('event_tickets').upsert(
+          {
+            event_id: editingEvent.id,
+            name: 'General Admission',
+            price_cents: ticketPrice,
+            quantity: ticketQuantity,
+          },
+          { onConflict: 'event_id' }
+        )
       }
 
       const isVarietyForPromotions =
@@ -924,6 +927,17 @@ export default function EventManagementPage() {
       setEditingEvent(null)
       resetFormData()
       loadEvents()
+
+      // Invalidate public page caches so the events listing reflects the change
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (token) {
+        fetch(`/api/events/${editingEvent.id}/revalidate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ slug: (editingEvent as any).slug }),
+        }).catch(() => null)
+      }
     } catch (error: any) {
       console.error('Full error:', error)
       toast.error('Error: ' + error.message)
@@ -1609,10 +1623,15 @@ export default function EventManagementPage() {
                   )}
                 </div>
 
+                {/* ── Performer Settings ─────────────────────── */}
+                <div className="border-t pt-4">
+                  <h4 className="text-base font-semibold text-gray-800 mb-4">Performer Settings</h4>
+                </div>
+
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Credits Required *
+                      Credits Req'd *
                     </label>
                     <input
                       type="number"
@@ -1662,138 +1681,7 @@ export default function EventManagementPage() {
                   </div>
                 </div>
 
-                {/* Tickets configuration (shown in Edit modal too) */}
-                {formData.event_type !== 'booked_show' && (
-                  <div className="border-t pt-4 space-y-3">
-                    <label className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={formData.tickets_enabled}
-                        onChange={(e) => {
-                          const nextValue = e.target.checked
-                          setFormData({
-                            ...formData,
-                            tickets_enabled: nextValue,
-                            external_event: nextValue ? formData.external_event : false,
-                            external_ticket_url: nextValue ? formData.external_ticket_url : '',
-                          })
-                        }}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                      />
-                      Add tickets
-                    </label>
-
-                    {formData.tickets_enabled && (
-                      <div className="space-y-4">
-                        <label className="flex items-center gap-2 text-sm text-gray-700">
-                          <input
-                            type="checkbox"
-                            checked={formData.external_event}
-                            onChange={(e) => setFormData({ ...formData, external_event: e.target.checked })}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                          />
-                          External event
-                        </label>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            External ticket link
-                          </label>
-                          <input
-                            type="url"
-                            value={formData.external_ticket_url}
-                            onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
-                            placeholder="https://tickets.example.com"
-                            disabled={!formData.external_event}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Audience capacity
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={formData.audience_capacity}
-                              onChange={(e) => setFormData({ ...formData, audience_capacity: e.target.value })}
-                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="flex items-center gap-2 text-sm text-gray-700">
-                              <input
-                                type="checkbox"
-                                checked={formData.tickets_redeemable_credits_enabled}
-                                onChange={(e) =>
-                                  setFormData({
-                                    ...formData,
-                                    tickets_redeemable_credits_enabled: e.target.checked,
-                                    tickets_redeemable_credits_amount: e.target.checked
-                                      ? (formData.tickets_redeemable_credits_amount || '5')
-                                      : '5',
-                                    ticket_price: e.target.checked ? '0' : formData.ticket_price,
-                                  })
-                                }
-                                className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                              />
-                              Redeemable credits
-                            </label>
-
-                            <input
-                              type="number"
-                              min="0"
-                              value={formData.tickets_redeemable_credits_amount}
-                              onChange={(e) =>
-                                setFormData({ ...formData, tickets_redeemable_credits_amount: e.target.value })
-                              }
-                              disabled={!formData.tickets_redeemable_credits_enabled}
-                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                            />
-                          </div>
-                        </div>
-
-                        {!formData.external_event && (
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Ticket price (CAD)
-                              </label>
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={formData.ticket_price}
-                                onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
-                                placeholder="20.00"
-                                disabled={formData.tickets_redeemable_credits_enabled}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Ticket quantity
-                              </label>
-                              <input
-                                type="number"
-                                min="1"
-                                value={formData.ticket_quantity}
-                                onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
-                                placeholder="100"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {formData.event_type === 'open_mic' && !formData.tickets_enabled && (
+                {formData.event_type === 'open_mic' && (
                   <div className="border-t pt-4 space-y-3">
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                       <input
@@ -1841,6 +1729,7 @@ export default function EventManagementPage() {
                   </div>
                 )}
 
+                {/* Multilingual + Open Registration stay under Performer Settings */}
                 <div className="border-t pt-4 space-y-3">
                   <div className="space-y-2 rounded-lg border p-3">
                     <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -1890,31 +1779,6 @@ export default function EventManagementPage() {
                       </div>
                     )}
                   </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <label className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={formData.tickets_enabled}
-                        onChange={(e) => {
-                          const nextValue = e.target.checked
-                          setFormData({
-                            ...formData,
-                            tickets_enabled: nextValue,
-                            external_event: nextValue ? formData.external_event : false,
-                            external_ticket_url: nextValue ? formData.external_ticket_url : '',
-                          })
-                        }}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                      />
-                      Add tickets
-                    </label>
-                    {formData.tickets_enabled && (
-                      <Button type="button" size="sm" variant="outline" onClick={() => setCreateStep('tickets')}>
-                        Configure tickets
-                      </Button>
-                    )}
-                  </div>
                 </div>
 
                 {formData.event_type !== 'booked_show' && (
@@ -1952,6 +1816,43 @@ export default function EventManagementPage() {
                     )}
                   </div>
                 )}
+
+                {/* ── Audience Settings ──────────────────────── */}
+                {formData.event_type !== 'booked_show' && (
+                  <div className="border-t pt-4 space-y-3">
+                    <h4 className="text-base font-semibold text-gray-800">Audience Settings</h4>
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={formData.tickets_enabled}
+                          onChange={(e) => {
+                            const nextValue = e.target.checked
+                            setFormData({
+                              ...formData,
+                              tickets_enabled: nextValue,
+                              external_event: nextValue ? formData.external_event : false,
+                              external_ticket_url: nextValue ? formData.external_ticket_url : '',
+                              ticket_price: nextValue && formData.event_type === 'open_mic' && !formData.ticket_price
+                                ? '5'
+                                : formData.ticket_price,
+                              ticket_quantity: nextValue && formData.event_type === 'open_mic' && !formData.ticket_quantity
+                                ? (formData.audience_capacity || '15')
+                                : formData.ticket_quantity,
+                            })
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        Add tickets
+                      </label>
+                      {formData.tickets_enabled && (
+                        <Button type="button" size="sm" variant="outline" onClick={() => setCreateStep('tickets')}>
+                          Configure tickets
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 </>
                 )}
 
@@ -1964,6 +1865,88 @@ export default function EventManagementPage() {
                       </Button>
                     </div>
 
+                    {/* 1. Audience capacity */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Audience capacity
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formData.audience_capacity}
+                        onChange={(e) => setFormData({ ...formData, audience_capacity: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    {/* 2. Ticket price (hidden for external events) */}
+                    {!formData.external_event && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Ticket price (CAD)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.ticket_price}
+                          onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
+                          placeholder="20.00"
+                          disabled={formData.tickets_redeemable_credits_enabled}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    )}
+
+                    {/* 3. Ticket quantity (hidden for external events) */}
+                    {!formData.external_event && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Ticket quantity
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max={Number(formData.audience_capacity) || undefined}
+                          value={formData.ticket_quantity}
+                          onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
+                          placeholder="100"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    )}
+
+                    {/* 4. Redeemable credits */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={formData.tickets_redeemable_credits_enabled}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              tickets_redeemable_credits_enabled: e.target.checked,
+                              tickets_redeemable_credits_amount: e.target.checked
+                                ? (formData.tickets_redeemable_credits_amount || '5')
+                                : '5',
+                              ticket_price: e.target.checked ? '0' : formData.ticket_price,
+                            })
+                          }
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        Redeemable credits
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formData.tickets_redeemable_credits_amount}
+                        onChange={(e) => setFormData({ ...formData, tickets_redeemable_credits_amount: e.target.value })}
+                        disabled={!formData.tickets_redeemable_credits_enabled}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                      />
+                    </div>
+
+                    {/* 5. External event checkbox */}
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                       <input
                         type="checkbox"
@@ -1971,96 +1954,22 @@ export default function EventManagementPage() {
                         onChange={(e) => setFormData({ ...formData, external_event: e.target.checked })}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                       />
-                      External event
+                      External event (tickets sold elsewhere)
                     </label>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        External ticket link
-                      </label>
-                      <input
-                        type="url"
-                        value={formData.external_ticket_url}
-                        onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
-                        placeholder="https://tickets.example.com"
-                        disabled={!formData.external_event}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* 6. External ticket link (only when external_event is true) */}
+                    {formData.external_event && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Audience capacity
+                          External ticket link
                         </label>
                         <input
-                          type="number"
-                          min="0"
-                          value={formData.audience_capacity}
-                          onChange={(e) => setFormData({ ...formData, audience_capacity: e.target.value })}
+                          type="url"
+                          value={formData.external_ticket_url}
+                          onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
+                          placeholder="https://tickets.example.com"
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm text-gray-700">
-                          <input
-                            type="checkbox"
-                            checked={formData.tickets_redeemable_credits_enabled}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                tickets_redeemable_credits_enabled: e.target.checked,
-                                tickets_redeemable_credits_amount: e.target.checked
-                                  ? (formData.tickets_redeemable_credits_amount || '5')
-                                  : '5',
-                                ticket_price: e.target.checked ? '0' : formData.ticket_price,
-                              })
-                            }
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                          />
-                          Redeemable credits
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={formData.tickets_redeemable_credits_amount}
-                          onChange={(e) => setFormData({ ...formData, tickets_redeemable_credits_amount: e.target.value })}
-                          disabled={!formData.tickets_redeemable_credits_enabled}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                        />
-                      </div>
-                    </div>
-
-                    {!formData.external_event && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Ticket price (CAD)
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={formData.ticket_price}
-                            onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
-                            placeholder="20.00"
-                            disabled={formData.tickets_redeemable_credits_enabled}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Ticket quantity
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={formData.ticket_quantity}
-                            onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
-                            placeholder="100"
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
                       </div>
                     )}
                   </div>
@@ -2121,26 +2030,28 @@ export default function EventManagementPage() {
                   </div>
                 )}
 
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium"
-                  >
-                    {submitting ? 'Creating...' : 'Create Event'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowCreateForm(false)
-                      setCreateStep('details')
-                      resetFormData()
-                    }}
-                    className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                {createStep === 'details' && (
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium"
+                    >
+                      {submitting ? 'Creating...' : 'Create Event'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCreateForm(false)
+                        setCreateStep('details')
+                        resetFormData()
+                      }}
+                      className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </form>
             </div>
           </div>
@@ -2407,10 +2318,15 @@ export default function EventManagementPage() {
                   </select>
                 </div>
 
+                {/* ── Performer Settings ─────────────────────── */}
+                <div className="border-t pt-4">
+                  <h4 className="text-base font-semibold text-gray-800 mb-4">Performer Settings</h4>
+                </div>
+
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Credits Required *
+                      Credits Req'd *
                     </label>
                     <input
                       type="number"
@@ -2460,163 +2376,8 @@ export default function EventManagementPage() {
                   </div>
                 </div>
 
-                {/* Tickets configuration (Edit Event modal) */}
-                {formData.event_type !== 'booked_show' && (
-                  <div className="border-t pt-4 space-y-3">
-                    <label className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={formData.tickets_enabled}
-                        onChange={(e) => {
-                          const nextValue = e.target.checked
-                          setFormData({
-                            ...formData,
-                            tickets_enabled: nextValue,
-                            external_event: nextValue ? formData.external_event : false,
-                            external_ticket_url: nextValue ? formData.external_ticket_url : '',
-                          })
-                          if (!nextValue) setEditTicketsOpen(false)
-                        }}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                      />
-                      Add tickets
-                    </label>
-
-                    {formData.tickets_enabled && !editTicketsOpen && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditTicketsOpen(true)}
-                      >
-                        Configure tickets
-                      </Button>
-                    )}
-
-                    {formData.tickets_enabled && editTicketsOpen && (
-                      <div className="space-y-4 pt-2">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-lg font-semibold text-gray-900">Ticket Settings</h4>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setEditTicketsOpen(false)}
-                          >
-                            Back
-                          </Button>
-                        </div>
-
-                        <label className="flex items-center gap-2 text-sm text-gray-700">
-                          <input
-                            type="checkbox"
-                            checked={formData.external_event}
-                            onChange={(e) => setFormData({ ...formData, external_event: e.target.checked })}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                          />
-                          External event
-                        </label>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            External ticket link
-                          </label>
-                          <input
-                            type="url"
-                            value={formData.external_ticket_url}
-                            onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
-                            placeholder="https://tickets.example.com"
-                            disabled={!formData.external_event}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Audience capacity
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={formData.audience_capacity}
-                              onChange={(e) => setFormData({ ...formData, audience_capacity: e.target.value })}
-                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="flex items-center gap-2 text-sm text-gray-700">
-                              <input
-                                type="checkbox"
-                                checked={formData.tickets_redeemable_credits_enabled}
-                                onChange={(e) =>
-                                  setFormData({
-                                    ...formData,
-                                    tickets_redeemable_credits_enabled: e.target.checked,
-                                    tickets_redeemable_credits_amount: e.target.checked
-                                      ? (formData.tickets_redeemable_credits_amount || '5')
-                                      : '5',
-                                    ticket_price: e.target.checked ? '0' : formData.ticket_price,
-                                  })
-                                }
-                                className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                              />
-                              Redeemable credits
-                            </label>
-
-                            <input
-                              type="number"
-                              min="0"
-                              value={formData.tickets_redeemable_credits_amount}
-                              onChange={(e) =>
-                                setFormData({ ...formData, tickets_redeemable_credits_amount: e.target.value })
-                              }
-                              disabled={!formData.tickets_redeemable_credits_enabled}
-                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                            />
-                          </div>
-                        </div>
-
-                        {!formData.external_event && (
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Ticket price (CAD)
-                              </label>
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={formData.ticket_price}
-                                onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
-                                placeholder="20.00"
-                                disabled={formData.tickets_redeemable_credits_enabled}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Ticket quantity
-                              </label>
-                              <input
-                                type="number"
-                                min="1"
-                                value={formData.ticket_quantity}
-                                onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
-                                placeholder="100"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {formData.event_type === 'open_mic' && !formData.tickets_enabled && (
+                {/* Venue food coupon — performer setting (open_mic only) */}
+                {formData.event_type === 'open_mic' && (
                   <div className="border-t pt-4 space-y-3">
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                       <input
@@ -2664,7 +2425,8 @@ export default function EventManagementPage() {
                   </div>
                 )}
 
-                <div className="border-t pt-4">
+                {/* Multilingual + Open Registration — under Performer Settings */}
+                <div className="border-t pt-4 space-y-3">
                   <div className="space-y-2 rounded-lg border p-3">
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                       <input
@@ -2681,6 +2443,9 @@ export default function EventManagementPage() {
                       />
                       Multilingual event
                     </label>
+                    <p className="text-xs text-muted-foreground">
+                      Default language is English. Add more languages when multilingual is enabled.
+                    </p>
                     {formData.is_multilingual && (
                       <div className="space-y-2">
                         <div className="flex gap-2">
@@ -2743,6 +2508,176 @@ export default function EventManagementPage() {
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           required={!formData.open_registration_now}
                         />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Audience Settings ──────────────────────── */}
+                {formData.event_type !== 'booked_show' && (
+                  <div className="border-t pt-4 space-y-3">
+                    <h4 className="text-base font-semibold text-gray-800">Audience Settings</h4>
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={formData.tickets_enabled}
+                          onChange={(e) => {
+                            const nextValue = e.target.checked
+                            setFormData({
+                              ...formData,
+                              tickets_enabled: nextValue,
+                              external_event: nextValue ? formData.external_event : false,
+                              external_ticket_url: nextValue ? formData.external_ticket_url : '',
+                              ticket_price: nextValue && formData.event_type === 'open_mic' && !formData.ticket_price
+                                ? '5'
+                                : formData.ticket_price,
+                              ticket_quantity: nextValue && formData.event_type === 'open_mic' && !formData.ticket_quantity
+                                ? (formData.audience_capacity || '15')
+                                : formData.ticket_quantity,
+                            })
+                            if (!nextValue) setEditTicketsOpen(false)
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        Add tickets
+                      </label>
+
+                      {formData.tickets_enabled && !editTicketsOpen && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditTicketsOpen(true)}
+                        >
+                          Configure tickets
+                        </Button>
+                      )}
+                    </div>
+
+                    {formData.tickets_enabled && editTicketsOpen && (
+                      <div className="space-y-4 pt-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-lg font-semibold text-gray-900">Ticket Settings</h4>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditTicketsOpen(false)}
+                          >
+                            Back
+                          </Button>
+                        </div>
+
+                        {/* 1. Audience capacity */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Audience capacity
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.audience_capacity}
+                            onChange={(e) => setFormData({ ...formData, audience_capacity: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+
+                        {/* 2. Ticket price (hidden for external events) */}
+                        {!formData.external_event && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Ticket price (CAD)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={formData.ticket_price}
+                              onChange={(e) => setFormData({ ...formData, ticket_price: e.target.value })}
+                              placeholder="20.00"
+                              disabled={formData.tickets_redeemable_credits_enabled}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        )}
+
+                        {/* 3. Ticket quantity (hidden for external events) */}
+                        {!formData.external_event && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Ticket quantity
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max={Number(formData.audience_capacity) || undefined}
+                              value={formData.ticket_quantity}
+                              onChange={(e) => setFormData({ ...formData, ticket_quantity: e.target.value })}
+                              placeholder="100"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        )}
+
+                        {/* 4. Redeemable credits */}
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={formData.tickets_redeemable_credits_enabled}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  tickets_redeemable_credits_enabled: e.target.checked,
+                                  tickets_redeemable_credits_amount: e.target.checked
+                                    ? (formData.tickets_redeemable_credits_amount || '5')
+                                    : '5',
+                                  ticket_price: e.target.checked ? '0' : formData.ticket_price,
+                                })
+                              }
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                            />
+                            Redeemable credits
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.tickets_redeemable_credits_amount}
+                            onChange={(e) =>
+                              setFormData({ ...formData, tickets_redeemable_credits_amount: e.target.value })
+                            }
+                            disabled={!formData.tickets_redeemable_credits_enabled}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                          />
+                        </div>
+
+                        {/* 5. External event checkbox */}
+                        <label className="flex items-center gap-2 text-sm text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={formData.external_event}
+                            onChange={(e) => setFormData({ ...formData, external_event: e.target.checked })}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                          />
+                          External event (tickets sold elsewhere)
+                        </label>
+
+                        {/* 6. External ticket link (only when external_event is true) */}
+                        {formData.external_event && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              External ticket link
+                            </label>
+                            <input
+                              type="url"
+                              value={formData.external_ticket_url}
+                              onChange={(e) => setFormData({ ...formData, external_ticket_url: e.target.value })}
+                              placeholder="https://tickets.example.com"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

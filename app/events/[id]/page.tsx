@@ -335,96 +335,86 @@ export default function EventDetailsPage() {
         router.replace(`/events/${(eventData as any).slug}`)
       }
 
-      // Load venue details if present
-      if (eventData.venue_id) {
-        const { data: venueData, error: venueError } = await supabase
-          .from('venues')
-          .select('id, name, address, parking_options, accessibility, food_drinks_available, drinks_available')
-          .eq('id', eventData.venue_id)
-          .single()
+      // Check if current user is the host / creator
+      if (user && eventData.host_user_id === user.id) setIsHost(true)
+      if (user && eventData.created_by === user.id) setIsEventCreator(true)
 
-        if (!venueError && venueData) {
-          setVenue(venueData as VenueDetails)
-        }
-      }
-
-      // Check if current user is the host
-      if (user && eventData.host_user_id === user.id) {
-        setIsHost(true)
-      }
-
-      // Check if current user is the event creator
-      if (user && eventData.created_by === user.id) {
-        setIsEventCreator(true)
-      }
-
-      // Load host profile if host is assigned
-      if (eventData.host_user_id) {
-        const { data: hostData, error: hostError } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', eventData.host_user_id)
-          .single()
-
-        if (!hostError && hostData) {
-          setHostProfile(hostData)
-        }
-      }
-
-      // Load confirmed bookings
-      const { data: confirmedData, error: confirmedError } = await supabase
-        .from('bookings')
-        .select(`
-          id,
-          status,
-          booking_scope,
-          event_art_type_id,
-          waitlist_position,
-          profiles (id, full_name, email, avatar_url, instagram_link)
-        `)
-        .eq('event_id', resolvedEventId)
-        .eq('status', 'confirmed')
-        .order('booked_at', { ascending: true })
-
-      if (confirmedError) throw confirmedError
-      const performerConfirmed = (confirmedData || []).filter((booking: any) => booking.booking_scope !== 'audience')
-      setConfirmedBookings(performerConfirmed as any)
-
-      // Load waitlist bookings
-      const { data: waitlistData, error: waitlistError } = await supabase
-        .from('bookings')
-        .select(`
-          id,
-          status,
-          booking_scope,
-          event_art_type_id,
-          waitlist_position,
-          profiles (id, full_name, email, avatar_url, instagram_link)
-        `)
-        .eq('event_id', resolvedEventId)
-        .eq('status', 'waitlist')
-        .order('waitlist_position', { ascending: true })
-
-      if (waitlistError) throw waitlistError
-      const performerWaitlist = (waitlistData || []).filter((booking: any) => booking.booking_scope !== 'audience')
-      setWaitlistBookings(performerWaitlist as any)
-
-      if (
+      const isVariety =
         eventData.event_type === 'open_mic' &&
         (eventData as any).open_mic_type === 'variety_arts_open_mic'
-      ) {
-        const { data: artRows } = await supabase
-          .from('event_art_types')
-          .select('id, art_type_name, slot_capacity')
-          .eq('event_id', resolvedEventId)
-          .order('created_at', { ascending: true })
 
-        const options = (artRows || []).map((row: any) => {
-          const confirmedCount = (confirmedData || []).filter(
-            (booking: any) => booking.booking_scope !== 'audience' && booking.event_art_type_id === row.id
+      // Fire all event-level queries in parallel — none depend on each other
+      const [
+        venueResult,
+        hostResult,
+        confirmedResult,
+        waitlistResult,
+        audienceCountResult,
+        artTypesResult,
+      ] = await Promise.all([
+        eventData.venue_id
+          ? supabase
+              .from('venues')
+              .select('id, name, address, parking_options, accessibility, food_drinks_available, drinks_available')
+              .eq('id', eventData.venue_id)
+              .single()
+          : Promise.resolve({ data: null, error: null }),
+        eventData.host_user_id
+          ? supabase
+              .from('profiles')
+              .select('full_name')
+              .eq('id', eventData.host_user_id)
+              .single()
+          : Promise.resolve({ data: null, error: null }),
+        supabase
+          .from('bookings')
+          .select('id, status, booking_scope, event_art_type_id, waitlist_position, profiles (id, full_name, email, avatar_url, instagram_link)')
+          .eq('event_id', resolvedEventId)
+          .eq('status', 'confirmed')
+          .order('booked_at', { ascending: true }),
+        supabase
+          .from('bookings')
+          .select('id, status, booking_scope, event_art_type_id, waitlist_position, profiles (id, full_name, email, avatar_url, instagram_link)')
+          .eq('event_id', resolvedEventId)
+          .eq('status', 'waitlist')
+          .order('waitlist_position', { ascending: true }),
+        supabase
+          .from('bookings')
+          .select('id', { count: 'exact', head: true })
+          .eq('event_id', resolvedEventId)
+          .eq('booking_scope', 'audience')
+          .in('status', ['confirmed', 'waitlist']),
+        isVariety
+          ? supabase
+              .from('event_art_types')
+              .select('id, art_type_name, slot_capacity')
+              .eq('event_id', resolvedEventId)
+              .order('created_at', { ascending: true })
+          : Promise.resolve({ data: null, error: null }),
+      ])
+
+      if (!venueResult.error && venueResult.data) setVenue(venueResult.data as VenueDetails)
+      if (!hostResult.error && hostResult.data) setHostProfile(hostResult.data)
+
+      if (confirmedResult.error) throw confirmedResult.error
+      const confirmedData = confirmedResult.data || []
+      const performerConfirmed = confirmedData.filter((b: any) => b.booking_scope !== 'audience')
+      setConfirmedBookings(performerConfirmed as any)
+
+      if (waitlistResult.error) throw waitlistResult.error
+      const waitlistData = waitlistResult.data || []
+      const performerWaitlist = waitlistData.filter((b: any) => b.booking_scope !== 'audience')
+      setWaitlistBookings(performerWaitlist as any)
+
+      setAudienceExpectedCount(audienceCountResult.count || 0)
+
+      if (isVariety && artTypesResult.data) {
+        const options = artTypesResult.data.map((row: any) => {
+          const confirmedCount = confirmedData.filter(
+            (b: any) => b.booking_scope !== 'audience' && b.event_art_type_id === row.id
           ).length
-          const waitlistCount = (waitlistData || []).filter(
-            (booking: any) => booking.booking_scope !== 'audience' && booking.event_art_type_id === row.id
+          const waitlistCount = waitlistData.filter(
+            (b: any) => b.booking_scope !== 'audience' && b.event_art_type_id === row.id
           ).length
           return {
             id: row.id,
@@ -441,50 +431,41 @@ export default function EventDetailsPage() {
         setSelectedVarietyOptionId('')
       }
 
-      const { count: audienceCount } = await supabase
-        .from('bookings')
-        .select('id', { count: 'exact', head: true })
-        .eq('event_id', resolvedEventId)
-        .eq('booking_scope', 'audience')
-        .in('status', ['confirmed', 'waitlist'])
-
-      setAudienceExpectedCount(audienceCount || 0)
-
-      // User-specific rows must use the resolved UUID — URL param may be a public slug, not event_id.
+      // User-specific rows — all three only need user.id + resolvedEventId
       if (user) {
-        const { data: userBookingData } = await supabase
-          .from('bookings')
-          .select('id, status')
-          .eq('event_id', resolvedEventId)
-          .eq('user_id', user.id)
-          .in('status', ['confirmed', 'waitlist'])
-          .order('booked_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        setUserBooking(userBookingData || null)
+        const [userBookingResult, prefResult, alertResult] = await Promise.all([
+          supabase
+            .from('bookings')
+            .select('id, status')
+            .eq('event_id', resolvedEventId)
+            .eq('user_id', user.id)
+            .in('status', ['confirmed', 'waitlist'])
+            .order('booked_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('poster_auto_post_prefs')
+            .select('auto_post_enabled')
+            .eq('user_id', user.id)
+            .eq('event_id', resolvedEventId)
+            .maybeSingle(),
+          supabase
+            .from('registration_alerts')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('event_id', resolvedEventId)
+            .maybeSingle(),
+        ])
 
-        const { data: prefData } = await supabase
-          .from('poster_auto_post_prefs')
-          .select('auto_post_enabled')
-          .eq('user_id', user.id)
-          .eq('event_id', resolvedEventId)
-          .maybeSingle()
-        setEventAutoPostEnabled(!!prefData?.auto_post_enabled)
+        setUserBooking(userBookingResult.data || null)
+        setEventAutoPostEnabled(!!prefResult.data?.auto_post_enabled)
 
-        const { data: alertsData, error: alertsError } = await supabase
-          .from('registration_alerts')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('event_id', resolvedEventId)
-          .maybeSingle()
-        if (alertsError) {
-          const missingTable = alertsError.code === '42P01' || alertsError.message?.includes('registration_alerts')
-          if (!missingTable) {
-            console.warn('Error loading registration alert:', alertsError)
-          }
+        if (alertResult.error) {
+          const missingTable = alertResult.error.code === '42P01' || alertResult.error.message?.includes('registration_alerts')
+          if (!missingTable) console.warn('Error loading registration alert:', alertResult.error)
           setAlertSet(false)
         } else {
-          setAlertSet(!!alertsData)
+          setAlertSet(!!alertResult.data)
         }
       }
     } catch (error: any) {
