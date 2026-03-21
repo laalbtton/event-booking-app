@@ -53,13 +53,16 @@ export async function POST(
     }
 
     const now = new Date()
+    // Non-primary cross-submissions expire after 7 days if not reviewed
     const expiresAt = isPrimary ? null : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
     const { error: insertError } = await supabase.from('event_communities').insert({
       event_id: eventId,
       community_id: communityId,
       is_primary: Boolean(isPrimary),
-      status: isPrimary ? 'approved' : 'pending',
+      // Always start as 'pending' — the community admin approves it via the review route
+      // (which also sets events.status = 'active')
+      status: 'pending',
       submitted_by: authData.user.id,
       submitted_at: now.toISOString(),
       expires_at: expiresAt,

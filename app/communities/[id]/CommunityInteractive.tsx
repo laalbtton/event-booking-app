@@ -113,7 +113,10 @@ export function CommunityInteractive({
       setMyRole(role)
 
       if (['admin', 'co_admin'].includes(role || '')) {
-        const [memsRes, ecReqsRes, crossSubsRes, pendingEvLinksRes, pendingVenuesRes] = await Promise.all([
+        const { data: sessionData } = await supabase.auth.getSession()
+        const accessToken = sessionData.session?.access_token
+
+        const [memsRes, ecReqsRes, crossSubsRes, pendingVenuesRes, pendingEventsRes] = await Promise.all([
           supabase
             .from('community_members')
             .select('id, user_id, role, joined_at, profiles(full_name, email)')
@@ -129,51 +132,35 @@ export function CommunityInteractive({
             .select('id, event_id, status, submitted_at, expires_at, events(title, slug)')
             .eq('community_id', communityId)
             .eq('status', 'pending'),
-          // Pending events: events with status=pending_approval linked to this community
-          supabase
-            .from('event_communities')
-            .select('event_id, events(id, title, date, created_by, profiles(full_name, email))')
-            .eq('community_id', communityId),
           // Pending venues for this community
           supabase
             .from('venues')
             .select('id, name, address, requested_at, profiles:requested_by(full_name, email)')
             .eq('community_id', communityId)
             .eq('status', 'pending'),
+          // Pending events via service-role API route (bypasses RLS on events table)
+          accessToken
+            ? fetch(`/api/communities/${communityId}/pending-events`, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+              }).then(r => r.json()).catch(() => ({ events: [] }))
+            : Promise.resolve({ events: [] }),
         ])
 
         setMembers((memsRes.data || []) as unknown as CommunityMemberRow[])
         setEcRequests((ecReqsRes.data || []) as unknown as ECRequest[])
         setCrossSubmissions((crossSubsRes.data || []) as unknown as CrossSubmission[])
 
-        // Extract pending events from event_communities links
-        const pendingEvList: PendingEvent[] = []
-        for (const link of (pendingEvLinksRes.data || []) as any[]) {
-          const ev = link.events
-          if (ev && ev.id && ev.date) {
-            // We'll check event status via a separate query since we can't filter on joined table's column
-            pendingEvList.push({
-              id: ev.id,
-              title: ev.title || 'Untitled',
-              date: ev.date,
-              created_by: ev.created_by,
-              profiles: ev.profiles || null,
-            })
-          }
-        }
-
-        // Filter only pending_approval events
-        if (pendingEvList.length > 0) {
-          const { data: evStatusData } = await supabase
-            .from('events')
-            .select('id')
-            .in('id', pendingEvList.map(e => e.id))
-            .eq('status', 'pending_approval')
-          const pendingIds = new Set((evStatusData || []).map((e: any) => e.id))
-          setPendingEvents(pendingEvList.filter(e => pendingIds.has(e.id)))
-        } else {
-          setPendingEvents([])
-        }
+        // Pending events come from the API route which uses service role
+        const apiEvents = (pendingEventsRes as { events?: any[] }).events || []
+        setPendingEvents(
+          apiEvents.map((ev: any) => ({
+            id: ev.id,
+            title: ev.title || 'Untitled',
+            date: ev.date,
+            created_by: ev.created_by,
+            profiles: ev.profiles || null,
+          }))
+        )
 
         setPendingVenues((pendingVenuesRes.data || []) as unknown as PendingVenue[])
       }

@@ -95,7 +95,7 @@ export default function NotificationsPage() {
     }
   }
 
-  function handleNotificationClick(notification: Notification) {
+  async function handleNotificationClick(notification: Notification) {
     // Mark as read when clicked
     if (!notification.read) {
       markAsRead(notification.id)
@@ -104,6 +104,26 @@ export default function NotificationsPage() {
     // Navigate based on notification type
     if (notification.type === 'event_creator_request') {
       router.push('/admin/requests')
+    } else if (notification.type === 'event_pending_approval' && notification.related_event_id) {
+      // Look up the primary community for this event and go to the community admin panel
+      const { data: link } = await supabase
+        .from('event_communities')
+        .select('community_id')
+        .eq('event_id', notification.related_event_id)
+        .eq('is_primary', true)
+        .maybeSingle()
+      if (link?.community_id) {
+        router.push(`/communities/${link.community_id}`)
+      } else {
+        // Fallback: look up any community link for this event
+        const { data: anyLink } = await supabase
+          .from('event_communities')
+          .select('community_id')
+          .eq('event_id', notification.related_event_id)
+          .limit(1)
+          .maybeSingle()
+        router.push(anyLink?.community_id ? `/communities/${anyLink.community_id}` : '/dashboard')
+      }
     } else if (notification.related_event_id) {
       router.push(`/events/${notification.related_event_id}`)
     } else if (notification.related_booking_id) {
