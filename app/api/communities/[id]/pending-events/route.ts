@@ -49,12 +49,14 @@ export async function GET(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
-    // Fetch all event_communities links for this community (no status filter —
-    // primary events land as 'approved' in event_communities but 'pending_approval' in events)
+    // Fetch primary community links only — cross-community submissions are handled separately.
+    // We don't filter by event_communities.status here because we want to catch events
+    // that are still pending_approval in the events table regardless of link status.
     const { data: links, error: linksError } = await supabase
       .from('event_communities')
       .select('event_id')
       .eq('community_id', communityId)
+      .eq('is_primary', true)
 
     if (linksError) return NextResponse.json({ error: linksError.message }, { status: 500 })
 

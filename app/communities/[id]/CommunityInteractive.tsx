@@ -131,7 +131,8 @@ export function CommunityInteractive({
             .from('event_communities')
             .select('id, event_id, status, submitted_at, expires_at, events(title, slug)')
             .eq('community_id', communityId)
-            .eq('status', 'pending'),
+            .eq('status', 'pending')
+            .eq('is_primary', false),
           // Pending venues for this community
           supabase
             .from('venues')

@@ -56,14 +56,14 @@ export async function POST(
     // Verify the submission belongs to this community and is pending
     const { data: submission } = await supabase
       .from('event_communities')
-      .select('status, submitted_by, event_id, expires_at')
+      .select('status, submitted_by, event_id, expires_at, is_primary')
       .eq('id', eventCommunityId)
       .eq('community_id', communityId)
       .single()
 
     if (!submission) return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
 
-    const sub = submission as { status: string; submitted_by: string; event_id: string; expires_at: string | null }
+    const sub = submission as { status: string; submitted_by: string; event_id: string; expires_at: string | null; is_primary: boolean }
 
     if (sub.status !== 'pending') {
       return NextResponse.json({ error: 'This submission has already been reviewed' }, { status: 400 })
@@ -88,6 +88,22 @@ export async function POST(
       .eq('id', eventCommunityId)
 
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 })
+
+    // If this is the primary community link and the event is being approved,
+    // also activate the event itself (same as handleReviewPendingEvent)
+    if (action === 'approved' && sub.is_primary) {
+      const { data: ev } = await supabase
+        .from('events')
+        .select('status')
+        .eq('id', sub.event_id)
+        .single()
+      if ((ev as { status?: string } | null)?.status === 'pending_approval') {
+        await supabase
+          .from('events')
+          .update({ status: 'active' })
+          .eq('id', sub.event_id)
+      }
+    }
 
     // Notify the submitter
     const { data: community } = await supabase
