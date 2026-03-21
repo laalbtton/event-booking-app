@@ -46,7 +46,7 @@ export default function CreditPurchaseOptions({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         {getCreditPacks().map((pack) => (
           <Card key={pack.id} className="border border-gray-200 shadow-sm">
             <CardContent className="p-4 flex flex-col gap-3">

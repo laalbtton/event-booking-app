@@ -12,13 +12,6 @@ const STRIPE_MODE = (process.env.NEXT_PUBLIC_STRIPE_MODE || 'test') as StripeMod
 
 const TEST_PACKS: CreditPack[] = [
   {
-    id: 'credits-5',
-    label: '5 credits',
-    credits: 5,
-    amountCents: 500,
-    priceId: 'price_1Sz7J5Ah62Qt3gHu8JklD7A4',
-  },
-  {
     id: 'credits-10',
     label: '10 credits',
     credits: 10,
@@ -35,13 +28,6 @@ const TEST_PACKS: CreditPack[] = [
 ]
 
 const LIVE_PACKS: CreditPack[] = [
-  {
-    id: 'credits-5',
-    label: '5 credits',
-    credits: 5,
-    amountCents: 500,
-    priceId: 'price_1SyxsVAh62Qt3gHuY323mure',
-  },
   {
     id: 'credits-10',
     label: '10 credits',
@@ -62,5 +48,5 @@ export function getCreditPacks(): CreditPack[] {
   return STRIPE_MODE === 'live' ? LIVE_PACKS : TEST_PACKS
 }
 
-export const MIN_CUSTOM_CREDITS = 5
+export const MIN_CUSTOM_CREDITS = 1
 export const MAX_CUSTOM_CREDITS = 500
