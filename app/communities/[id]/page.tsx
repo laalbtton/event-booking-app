@@ -32,7 +32,7 @@ export default async function CommunityDetailPage({ params }: Props) {
     <>
       <PublicHeader />
 
-      <div className="min-h-screen bg-background pb-24">
+      <div className="min-h-screen bg-background pb-28">
         <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
           {/* Back nav */}
           <div className="flex items-center gap-2">

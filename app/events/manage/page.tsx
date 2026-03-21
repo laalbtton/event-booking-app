@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/lib/supabase'
@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
-import { QrCode, Link as LinkIcon, Image as ImageIcon, Upload, Trash2 } from 'lucide-react'
+import { QrCode, Link as LinkIcon, Image as ImageIcon, Trash2, MoreVertical, Copy, Edit, X, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { appendSlugSuffix, buildEventSlugBase } from '@/lib/seo/slug'
 import { toast } from 'sonner'
@@ -51,6 +51,11 @@ export default function EventManagementPage() {
   const [editTicketsOpen, setEditTicketsOpen] = useState(false)
   const [languageInput, setLanguageInput] = useState('')
   const [varietyArtTypes, setVarietyArtTypes] = useState<Array<{ id?: string; art_type_name: string; slot_capacity: string }>>([])
+
+  // Three-dot menu state
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const posterInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   // Venue request state
   const [showVenueRequestForm, setShowVenueRequestForm] = useState(false)
@@ -990,6 +995,86 @@ export default function EventManagementPage() {
     }
   }
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!openMenuId) return
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [openMenuId])
+
+  async function handleDuplicateEvent(event: Event) {
+    setOpenMenuId(null)
+
+    const eventDate = new Date(event.date)
+    const localDateTime = toLocalDateTimeString(eventDate)
+    const endTimeValue = (event as any).end_time
+      ? toLocalDateTimeString(new Date((event as any).end_time))
+      : computeEndTime(localDateTime, 120)
+    const durationMinutes = computeDurationMinutes(localDateTime, endTimeValue) || 120
+
+    const { data: ticketData } = await supabase
+      .from('event_tickets')
+      .select('price_cents, quantity')
+      .eq('event_id', event.id)
+      .maybeSingle()
+
+    const { data: artTypeData } = await supabase
+      .from('event_art_types')
+      .select('art_type_name, slot_capacity')
+      .eq('event_id', event.id)
+      .order('created_at', { ascending: true })
+
+    setFormData({
+      title: `${event.title} (Copy)`,
+      description: event.description || '',
+      theme: event.theme || '',
+      rating: (event as any).rating || '18+',
+      event_type: (event as any).event_type || 'open_mic',
+      open_mic_type: (event as any).open_mic_type || 'comedy_open_mic',
+      variety_use_max_attendees: !!(event as any).variety_use_max_attendees,
+      is_multilingual: !!(event as any).is_multilingual,
+      languages: Array.isArray((event as any).languages) && (event as any).languages.length > 0
+        ? (event as any).languages
+        : ['English'],
+      tickets_enabled: !!(event as any).tickets_enabled,
+      external_event: !!(event as any).external_event,
+      external_ticket_url: (event as any).external_ticket_url || '',
+      ticket_price: ticketData ? (ticketData.price_cents / 100).toFixed(2) : '',
+      ticket_quantity: ticketData ? ticketData.quantity.toString() : '',
+      // Clear the date — the user must pick a new one
+      date: '',
+      end_time: '',
+      duration_hours: minutesToHoursString(durationMinutes),
+      venue_id: (event as any).venue_id || '',
+      credits_required: event.credits_required.toString(),
+      audience_capacity: ((event as any).audience_capacity ?? 15).toString(),
+      tickets_redeemable_credits_enabled: Number((event as any).audience_deposit_credits || 0) > 0,
+      tickets_redeemable_credits_amount: (((event as any).audience_deposit_credits ?? 5) || 5).toString(),
+      food_coupon_enabled: !!(event as any).food_coupon_enabled,
+      spot_fee_credits: ((event as any).spot_fee_credits ?? 5).toString(),
+      food_coupon_value_cents: ((event as any).food_coupon_value_cents ?? 500).toString(),
+      food_coupon_expires_hours: ((event as any).food_coupon_expires_hours ?? 24).toString(),
+      max_attendees: event.max_attendees ? event.max_attendees.toString() : '',
+      cancellation_hours: event.cancellation_hours.toString(),
+      open_registration_now: true,
+      registration_opens_at: '',
+    })
+    setVarietyArtTypes(
+      (artTypeData || []).map((item: any) => ({
+        art_type_name: item.art_type_name,
+        slot_capacity: String(item.slot_capacity),
+      }))
+    )
+    setCreateStep('details')
+    setShowCreateForm(true)
+    toast.info('Fill in a new date and submit to create the duplicate event.')
+  }
+
   async function handlePosterUpload(eventId: string, file: File) {
     if (!file.type.startsWith('image/')) {
       toast.error('Please upload an image file')
@@ -1144,12 +1229,139 @@ export default function EventManagementPage() {
                 })
                 .map((event) => (
                 <Card key={event.id} className="shadow-sm">
+                  {/* Hidden file input for poster upload — triggered via ref */}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    ref={(el) => { posterInputRefs.current[event.id] = el }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handlePosterUpload(event.id, file)
+                      e.currentTarget.value = ''
+                    }}
+                  />
                   <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="text-lg font-bold">{event.title}</CardTitle>
-                      {event.status === 'cancelled' && (
-                        <Badge variant="destructive">Cancelled</Badge>
-                      )}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-lg font-bold leading-tight">{event.title}</CardTitle>
+                        {event.status === 'cancelled' && (
+                          <Badge variant="destructive" className="mt-1">Cancelled</Badge>
+                        )}
+                        {event.status === 'pending_approval' && (
+                          <Badge variant="secondary" className="mt-1">Pending Approval</Badge>
+                        )}
+                      </div>
+                      {/* Three-dot menu */}
+                      <div className="relative shrink-0" ref={openMenuId === event.id ? menuRef : undefined}>
+                        <button
+                          type="button"
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setOpenMenuId(openMenuId === event.id ? null : event.id)}
+                          aria-label="Event actions"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                        {openMenuId === event.id && (
+                          <div className="absolute right-0 top-8 z-50 w-52 bg-popover border border-border rounded-lg shadow-lg py-1 text-sm">
+                            {/* Edit — upcoming only, not cancelled */}
+                            {activeTab === 'upcoming' && event.status !== 'cancelled' && (
+                              <button
+                                type="button"
+                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
+                                onClick={() => { setOpenMenuId(null); handleEditEvent(event) }}
+                              >
+                                <Edit className="w-4 h-4 text-muted-foreground" />
+                                Edit Details
+                              </button>
+                            )}
+                            {/* Copy public link */}
+                            <button
+                              type="button"
+                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
+                              onClick={() => {
+                                setOpenMenuId(null)
+                                const publicUrl = `${window.location.origin}/events/${event.slug || event.id}`
+                                navigator.clipboard.writeText(publicUrl)
+                                toast.success('Public link copied!')
+                              }}
+                            >
+                              <LinkIcon className="w-4 h-4 text-muted-foreground" />
+                              Copy Public Link
+                            </button>
+                            {/* Poster upload — upcoming only */}
+                            {activeTab === 'upcoming' && (
+                              <button
+                                type="button"
+                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
+                                disabled={posterUploadingId === event.id}
+                                onClick={() => {
+                                  setOpenMenuId(null)
+                                  posterInputRefs.current[event.id]?.click()
+                                }}
+                              >
+                                <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                                {posterUploadingId === event.id ? 'Saving…' : event.poster_url ? 'Update Poster' : 'Add Poster'}
+                              </button>
+                            )}
+                            {/* Remove poster — upcoming only, if poster exists */}
+                            {activeTab === 'upcoming' && event.poster_url && (
+                              <button
+                                type="button"
+                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left text-rose-600"
+                                disabled={posterUploadingId === event.id}
+                                onClick={() => { setOpenMenuId(null); handlePosterRemove(event.id) }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Remove Poster
+                              </button>
+                            )}
+                            {/* QR Code — upcoming only */}
+                            {activeTab === 'upcoming' && (
+                              <Link
+                                href={`/events/${event.id}/qr`}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
+                                onClick={() => setOpenMenuId(null)}
+                              >
+                                <QrCode className="w-4 h-4 text-muted-foreground" />
+                                Generate QR Code
+                              </Link>
+                            )}
+                            {/* Attendance */}
+                            <Link
+                              href={`/events/${event.id}/attendance`}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
+                              onClick={() => setOpenMenuId(null)}
+                            >
+                              <Users className="w-4 h-4 text-muted-foreground" />
+                              {activeTab === 'upcoming' ? 'Manage Attendance' : 'View Attendance'}
+                            </Link>
+                            {/* Duplicate */}
+                            <button
+                              type="button"
+                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
+                              onClick={() => handleDuplicateEvent(event)}
+                            >
+                              <Copy className="w-4 h-4 text-muted-foreground" />
+                              Duplicate Event
+                            </button>
+                            {/* Cancel — upcoming only, not already cancelled */}
+                            {activeTab === 'upcoming' && event.status !== 'cancelled' && (
+                              <>
+                                <div className="border-t border-border my-1" />
+                                <button
+                                  type="button"
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left text-destructive"
+                                  onClick={() => { setOpenMenuId(null); handleCancelEvent(event.id, event.title) }}
+                                >
+                                  <X className="w-4 h-4" />
+                                  Cancel Event
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -1171,126 +1383,6 @@ export default function EventManagementPage() {
                       )}
                     </div>
 
-                    <Separator />
-
-                    <div className="flex flex-wrap gap-2">
-                      {activeTab === 'upcoming' && (
-                        <>
-                          <Button
-                            onClick={() => handleEditEvent(event)}
-                            size="sm"
-                            className="flex-1"
-                            title="Edit Event"
-                            disabled={event.status === 'cancelled'}
-                          >
-                            ✏️ Edit Details
-                          </Button>
-                          
-                          <Button
-                            onClick={() => handleCancelEvent(event.id, event.title)}
-                            variant="destructive"
-                            size="sm"
-                            disabled={event.status === 'cancelled'}
-                            title="Cancel Event"
-                          >
-                            Cancel
-                          </Button>
-                        </>
-                      )}
-                      
-                      <Button
-                        onClick={() => {
-                          const publicUrl = `${window.location.origin}/events/${event.slug || event.id}`
-                          navigator.clipboard.writeText(publicUrl)
-                          toast.success('Public link copied!')
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
-                        title="Copy Public Link"
-                      >
-                        <LinkIcon className="w-4 h-4" />
-                      </Button>
-
-                      {activeTab === 'upcoming' && (
-                        <>
-                          <label className="inline-flex">
-                            <input
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0]
-                                if (file) handlePosterUpload(event.id, file)
-                                e.currentTarget.value = ''
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="bg-sky-50 hover:bg-sky-100 border-sky-200 text-sky-700"
-                              disabled={posterUploadingId === event.id}
-                              asChild
-                            >
-                              <span>
-                                {posterUploadingId === event.id ? 'Saving...' : (event.poster_url ? 'Update Poster' : 'Add Poster')}
-                              </span>
-                            </Button>
-                          </label>
-                          {event.poster_url && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-700"
-                              onClick={() => handlePosterRemove(event.id)}
-                              disabled={posterUploadingId === event.id}
-                              title="Remove Poster"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700"
-                            asChild
-                            title="Generate QR Code"
-                          >
-                            <Link href={`/events/${event.id}/qr`}>
-                              <QrCode className="w-4 h-4" />
-                            </Link>
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="bg-orange-50 hover:bg-orange-100 border-orange-200 text-orange-700"
-                            asChild
-                            title="Manage Attendance"
-                          >
-                            <Link href={`/events/${event.id}/attendance`}>
-                              👥
-                            </Link>
-                          </Button>
-                        </>
-                      )}
-
-                      {activeTab === 'past' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="bg-orange-50 hover:bg-orange-100 border-orange-200 text-orange-700 flex-1"
-                          asChild
-                          title="View Attendance"
-                        >
-                          <Link href={`/events/${event.id}/attendance`}>
-                            👥 View Attendance
-                          </Link>
-                        </Button>
-                      )}
-                    </div>
                     {event.poster_url && (
                       <div className="text-xs text-sky-700 space-y-1">
                         <div className="flex items-center gap-1">

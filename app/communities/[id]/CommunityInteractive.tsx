@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
+import NavigationTabs from '@/components/NavigationTabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -745,6 +746,9 @@ export function CommunityInteractive({
           </CardContent>
         </Card>
       )}
+
+      {/* Bottom navigation for authenticated users */}
+      {authResolved && user && <NavigationTabs />}
     </div>
   )
 }
