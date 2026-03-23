@@ -29,7 +29,15 @@ export default function NavigationTabs() {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [chatOverlayOpen, setChatOverlayOpen] = useState(false)
   const warnedRealtimeRef = useRef(false)
+
+  useEffect(() => {
+    const check = () => setChatOverlayOpen(document.body.classList.contains('chat-overlay-open'))
+    const observer = new MutationObserver(check)
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
   const [feedbackForm, setFeedbackForm] = useState({
     email: '',
     rating: '',
@@ -277,6 +285,8 @@ export default function NavigationTabs() {
   const isActive = (path: string) => pathname === path || pathname?.startsWith(path + '/')
   const navItemClass =
     'flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors'
+
+  if (chatOverlayOpen) return null
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 shadow-lg border-t border-gray-200 dark:border-zinc-800 z-50 safe-area-inset-bottom">

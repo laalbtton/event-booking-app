@@ -57,6 +57,8 @@ type InviteItem = {
     title: string
     date: string
     location: string | null
+    credits_required: number | null
+    event_type: string | null
   }
 }
 
@@ -236,7 +238,7 @@ export default function ProfilePage() {
           .order('booked_at', { ascending: false }),
         supabase
           .from('event_invites')
-          .select('id, status, created_at, events (id, title, date, location)')
+          .select('id, status, created_at, events (id, title, date, location, credits_required, event_type)')
           .eq('invited_user_id', userId)
           .eq('status', 'pending')
           .order('created_at', { ascending: false }),
@@ -675,7 +677,23 @@ export default function ProfilePage() {
     }
   }
 
-  async function respondToInvite(inviteId: string, action: 'accept' | 'decline') {
+  async function respondToInvite(inviteId: string, action: 'accept' | 'decline', invite?: InviteItem) {
+    // Show credit charge confirmation for booked shows with a non-zero credit cost
+    if (action === 'accept' && invite) {
+      const creditsRequired = invite.events.credits_required ?? 0
+      const isBookedShow = invite.events.event_type === 'booked_show'
+      if (isBookedShow && creditsRequired > 0) {
+        const shouldProceed = await confirm({
+          title: 'Confirm acceptance',
+          message: `Accepting this invite will charge you ${creditsRequired} credit${creditsRequired !== 1 ? 's' : ''}.\n\nOnly proceed if you are okay with this charge.`,
+          confirmText: `Accept & pay ${creditsRequired} credit${creditsRequired !== 1 ? 's' : ''}`,
+          cancelText: 'Cancel',
+          variant: 'default',
+        })
+        if (!shouldProceed) return
+      }
+    }
+
     setRespondingInvite(inviteId)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -1222,11 +1240,16 @@ export default function ProfilePage() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{invite.events.title}</p>
                         <p className="text-xs text-muted-foreground truncate">{formatDate(invite.events.date)}</p>
+                        {invite.events.event_type === 'booked_show' && (invite.events.credits_required ?? 0) > 0 && (
+                          <p className="text-xs text-amber-600 font-medium mt-0.5">
+                            {invite.events.credits_required} credit{invite.events.credits_required !== 1 ? 's' : ''} required
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
                           size="sm"
-                          onClick={() => respondToInvite(invite.id, 'accept')}
+                          onClick={() => respondToInvite(invite.id, 'accept', invite)}
                           disabled={respondingInvite === invite.id}
                         >
                           Accept
@@ -1234,7 +1257,7 @@ export default function ProfilePage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => respondToInvite(invite.id, 'decline')}
+                          onClick={() => respondToInvite(invite.id, 'decline', invite)}
                           disabled={respondingInvite === invite.id}
                         >
                           Decline

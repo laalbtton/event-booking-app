@@ -41,9 +41,29 @@ export default function EventChat({
   const [notifEnabled, setNotifEnabled] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  // Cache of user_id -> profile so real-time messages can be enriched immediately
+  const profileCache = useRef<Record<string, { full_name: string | null; avatar_url: string | null }>>({})
+
+  async function getProfile(userId: string) {
+    if (profileCache.current[userId]) return profileCache.current[userId]
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, avatar_url')
+      .eq('id', userId)
+      .maybeSingle()
+    const profile = data ?? { full_name: null, avatar_url: null }
+    profileCache.current[userId] = profile
+    return profile
+  }
 
   // Can send = has a confirmed booking for this event (or is host) AND mode allows it
   const canSend = canSendMessages && (isHost || chatMode === 'open')
+
+  // Hide the bottom navigation bar while chat is open
+  useEffect(() => {
+    document.body.classList.add('chat-overlay-open')
+    return () => document.body.classList.remove('chat-overlay-open')
+  }, [])
 
   // Load message history and notification pref
   useEffect(() => {
@@ -58,7 +78,12 @@ export default function EventChat({
         })
         const json = await res.json()
         if (res.ok) {
-          setMessages(json.messages || [])
+          const msgs: ChatMessage[] = json.messages || []
+          // Seed the profile cache from already-loaded messages
+          msgs.forEach((m) => {
+            if (m.profiles) profileCache.current[m.user_id] = m.profiles
+          })
+          setMessages(msgs)
         } else {
           setLoadError(json.error || 'Failed to load messages')
         }
@@ -92,11 +117,14 @@ export default function EventChat({
           table: 'event_chat_messages',
           filter: `event_id=eq.${eventId}`,
         },
-        (payload) => {
+        async (payload) => {
           const newMsg = payload.new as ChatMessage
+          // Real-time rows don't include joined profile data — enrich from cache or fetch
+          const profile = await getProfile(newMsg.user_id)
+          const enriched: ChatMessage = { ...newMsg, profiles: profile }
           setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev
-            return [...prev, newMsg]
+            if (prev.some((m) => m.id === enriched.id)) return prev
+            return [...prev, enriched]
           })
         }
       )
@@ -171,7 +199,7 @@ export default function EventChat({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-zinc-950">
+    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950">
       {/* Header */}
       <div className="flex items-center gap-3 px-3 py-3 border-b border-zinc-800 bg-zinc-900">
         {/* Back button */}

@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, max_attendees, event_type')
+      .select('id, max_attendees, event_type, credits_required, cancellation_hours')
       .eq('id', invite.event_id)
       .single()
 
@@ -85,14 +85,47 @@ export async function POST(request: NextRequest) {
       .eq('user_id', authData.user.id)
       .in('status', ['confirmed', 'waitlist'])
 
+    const creditsRequired = event.credits_required ?? 0
+
     if ((existingBooking ?? 0) === 0) {
+      // Deduct credits if the event charges performers
+      if (creditsRequired > 0) {
+        const { data: creditData } = await supabase
+          .from('profiles')
+          .select('credits')
+          .eq('id', authData.user.id)
+          .single()
+
+        const currentCredits = creditData?.credits ?? 0
+        if (currentCredits < creditsRequired) {
+          return NextResponse.json(
+            { error: `Insufficient credits. You need ${creditsRequired} but have ${currentCredits}.` },
+            { status: 400 }
+          )
+        }
+
+        await supabase
+          .from('profiles')
+          .update({ credits: currentCredits - creditsRequired })
+          .eq('id', authData.user.id)
+
+        await supabase.from('credit_transactions').insert({
+          user_id: authData.user.id,
+          amount: -creditsRequired,
+          transaction_type: 'booking',
+          description: `Booked show invite accepted`,
+          event_id: invite.event_id,
+        })
+      }
+
       const { error: bookingError } = await supabase
         .from('bookings')
         .insert({
           user_id: authData.user.id,
           event_id: invite.event_id,
-          credits_used: 0,
+          credits_used: creditsRequired,
           status: 'confirmed',
+          booking_scope: 'performer',
           attendance_status: null,
         })
 
@@ -110,6 +143,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: acceptError.message }, { status: 500 })
     }
 
+    // Keep max_attendees in sync for booked shows
     if (event.event_type === 'booked_show' && event.max_attendees !== null) {
       const { count: confirmedCount } = await supabase
         .from('bookings')

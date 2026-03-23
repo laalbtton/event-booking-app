@@ -50,6 +50,7 @@ export default function EventManagementPage() {
   const [editVarietyOpen, setEditVarietyOpen] = useState(false)
   const [editTicketsOpen, setEditTicketsOpen] = useState(false)
   const [languageInput, setLanguageInput] = useState('')
+  const [languageSuggestions, setLanguageSuggestions] = useState<string[]>([])
   const [varietyArtTypes, setVarietyArtTypes] = useState<Array<{ id?: string; art_type_name: string; slot_capacity: string }>>([])
 
   // Three-dot menu state
@@ -322,6 +323,23 @@ export default function EventManagementPage() {
       setEvents(data)
       await loadPosterJobSummary((data || []).map((item: any) => item.id))
       await loadPosterPublishMeta((data || []).map((item: any) => item.id))
+
+      // Compute top-2 non-English language suggestions from creator's past multilingual events
+      const langFreq: Record<string, number> = {}
+      for (const ev of data as any[]) {
+        if (ev.is_multilingual && Array.isArray(ev.languages)) {
+          for (const lang of ev.languages as string[]) {
+            if (lang.toLowerCase() !== 'english') {
+              langFreq[lang] = (langFreq[lang] ?? 0) + 1
+            }
+          }
+        }
+      }
+      const top2 = Object.entries(langFreq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 2)
+        .map(([lang]) => lang)
+      setLanguageSuggestions(top2)
     }
     setLoading(false)
   }
@@ -1515,8 +1533,8 @@ export default function EventManagementPage() {
                               event_type: nextType,
                               open_mic_type: nextType === 'open_mic' ? (formData.open_mic_type || 'comedy_open_mic') : null as any,
                               variety_use_max_attendees: nextType === 'open_mic' ? formData.variety_use_max_attendees : false,
-                              credits_required: nextType === 'booked_show' ? '0' : formData.credits_required || '5',
-                              cancellation_hours: nextType === 'booked_show' ? '0' : formData.cancellation_hours || '4',
+                              credits_required: formData.credits_required || '5',
+                              cancellation_hours: formData.cancellation_hours || '4',
                             })
                           }}
                           className="h-4 w-4 text-blue-600 focus:ring-blue-500"
@@ -1732,7 +1750,6 @@ export default function EventManagementPage() {
                       value={formData.credits_required}
                       onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
                       min="0"
-                      disabled={formData.event_type === 'booked_show'}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
@@ -1761,16 +1778,13 @@ export default function EventManagementPage() {
                       value={formData.cancellation_hours}
                       onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
                       min="0"
-                      disabled={formData.event_type === 'booked_show'}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      {formData.event_type === 'booked_show'
-                        ? 'Not applicable for booked shows'
-                        : formData.tickets_enabled
-                          ? 'Not applicable for ticketed events'
-                          : 'Hours before event to allow cancellation with refund'}
+                      {formData.tickets_enabled
+                        ? 'Not applicable for ticketed events'
+                        : 'Hours before event to allow cancellation with refund'}
                     </p>
                   </div>
                 </div>
@@ -1825,33 +1839,52 @@ export default function EventManagementPage() {
 
                 {/* Multilingual + Open Registration stay under Performer Settings */}
                 <div className="border-t pt-4 space-y-3">
-                  <div className="space-y-2 rounded-lg border p-3">
-                    <label className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={formData.is_multilingual}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            is_multilingual: e.target.checked,
-                            languages: e.target.checked ? formData.languages : ['English'],
-                          })
-                        }
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                      />
-                      Multilingual event
-                    </label>
-                    <p className="text-xs text-muted-foreground">
-                      Default language is English. Add more languages when multilingual is enabled.
-                    </p>
+                  <div className="space-y-2 rounded-lg border">
+                    <div className="px-3 pt-3 space-y-2">
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={formData.is_multilingual}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              is_multilingual: e.target.checked,
+                              languages: e.target.checked ? formData.languages : ['English'],
+                            })
+                          }
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        Multilingual event
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        Default language is English. Add more languages when multilingual is enabled.
+                      </p>
+                    </div>
                     {formData.is_multilingual && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 px-3 pb-3">
+                        {languageSuggestions.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {languageSuggestions
+                              .filter((s) => !formData.languages.some((l) => l.toLowerCase() === s.toLowerCase()))
+                              .map((suggestion) => (
+                                <button
+                                  key={suggestion}
+                                  type="button"
+                                  onClick={() => setFormData((prev) => ({ ...prev, languages: [...prev.languages, suggestion] }))}
+                                  className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs text-blue-700 hover:bg-blue-100 transition-colors"
+                                >
+                                  + {suggestion}
+                                </button>
+                              ))}
+                          </div>
+                        )}
                         <div className="flex gap-2">
                           <input
                             type="text"
                             value={languageInput}
                             onChange={(e) => setLanguageInput(e.target.value)}
-                            placeholder="Add language (free text)"
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLanguageTag() }}}
+                            placeholder="Add language"
                             className="flex-1 px-3 py-2 border rounded-md text-sm"
                           />
                           <Button type="button" variant="outline" size="sm" onClick={addLanguageTag}>
@@ -2235,8 +2268,8 @@ export default function EventManagementPage() {
                               event_type: nextType,
                               open_mic_type: nextType === 'open_mic' ? (formData.open_mic_type || 'comedy_open_mic') : null as any,
                               variety_use_max_attendees: nextType === 'open_mic' ? formData.variety_use_max_attendees : false,
-                              credits_required: nextType === 'booked_show' ? '0' : formData.credits_required || '5',
-                              cancellation_hours: nextType === 'booked_show' ? '0' : formData.cancellation_hours || '4',
+                              credits_required: formData.credits_required || '5',
+                              cancellation_hours: formData.cancellation_hours || '4',
                             })
                           }}
                           className="h-4 w-4 text-blue-600 focus:ring-blue-500"
@@ -2427,7 +2460,6 @@ export default function EventManagementPage() {
                       value={formData.credits_required}
                       onChange={(e) => setFormData({ ...formData, credits_required: e.target.value })}
                       min="0"
-                      disabled={formData.event_type === 'booked_show'}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
@@ -2456,16 +2488,13 @@ export default function EventManagementPage() {
                       value={formData.cancellation_hours}
                       onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
                       min="0"
-                      disabled={formData.event_type === 'booked_show'}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      {formData.event_type === 'booked_show'
-                        ? 'Not applicable for booked shows'
-                        : formData.tickets_enabled
-                          ? 'Not applicable for ticketed events'
-                          : 'Hours before event to allow cancellation with refund'}
+                      {formData.tickets_enabled
+                        ? 'Not applicable for ticketed events'
+                        : 'Hours before event to allow cancellation with refund'}
                     </p>
                   </div>
                 </div>
@@ -2521,33 +2550,52 @@ export default function EventManagementPage() {
 
                 {/* Multilingual + Open Registration — under Performer Settings */}
                 <div className="border-t pt-4 space-y-3">
-                  <div className="space-y-2 rounded-lg border p-3">
-                    <label className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={formData.is_multilingual}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            is_multilingual: e.target.checked,
-                            languages: e.target.checked ? formData.languages : ['English'],
-                          })
-                        }
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                      />
-                      Multilingual event
-                    </label>
-                    <p className="text-xs text-muted-foreground">
-                      Default language is English. Add more languages when multilingual is enabled.
-                    </p>
+                  <div className="space-y-2 rounded-lg border">
+                    <div className="px-3 pt-3 space-y-2">
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={formData.is_multilingual}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              is_multilingual: e.target.checked,
+                              languages: e.target.checked ? formData.languages : ['English'],
+                            })
+                          }
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        Multilingual event
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        Default language is English. Add more languages when multilingual is enabled.
+                      </p>
+                    </div>
                     {formData.is_multilingual && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 px-3 pb-3">
+                        {languageSuggestions.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {languageSuggestions
+                              .filter((s) => !formData.languages.some((l) => l.toLowerCase() === s.toLowerCase()))
+                              .map((suggestion) => (
+                                <button
+                                  key={suggestion}
+                                  type="button"
+                                  onClick={() => setFormData((prev) => ({ ...prev, languages: [...prev.languages, suggestion] }))}
+                                  className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs text-blue-700 hover:bg-blue-100 transition-colors"
+                                >
+                                  + {suggestion}
+                                </button>
+                              ))}
+                          </div>
+                        )}
                         <div className="flex gap-2">
                           <input
                             type="text"
                             value={languageInput}
                             onChange={(e) => setLanguageInput(e.target.value)}
-                            placeholder="Add language (free text)"
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLanguageTag() }}}
+                            placeholder="Add language"
                             className="flex-1 px-3 py-2 border rounded-md text-sm"
                           />
                           <Button type="button" variant="outline" size="sm" onClick={addLanguageTag}>
