@@ -171,7 +171,7 @@ export default function EventChat({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-zinc-950">
       {/* Header */}
       <div className="flex items-center gap-3 px-3 py-3 border-b border-zinc-800 bg-zinc-900">
         {/* Back button */}
