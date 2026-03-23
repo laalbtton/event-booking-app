@@ -49,30 +49,91 @@ export async function GET(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
-    // Fetch primary community links only — cross-community submissions are handled separately.
-    // We don't filter by event_communities.status here because we want to catch events
-    // that are still pending_approval in the events table regardless of link status.
-    const { data: links, error: linksError } = await supabase
+    // Strategy 1: find events via event_communities (primary link, status pending)
+    // Strategy 2 (fallback): find events created by community members that are pending_approval
+    // We combine both to ensure nothing is missed regardless of whether the
+    // event_communities row was created correctly.
+
+    // Get all event_ids from event_communities for this community (any status, primary link)
+    const { data: ecLinks } = await supabase
       .from('event_communities')
       .select('event_id')
       .eq('community_id', communityId)
       .eq('is_primary', true)
 
-    if (linksError) return NextResponse.json({ error: linksError.message }, { status: 500 })
+    const ecEventIds = (ecLinks || []).map((l: { event_id: string }) => l.event_id)
 
-    const eventIds = (links || []).map((l: { event_id: string }) => l.event_id)
-    if (eventIds.length === 0) return NextResponse.json({ events: [] })
+    // Get all user_ids who are event_creator+ members of this community
+    const { data: creatorMembers } = await supabase
+      .from('community_members')
+      .select('user_id')
+      .eq('community_id', communityId)
+      .in('role', ['event_creator', 'co_admin', 'admin'])
 
-    // Fetch events in pending_approval status — service role bypasses RLS
-    const { data: events, error: eventsError } = await supabase
-      .from('events')
-      .select('id, title, date, created_by, profiles(full_name, email)')
-      .in('id', eventIds)
-      .eq('status', 'pending_approval')
+    const creatorUserIds = (creatorMembers || []).map((m: { user_id: string }) => m.user_id)
 
-    if (eventsError) return NextResponse.json({ error: eventsError.message }, { status: 500 })
+    if (ecEventIds.length === 0 && creatorUserIds.length === 0) {
+      return NextResponse.json({ events: [] })
+    }
 
-    return NextResponse.json({ events: events || [] })
+    // Build a union query: pending_approval events that are EITHER linked via
+    // event_communities OR created by a member of this community
+    // We query both sets and deduplicate by id.
+    const queries: Promise<any>[] = []
+
+    if (ecEventIds.length > 0) {
+      queries.push(
+        supabase
+          .from('events')
+          .select('id, title, date, created_by')
+          .in('id', ecEventIds)
+          .eq('status', 'pending_approval')
+      )
+    }
+
+    if (creatorUserIds.length > 0) {
+      queries.push(
+        supabase
+          .from('events')
+          .select('id, title, date, created_by')
+          .in('created_by', creatorUserIds)
+          .eq('status', 'pending_approval')
+      )
+    }
+
+    const results = await Promise.all(queries)
+    const allEvents = results.flatMap((r) => r.data || [])
+
+    // Deduplicate by event id
+    const seen = new Set<string>()
+    const uniqueEvents = allEvents.filter((ev: { id: string }) => {
+      if (seen.has(ev.id)) return false
+      seen.add(ev.id)
+      return true
+    })
+
+    if (uniqueEvents.length === 0) {
+      return NextResponse.json({ events: [] })
+    }
+
+    // Fetch creator profiles separately to avoid join failures
+    const creatorIds = [...new Set(uniqueEvents.map((ev: { created_by: string | null }) => ev.created_by).filter(Boolean))]
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', creatorIds)
+
+    const profileMap = new Map((profilesData || []).map((p: { id: string; full_name: string | null; email: string | null }) => [p.id, p]))
+
+    const events = uniqueEvents.map((ev: { id: string; title: string; date: string; created_by: string | null }) => ({
+      id: ev.id,
+      title: ev.title,
+      date: ev.date,
+      created_by: ev.created_by,
+      profiles: ev.created_by ? (profileMap.get(ev.created_by) || null) : null,
+    }))
+
+    return NextResponse.json({ events })
   } catch (err: unknown) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal server error' },

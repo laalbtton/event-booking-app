@@ -590,24 +590,32 @@ export default function EventManagementPage() {
       }
 
       // Associate event with communities where the creator is an event_creator or above
+      // Use ORDER BY joined_at so the primary community is deterministic
+      let primaryCommunityId: string | null = null
       try {
         const { data: creatorMemberships } = await supabase
           .from('community_members')
           .select('community_id, role')
           .eq('user_id', user.id)
           .in('role', ['event_creator', 'co_admin', 'admin'])
+          .order('joined_at', { ascending: true })
 
         if (creatorMemberships && creatorMemberships.length > 0) {
+          primaryCommunityId = creatorMemberships[0].community_id
           const commSession = await supabase.auth.getSession()
           const accessToken = commSession.data.session?.access_token
           if (accessToken) {
             for (let idx = 0; idx < Math.min(creatorMemberships.length, 3); idx++) {
               const membership = creatorMemberships[idx]
-              await fetch(`/api/communities/${membership.community_id}/submit-event`, {
+              const res = await fetch(`/api/communities/${membership.community_id}/submit-event`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
                 body: JSON.stringify({ eventId: data.id, isPrimary: idx === 0 }),
-              }).catch(() => null)
+              }).catch((err) => { console.warn('submit-event fetch error:', err); return null })
+              if (res && !res.ok) {
+                const errBody = await res.json().catch(() => ({}))
+                console.warn(`submit-event failed for community ${membership.community_id}:`, errBody)
+              }
             }
           }
         }
@@ -616,15 +624,9 @@ export default function EventManagementPage() {
       }
 
       // If event is pending approval, notify community admins for review
+      // Use the same primaryCommunityId determined above for consistency
       if (userRole !== 'admin') {
         try {
-          const { data: creatorMembershipsForNotif } = await supabase
-            .from('community_members')
-            .select('community_id')
-            .eq('user_id', user.id)
-            .in('role', ['event_creator', 'co_admin', 'admin'])
-            .limit(1)
-          const primaryCommunityId = (creatorMembershipsForNotif || [])[0]?.community_id
           if (primaryCommunityId) {
             const { data: communityAdmins } = await supabase
               .from('community_members')

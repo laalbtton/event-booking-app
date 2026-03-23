@@ -144,7 +144,11 @@ export function CommunityInteractive({
           accessToken
             ? fetch(`/api/communities/${communityId}/pending-events`, {
                 headers: { Authorization: `Bearer ${accessToken}` },
-              }).then(r => r.json()).catch(() => ({ events: [] }))
+              }).then(async (r) => {
+                const json = await r.json().catch(() => ({}))
+                if (!r.ok) console.warn('pending-events API error:', json)
+                return json
+              }).catch((err) => { console.warn('pending-events fetch error:', err); return { events: [] } })
             : Promise.resolve({ events: [] }),
         ])
 
