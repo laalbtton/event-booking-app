@@ -17,7 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronDown, Copy, Download, Settings } from 'lucide-react'
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Globe, Instagram, Pencil, Settings, Share2, Twitter, Youtube } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
@@ -120,6 +120,9 @@ export default function ProfilePage() {
   const [bookingsTab, setBookingsTab] = useState<'bookings' | 'coupons'>('bookings')
   const [cancellingBooking, setCancellingBooking] = useState<string | null>(null)
   const [expandedPosterActions, setExpandedPosterActions] = useState<Set<string>>(new Set())
+  const [profileDetailsExpanded, setProfileDetailsExpanded] = useState(false)
+  const [calendarExpanded, setCalendarExpanded] = useState(true)
+  const [calendarCursor, setCalendarCursor] = useState(new Date())
   const { confirm } = useConfirmDialog()
   const touchStartX = useRef<Record<string, number>>({})
   const touchStartY = useRef<Record<string, number>>({})
@@ -186,6 +189,24 @@ export default function ProfilePage() {
     return name.substring(0, 2).toUpperCase()
   }
 
+  function extractInstagramUsername(value: string | null | undefined): string {
+    if (!value) return ''
+    const trimmed = value.trim()
+    if (!trimmed) return ''
+    const cleaned = trimmed.replace(/^@+/, '')
+    if (!cleaned.includes('/')) return cleaned
+    const match = cleaned.match(/instagram\.com\/([^/?#]+)/i)
+    if (match?.[1]) return match[1].replace(/^@+/, '')
+    const parts = cleaned.split('/').filter(Boolean)
+    return (parts[parts.length - 1] || '').replace(/^@+/, '')
+  }
+
+  function toInstagramUrl(usernameOrUrl: string | null | undefined): string | null {
+    const username = extractInstagramUsername(usernameOrUrl)
+    if (!username) return null
+    return `https://instagram.com/${username}`
+  }
+
   function copyPublicProfileLink() {
     if (!profile) return
     const publicUrl = `${window.location.origin}/profile/${profile.id}`
@@ -223,7 +244,7 @@ export default function ProfilePage() {
         full_name: profileData.full_name || '',
         bio: profileData.bio || '',
         website_link: profileData.website_link || '',
-        instagram_link: profileData.instagram_link || '',
+        instagram_link: extractInstagramUsername(profileData.instagram_link),
         youtube_link: profileData.youtube_link || '',
         twitter_link: profileData.twitter_link || ''
       })
@@ -657,7 +678,7 @@ export default function ProfilePage() {
           full_name: formData.full_name,
           bio: formData.bio,
           website_link: formData.website_link || null,
-          instagram_link: formData.instagram_link || null,
+          instagram_link: toInstagramUrl(formData.instagram_link),
           youtube_link: formData.youtube_link || null,
           twitter_link: formData.twitter_link || null,
           updated_at: new Date().toISOString()
@@ -971,6 +992,37 @@ export default function ProfilePage() {
     !pushEnabled &&
     pushPermission !== 'denied' &&
     !pushReminderSnoozed
+  const calendarMonth = calendarCursor.getMonth()
+  const calendarYear = calendarCursor.getFullYear()
+  const firstDay = new Date(calendarYear, calendarMonth, 1)
+  const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate()
+  const startWeekday = firstDay.getDay()
+  const monthLabel = firstDay.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+  const upcomingBookingDateKeys = new Set(
+    myBookings
+      .filter((b) => {
+        const eventDate = new Date(b.events.date)
+        return eventDate >= currentTime && b.status !== 'cancelled' && b.events?.status !== 'cancelled'
+      })
+      .map((b) => {
+        const d = new Date(b.events.date)
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+      })
+  )
+  const pastBookingDateKeys = new Set(
+    myBookings
+      .filter((b) => {
+        const eventDate = new Date(b.events.date)
+        return eventDate < currentTime && b.status !== 'cancelled' && b.events?.status !== 'cancelled'
+      })
+      .map((b) => {
+        const d = new Date(b.events.date)
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+      })
+  )
+  const calendarCells: Array<number | null> = []
+  for (let i = 0; i < startWeekday; i += 1) calendarCells.push(null)
+  for (let day = 1; day <= daysInMonth; day += 1) calendarCells.push(day)
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -978,6 +1030,21 @@ export default function ProfilePage() {
       <NavigationTabs />
 
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+        <div className="mb-2">
+          <div className="flex items-center justify-end gap-1">
+            <Button onClick={copyPublicProfileLink} variant="ghost" size="icon" className="h-8 w-8" title="Share Profile">
+              <Share2 className="h-4 w-4" />
+            </Button>
+            <Button onClick={() => setIsEditing(true)} variant="ghost" size="icon" className="h-8 w-8" title="Edit Profile">
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8" title="Settings" asChild>
+              <Link href="/settings">
+                <Settings className="w-4 h-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
         {/* Profile Card */}
         <Card className="mb-6 shadow-sm">
           <CardContent className="p-6 sm:p-8">
@@ -993,41 +1060,12 @@ export default function ProfilePage() {
               </Avatar>
 
               <div className="flex-1 min-w-0">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                <div className="mb-4">
                   <div className="min-w-0">
                     <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1 truncate">
                       {profile.full_name || 'No name set'}
                     </h2>
                     <p className="text-sm text-muted-foreground truncate">{profile.email}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                    <Button
-                      onClick={copyPublicProfileLink}
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9"
-                      title="Share Profile"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                      </svg>
-                    </Button>
-                    <Button
-                      onClick={() => setIsEditing(true)}
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9"
-                      title="Edit Profile"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-9 w-9" title="Settings" asChild>
-                      <Link href="/settings">
-                        <Settings className="w-5 h-5" />
-                      </Link>
-                    </Button>
                   </div>
                 </div>
 
@@ -1052,47 +1090,55 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {profile.bio && (
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold mb-2 tracking-tight">Bio</h3>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{profile.bio}</p>
-              </div>
-            )}
-
-            {/* Social Links */}
-            {(profile.website_link || profile.instagram_link || profile.youtube_link || profile.twitter_link) && (
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold mb-3 tracking-tight">Social Links</h3>
-                <div className="flex flex-wrap gap-2">
-                  {profile.website_link && (
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={profile.website_link} target="_blank" rel="noopener noreferrer">
-                        🌐 Website
-                      </a>
-                    </Button>
-                  )}
-                  {profile.instagram_link && (
-                    <Button variant="outline" size="sm" className="bg-pink-50 hover:bg-pink-100 border-pink-200" asChild>
-                      <a href={profile.instagram_link} target="_blank" rel="noopener noreferrer">
-                        📷 Instagram
-                      </a>
-                    </Button>
-                  )}
-                  {profile.youtube_link && (
-                    <Button variant="outline" size="sm" className="bg-red-50 hover:bg-red-100 border-red-200" asChild>
-                      <a href={profile.youtube_link} target="_blank" rel="noopener noreferrer">
-                        ▶️ YouTube
-                      </a>
-                    </Button>
-                  )}
-                  {profile.twitter_link && (
-                    <Button variant="outline" size="sm" className="bg-sky-50 hover:bg-sky-100 border-sky-200" asChild>
-                      <a href={profile.twitter_link} target="_blank" rel="noopener noreferrer">
-                        🐦 Twitter
-                      </a>
-                    </Button>
-                  )}
-                </div>
+            {(profile.bio || profile.website_link || profile.instagram_link || profile.youtube_link || profile.twitter_link) && (
+              <div className="mb-5">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between py-1"
+                  onClick={() => setProfileDetailsExpanded((prev) => !prev)}
+                >
+                  <span className="text-sm font-semibold tracking-tight">Bio & links</span>
+                  <ChevronDown className={cn('h-4 w-4 transition-transform', profileDetailsExpanded && 'rotate-180')} />
+                </button>
+                {profileDetailsExpanded && (
+                  <div className="pt-3 space-y-4">
+                    {profile.bio && (
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{profile.bio}</p>
+                    )}
+                    {(profile.website_link || profile.instagram_link || profile.youtube_link || profile.twitter_link) && (
+                      <div className="flex flex-wrap gap-2">
+                        {profile.website_link && (
+                          <Button variant="outline" size="icon" className="h-9 w-9" asChild>
+                            <a href={profile.website_link} target="_blank" rel="noopener noreferrer" aria-label="Website">
+                              <Globe className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
+                        {profile.instagram_link && (
+                          <Button variant="outline" size="sm" className="bg-pink-50 hover:bg-pink-100 border-pink-200" asChild>
+                            <a href={profile.instagram_link} target="_blank" rel="noopener noreferrer">
+                              <Instagram className="h-4 w-4 mr-1" /> Instagram
+                            </a>
+                          </Button>
+                        )}
+                        {profile.youtube_link && (
+                          <Button variant="outline" size="sm" className="bg-red-50 hover:bg-red-100 border-red-200" asChild>
+                            <a href={profile.youtube_link} target="_blank" rel="noopener noreferrer">
+                              <Youtube className="h-4 w-4 mr-1" /> YouTube
+                            </a>
+                          </Button>
+                        )}
+                        {profile.twitter_link && (
+                          <Button variant="outline" size="sm" className="bg-sky-50 hover:bg-sky-100 border-sky-200" asChild>
+                            <a href={profile.twitter_link} target="_blank" rel="noopener noreferrer">
+                              <Twitter className="h-4 w-4 mr-1" /> Twitter
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1111,7 +1157,7 @@ export default function ProfilePage() {
                         full_name: profile.full_name || '',
                         bio: profile.bio || '',
                         website_link: profile.website_link || '',
-                        instagram_link: profile.instagram_link || '',
+                        instagram_link: extractInstagramUsername(profile.instagram_link),
                         youtube_link: profile.youtube_link || '',
                         twitter_link: profile.twitter_link || ''
                       })
@@ -1174,16 +1220,19 @@ export default function ProfilePage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2.5">
                   <Label htmlFor="instagram" className="text-sm font-semibold">
-                    Instagram
+                    Instagram username
                   </Label>
                   <Input
                     id="instagram"
-                    type="url"
+                    type="text"
                     value={formData.instagram_link}
                     onChange={(e) => setFormData({ ...formData, instagram_link: e.target.value })}
-                    placeholder="https://instagram.com/username"
+                    placeholder="@username"
                     className="h-11"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Enter only the username. We save the full Instagram link automatically.
+                  </p>
                 </div>
 
                 <div className="space-y-2.5">
@@ -1271,12 +1320,78 @@ export default function ProfilePage() {
           </Card>
         )}
 
+        <Card className="mb-6 shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
+          <CardHeader className="p-4 sm:p-6">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between"
+              onClick={() => setCalendarExpanded((prev) => !prev)}
+            >
+              <CardTitle className="text-lg sm:text-xl font-bold tracking-tight flex items-center gap-2">
+                <CalendarDays className="h-5 w-5" />
+                {monthLabel}
+              </CardTitle>
+              <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', calendarExpanded && 'rotate-180')} />
+            </button>
+            {calendarExpanded && (
+              <div className="mt-3 flex items-center justify-end gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setCalendarCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                  title="Previous month"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setCalendarCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                  title="Next month"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </CardHeader>
+          {calendarExpanded && (
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground mb-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                  <div key={d}>{d}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {calendarCells.map((day, idx) => {
+                  if (!day) return <div key={`blank-${idx}`} className="h-8" />
+                  const dateKey = `${calendarYear}-${calendarMonth}-${day}`
+                  const hasUpcomingBooking = upcomingBookingDateKeys.has(dateKey)
+                  const hasPastBooking = pastBookingDateKeys.has(dateKey)
+                  return (
+                    <div
+                      key={dateKey}
+                      className={cn(
+                        'h-8 rounded-sm flex items-center justify-center text-xs',
+                        hasUpcomingBooking ? 'text-red-600 font-bold' : 'text-muted-foreground',
+                        hasPastBooking && 'underline underline-offset-2'
+                      )}
+                    >
+                      {day}
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+
         {/* My Bookings - always visible, no dropdown, full-bleed on mobile */}
         <Card className="shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
-          <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Bookings</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-6 pt-0">
+          <CardContent className="p-4 sm:p-6">
             <Tabs value={bookingsTab} onValueChange={(v) => setBookingsTab(v as typeof bookingsTab)} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="bookings">Bookings</TabsTrigger>

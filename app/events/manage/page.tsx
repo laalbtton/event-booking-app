@@ -1945,7 +1945,7 @@ export default function EventManagementPage() {
                 )}
 
                 {/* ── Audience Settings ──────────────────────── */}
-                {formData.event_type !== 'booked_show' && (
+                {(
                   <div className="border-t pt-4 space-y-3">
                     <h4 className="text-base font-semibold text-gray-800">Audience Settings</h4>
                     <div className="flex items-center justify-between gap-3">
@@ -2656,7 +2656,7 @@ export default function EventManagementPage() {
                 )}
 
                 {/* ── Audience Settings ──────────────────────── */}
-                {formData.event_type !== 'booked_show' && (
+                {(
                   <div className="border-t pt-4 space-y-3">
                     <h4 className="text-base font-semibold text-gray-800">Audience Settings</h4>
                     <div className="flex items-center justify-between gap-3">
