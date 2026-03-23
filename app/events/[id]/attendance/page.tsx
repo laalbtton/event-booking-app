@@ -122,6 +122,7 @@ export default function AttendancePage() {
   const router = useRouter()
   const eventId = params.id as string
 
+  const [resolvedId, setResolvedId] = useState(eventId)
   const [event, setEvent] = useState<EventDetails | null>(null)
   const [bookings, setBookings] = useState<BookingWithProfile[]>([])
   const [audienceBookings, setAudienceBookings] = useState<BookingWithProfile[]>([])
@@ -236,7 +237,7 @@ export default function AttendancePage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
 
-      const params = new URLSearchParams({ code, eventId })
+      const params = new URLSearchParams({ code, eventId: resolvedId })
       const response = await fetch(`/api/vouchers/lookup?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -405,6 +406,21 @@ export default function AttendancePage() {
         currentUserRole = profileData?.role || null
       }
 
+      // Resolve the real UUID in case eventId is a slug
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventId)
+      let resolvedEventId = eventId
+      if (!isUuid) {
+        const { data: slugRow } = await supabase
+          .from('events')
+          .select('id')
+          .eq('slug', eventId)
+          .maybeSingle()
+        if (slugRow?.id) {
+          resolvedEventId = slugRow.id
+        }
+      }
+      setResolvedId(resolvedEventId)
+
       // Load event (fallback for environments missing no-show penalty columns).
       let eventData: EventDetails | null = null
       let eventError: Error | null = null
@@ -413,7 +429,7 @@ export default function AttendancePage() {
       const eventWithPenaltyQuery = await supabase
         .from('events')
         .select('id, title, date, end_time, host_user_id, created_by, event_type, credits_required, max_attendees, no_show_penalty_enabled, no_show_penalty_credits, food_coupon_enabled, audience_attendance_open_before_minutes, audience_attendance_cutoff_hours, chat_enabled, chat_mode')
-        .eq('id', eventId)
+        .eq('id', resolvedEventId)
         .single()
 
       if (eventWithPenaltyQuery.error && isMissingNoShowPenaltyColumnsError(eventWithPenaltyQuery.error.message)) {
@@ -421,7 +437,7 @@ export default function AttendancePage() {
         const fallbackQuery = await supabase
           .from('events')
           .select('id, title, date, end_time, host_user_id, created_by, event_type, credits_required, max_attendees, food_coupon_enabled, audience_attendance_open_before_minutes, audience_attendance_cutoff_hours')
-          .eq('id', eventId)
+          .eq('id', resolvedEventId)
           .single()
         eventError = fallbackQuery.error ? new Error(fallbackQuery.error.message) : null
         if (fallbackQuery.data) {
@@ -501,7 +517,7 @@ export default function AttendancePage() {
             email
           )
         `)
-        .eq('event_id', eventId)
+        .eq('event_id', resolvedEventId)
         .eq('status', 'confirmed')
         .order('booked_at', { ascending: true })
 
@@ -535,7 +551,7 @@ export default function AttendancePage() {
             email
           )
         `)
-        .eq('event_id', eventId)
+        .eq('event_id', resolvedEventId)
         .eq('status', 'waitlist')
         .order('waitlist_position', { ascending: true })
         .order('booked_at', { ascending: true })
@@ -548,7 +564,7 @@ export default function AttendancePage() {
         const { data: redeemedVouchers, error: redeemedError } = await supabase
           .from('booking_vouchers')
           .select('id, code, value_cents, redeemed_at, user_id')
-          .eq('event_id', eventId)
+          .eq('event_id', resolvedEventId)
           .eq('status', 'redeemed')
           .order('redeemed_at', { ascending: false })
           .limit(8)
@@ -596,7 +612,7 @@ export default function AttendancePage() {
             email
           )
         `)
-        .eq('event_id', eventId)
+        .eq('event_id', resolvedEventId)
         .order('created_at', { ascending: false })
 
       if (!invitesError) {
@@ -606,7 +622,7 @@ export default function AttendancePage() {
       const { data: inviteLinkData, error: inviteLinkError } = await supabase
         .from('event_invite_links')
         .select('id, token, max_uses, uses, expires_at')
-        .eq('event_id', eventId)
+        .eq('event_id', resolvedEventId)
         .order('created_at', { ascending: false })
         .limit(1)
         .single()
@@ -835,7 +851,7 @@ export default function AttendancePage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ eventId, invitedUserId }),
+        body: JSON.stringify({ eventId: resolvedId, invitedUserId }),
       })
 
       if (!response.ok) {
@@ -870,7 +886,7 @@ export default function AttendancePage() {
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          eventId,
+          eventId: resolvedId,
           maxUses: parseInt(inviteMaxUses, 10) || 12,
           expiresAt: inviteExpiresAt ? new Date(inviteExpiresAt).toISOString() : undefined,
         }),
@@ -1047,7 +1063,7 @@ export default function AttendancePage() {
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          eventId,
+          eventId: resolvedId,
           bookingIds,
           mode: refundMode,
           specificAmount: refundMode === 'specific' ? Math.floor(parsedAmount) : undefined,
@@ -1102,7 +1118,7 @@ export default function AttendancePage() {
       const { error } = await supabase
         .from('events')
         .update({ host_user_id: userId })
-        .eq('id', eventId)
+        .eq('id', resolvedId)
 
       if (error) throw error
 
@@ -1113,7 +1129,7 @@ export default function AttendancePage() {
           'Assigned as event host',
           `You have been designated as host for "${event?.title || 'an event'}".`,
           null,
-          eventId
+          resolvedId
         )
       }
 
@@ -1124,7 +1140,7 @@ export default function AttendancePage() {
           'Host role updated',
           `You are no longer the host for "${event?.title || 'an event'}".`,
           null,
-          eventId
+          resolvedId
         )
       }
 
@@ -1185,7 +1201,7 @@ export default function AttendancePage() {
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          eventId,
+          eventId: resolvedId,
           enabled: noShowPenaltyEnabled,
           penaltyCredits: parsedPenalty,
         }),
@@ -1252,7 +1268,7 @@ export default function AttendancePage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ eventId }),
+        body: JSON.stringify({ eventId: resolvedId }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || 'Failed to process no-show penalties')
@@ -1411,7 +1427,7 @@ export default function AttendancePage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
 
-      const res = await fetch(`/api/events/${eventId}/chat/toggle`, {
+      const res = await fetch(`/api/events/${resolvedId}/chat/toggle`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -1461,7 +1477,7 @@ export default function AttendancePage() {
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
             <Link
-              href={`/events/${eventId}`}
+              href={`/events/${resolvedId}`}
               className="text-blue-600 hover:text-blue-800 p-1 -ml-1 rounded hover:bg-gray-100"
               aria-label="Back to Event Details"
             >
