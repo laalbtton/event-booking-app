@@ -74,7 +74,7 @@ export async function POST(
     if (insertError) throw insertError
 
     // Fan-out push notifications to other confirmed performers (non-blocking)
-    fanOutNotifications(supabase, eventId, userId, event.title, event.slug, content).catch((err) =>
+    fanOutNotifications(eventId, userId, event.title, event.slug, content).catch((err) =>
       console.error('chat push fanout error:', err)
     )
 
@@ -86,15 +86,20 @@ export async function POST(
 }
 
 async function fanOutNotifications(
-  supabase: ReturnType<typeof createClient>,
   eventId: string,
   senderId: string,
   eventTitle: string,
   eventSlug: string | null,
   content: string
 ) {
+  // Create a fresh admin client inside the helper to avoid SupabaseClient generic type conflicts
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return
+  const client = createClient(url, key)
+
   // Get all confirmed performers (minus sender)
-  const { data: bookings } = await supabase
+  const { data: bookings } = await client
     .from('bookings')
     .select('user_id')
     .eq('event_id', eventId)
@@ -107,7 +112,7 @@ async function fanOutNotifications(
   const recipientIds = bookings.map((b: { user_id: string }) => b.user_id)
 
   // Fetch muted prefs
-  const { data: mutedPrefs } = await supabase
+  const { data: mutedPrefs } = await client
     .from('event_chat_notification_prefs')
     .select('user_id')
     .eq('event_id', eventId)
@@ -121,7 +126,7 @@ async function fanOutNotifications(
 
   for (const recipientId of recipientIds) {
     if (mutedSet.has(recipientId)) continue
-    sendPushToUser(supabase, recipientId, {
+    sendPushToUser(client, recipientId, {
       title: `New message in ${eventTitle}`,
       body: truncated,
       data: { url: eventUrl },
