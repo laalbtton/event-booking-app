@@ -1029,8 +1029,8 @@ export default function ProfilePage() {
       {/* Navigation Tabs */}
       <NavigationTabs />
 
-      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
-        <div className="mb-2">
+      <div className="max-w-4xl mx-auto px-0 py-4 sm:py-8 sm:px-6 lg:px-8">
+        <div className="mb-1 px-4 sm:px-0">
           <div className="flex items-center justify-end gap-1">
             <Button onClick={copyPublicProfileLink} variant="ghost" size="icon" className="h-8 w-8" title="Share Profile">
               <Share2 className="h-4 w-4" />
@@ -1046,7 +1046,7 @@ export default function ProfilePage() {
           </div>
         </div>
         {/* Profile Card */}
-        <Card className="mb-6 shadow-sm">
+        <Card className="mb-0 shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
           <CardContent className="p-6 sm:p-8">
           {!isEditing ? (
             <>
@@ -1091,7 +1091,7 @@ export default function ProfilePage() {
             </div>
 
             {(profile.bio || profile.website_link || profile.instagram_link || profile.youtube_link || profile.twitter_link) && (
-              <div className="mb-5">
+              <div className="mb-0">
                 <button
                   type="button"
                   className="w-full flex items-center justify-between py-1"
@@ -1320,43 +1320,48 @@ export default function ProfilePage() {
           </Card>
         )}
 
-        <Card className="mb-6 shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
+        <Card className="mb-0 shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
           <CardHeader className="p-4 sm:p-6">
             <button
               type="button"
               className="w-full flex items-center justify-between"
               onClick={() => setCalendarExpanded((prev) => !prev)}
             >
-              <CardTitle className="text-lg sm:text-xl font-bold tracking-tight flex items-center gap-2">
-                <CalendarDays className="h-5 w-5" />
-                {monthLabel}
-              </CardTitle>
-              <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', calendarExpanded && 'rotate-180')} />
-            </button>
-            {calendarExpanded && (
-              <div className="mt-3 flex items-center justify-end gap-1">
+              <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
-                  onClick={() => setCalendarCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setCalendarCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                  }}
                   title="Previous month"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
+                <CardTitle className="text-sm font-medium tracking-normal min-w-[160px] text-center">
+                  {monthLabel}
+                </CardTitle>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
-                  onClick={() => setCalendarCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setCalendarCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                  }}
                   title="Next month"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
-            )}
+              <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', calendarExpanded && 'rotate-180')} />
+            </button>
           </CardHeader>
           {calendarExpanded && (
             <CardContent className="p-4 sm:p-6 pt-0">
