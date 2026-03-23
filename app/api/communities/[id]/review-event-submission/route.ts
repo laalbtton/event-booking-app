@@ -90,7 +90,8 @@ export async function POST(
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 })
 
     // If this is the primary community link and the event is being approved,
-    // also activate the event itself (same as handleReviewPendingEvent)
+    // also activate the event itself (same as handleReviewPendingEvent).
+    // Also ensure the event_communities row is marked approved (upsert in case it was missing).
     if (action === 'approved' && sub.is_primary) {
       const { data: ev } = await supabase
         .from('events')
@@ -103,6 +104,21 @@ export async function POST(
           .update({ status: 'active' })
           .eq('id', sub.event_id)
       }
+      // Ensure the event_communities row exists and is approved
+      await supabase
+        .from('event_communities')
+        .upsert(
+          {
+            event_id: sub.event_id,
+            community_id: communityId,
+            is_primary: true,
+            status: 'approved',
+            reviewed_by: authData.user.id,
+            reviewed_at: new Date().toISOString(),
+            submitted_at: new Date().toISOString(),
+          },
+          { onConflict: 'event_id,community_id' }
+        )
     }
 
     // Notify the submitter

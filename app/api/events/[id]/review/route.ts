@@ -84,12 +84,21 @@ export async function POST(
         .update({ status: 'active' })
         .eq('id', eventId)
 
-      // Ensure the event_communities link for this community is approved
+      // Upsert the event_communities link — update if exists, insert if not
       await supabase
         .from('event_communities')
-        .update({ status: 'approved', reviewed_by: authData.user.id, reviewed_at: new Date().toISOString() })
-        .eq('event_id', eventId)
-        .eq('community_id', communityId)
+        .upsert(
+          {
+            event_id: eventId,
+            community_id: communityId,
+            is_primary: true,
+            status: 'approved',
+            reviewed_by: authData.user.id,
+            reviewed_at: new Date().toISOString(),
+            submitted_at: new Date().toISOString(),
+          },
+          { onConflict: 'event_id,community_id' }
+        )
 
       // Notify the event creator
       if (typedEvent.created_by) {
