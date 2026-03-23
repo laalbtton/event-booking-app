@@ -14,10 +14,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
-import { ChevronLeft, ChevronDown, ChevronUp, Copy, Instagram } from 'lucide-react'
+import { ChevronLeft, ChevronDown, ChevronUp, Copy, Instagram, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
+import EventChat from '@/components/EventChat'
 
 
 
@@ -120,6 +121,7 @@ export default function EventDetailsPage() {
   const [varietyOptions, setVarietyOptions] = useState<VarietyArtOption[]>([])
   const [selectedVarietyOptionId, setSelectedVarietyOptionId] = useState('')
   const [posterExpanded, setPosterExpanded] = useState(false)
+  const [showChat, setShowChat] = useState(false)
 
 
   function copyPublicLink() {
@@ -436,7 +438,7 @@ export default function EventDetailsPage() {
         const [userBookingResult, prefResult, alertResult] = await Promise.all([
           supabase
             .from('bookings')
-            .select('id, status')
+            .select('id, status, booking_scope')
             .eq('event_id', resolvedEventId)
             .eq('user_id', user.id)
             .in('status', ['confirmed', 'waitlist'])
@@ -992,6 +994,19 @@ export default function EventDetailsPage() {
                     </Link>
                   </Button>
                 )}
+                {(event as any).chat_enabled &&
+                  currentUser &&
+                  (isHost || isEventCreator || profile?.role === 'event_creator') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowChat(true)}
+                    className="gap-1.5"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    Chat
+                  </Button>
+                )}
               </div>
               {profile && (
                 event.status === 'cancelled' ? (
@@ -1167,6 +1182,22 @@ export default function EventDetailsPage() {
         )}
         </div>
       </div>
+
+      {/* Event Chat Overlay */}
+      {showChat && currentUser && (
+        <EventChat
+          eventId={(event as any).id || eventId}
+          isHost={isHost || isEventCreator}
+          chatMode={(event as any).chat_mode || 'open'}
+          currentUserId={currentUser.id}
+          canSendMessages={
+            isHost ||
+            isEventCreator ||
+            (userBooking?.status === 'confirmed' && (userBooking as any)?.booking_scope !== 'audience')
+          }
+          onClose={() => setShowChat(false)}
+        />
+      )}
 
       {/* Booking strip - fixed above nav when user has a booking */}
       {userBooking && (

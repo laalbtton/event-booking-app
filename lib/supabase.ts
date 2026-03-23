@@ -89,6 +89,8 @@ export type Event = {
   created_by: string | null
   created_at: string
   updated_at: string
+  chat_enabled?: boolean
+  chat_mode?: 'open' | 'host_only'
 }
 
 export type Booking = {

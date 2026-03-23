@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { ChevronLeft, GripVertical, User, Copy, ChevronDown } from 'lucide-react'
+import { ChevronLeft, GripVertical, User, Copy, ChevronDown, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type BookingWithProfile = {
@@ -88,6 +88,8 @@ type EventDetails = {
   food_coupon_enabled?: boolean
   audience_attendance_open_before_minutes?: number
   audience_attendance_cutoff_hours?: number
+  chat_enabled?: boolean
+  chat_mode?: 'open' | 'host_only'
 }
 
 type VoucherPreview = {
@@ -172,6 +174,9 @@ export default function AttendancePage() {
   const [scannerMessage, setScannerMessage] = useState('')
   const [scannerEngine, setScannerEngine] = useState<ScannerEngine>(null)
   const [scannerMode, setScannerMode] = useState<'coupon' | 'audience'>('coupon')
+  const [chatEnabled, setChatEnabled] = useState(false)
+  const [chatMode, setChatMode] = useState<'open' | 'host_only'>('open')
+  const [savingChat, setSavingChat] = useState(false)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
@@ -407,7 +412,7 @@ export default function AttendancePage() {
 
       const eventWithPenaltyQuery = await supabase
         .from('events')
-        .select('id, title, date, end_time, host_user_id, created_by, event_type, credits_required, max_attendees, no_show_penalty_enabled, no_show_penalty_credits, food_coupon_enabled, audience_attendance_open_before_minutes, audience_attendance_cutoff_hours')
+        .select('id, title, date, end_time, host_user_id, created_by, event_type, credits_required, max_attendees, no_show_penalty_enabled, no_show_penalty_credits, food_coupon_enabled, audience_attendance_open_before_minutes, audience_attendance_cutoff_hours, chat_enabled, chat_mode')
         .eq('id', eventId)
         .single()
 
@@ -450,6 +455,8 @@ export default function AttendancePage() {
       setCanManageHost(isEventCreator || isAdmin)
 
       setEvent(eventData)
+      setChatEnabled(eventData.chat_enabled ?? false)
+      setChatMode((eventData.chat_mode as 'open' | 'host_only') ?? 'open')
       const penaltySettings = getEffectiveNoShowSettings(eventData)
       setNoShowPenaltyEnabled(penaltySettings.enabled)
       setNoShowPenaltyCredits(String(penaltySettings.penalty))
@@ -1398,6 +1405,32 @@ export default function AttendancePage() {
     touchStartY.current[bookingId] = 0
   }
 
+  async function saveChatSettings(newEnabled: boolean, newMode: 'open' | 'host_only') {
+    setSavingChat(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const res = await fetch(`/api/events/${eventId}/chat/toggle`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ chat_enabled: newEnabled, chat_mode: newMode }),
+      })
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        console.error('Failed to update chat settings:', json.error)
+      }
+    } catch (err) {
+      console.error('saveChatSettings error:', err)
+    } finally {
+      setSavingChat(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -1641,6 +1674,72 @@ export default function AttendancePage() {
               </div>
             )}
           </CardContent>
+        </Card>
+
+        {/* Event Chat Settings */}
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 text-muted-foreground" />
+                <CardTitle className="text-lg">Event Chat</CardTitle>
+              </div>
+              <Switch
+                checked={chatEnabled}
+                disabled={savingChat}
+                onCheckedChange={async (checked) => {
+                  setChatEnabled(checked)
+                  await saveChatSettings(checked, chatMode)
+                }}
+                aria-label="Enable chat"
+              />
+            </div>
+          </CardHeader>
+          {chatEnabled && (
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Chat is visible to confirmed performers on the event page.
+              </p>
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">Chat mode</p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setChatMode('open')
+                      await saveChatSettings(chatEnabled, 'open')
+                    }}
+                    disabled={savingChat}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm transition-colors ${
+                      chatMode === 'open'
+                        ? 'bg-blue-50 border-blue-400 text-blue-700 font-medium'
+                        : 'border-gray-200 text-muted-foreground hover:bg-gray-50'
+                    }`}
+                  >
+                    Everyone can send
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setChatMode('host_only')
+                      await saveChatSettings(chatEnabled, 'host_only')
+                    }}
+                    disabled={savingChat}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm transition-colors ${
+                      chatMode === 'host_only'
+                        ? 'bg-blue-50 border-blue-400 text-blue-700 font-medium'
+                        : 'border-gray-200 text-muted-foreground hover:bg-gray-50'
+                    }`}
+                  >
+                    Host only
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {bookings.length} performer{bookings.length === 1 ? '' : 's'} can access this chat.
+              </p>
+            </CardContent>
+          )}
         </Card>
 
         {/* Bookings List */}

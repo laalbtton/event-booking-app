@@ -79,7 +79,7 @@ export async function GET(
     // Build a union query: pending_approval events that are EITHER linked via
     // event_communities OR created by a member of this community
     // We query both sets and deduplicate by id.
-    const queries: Promise<any>[] = []
+    const queries: Promise<{ data: any[] | null }>[] = []
 
     if (ecEventIds.length > 0) {
       queries.push(
@@ -88,6 +88,7 @@ export async function GET(
           .select('id, title, date, created_by')
           .in('id', ecEventIds)
           .eq('status', 'pending_approval')
+          .then((r) => r)
       )
     }
 
@@ -98,6 +99,7 @@ export async function GET(
           .select('id, title, date, created_by')
           .in('created_by', creatorUserIds)
           .eq('status', 'pending_approval')
+          .then((r) => r)
       )
     }
 
