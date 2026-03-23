@@ -68,7 +68,7 @@ export async function POST(
     const { data: message, error: insertError } = await supabase
       .from('event_chat_messages')
       .insert({ event_id: eventId, user_id: userId, content })
-      .select('id, content, created_at, user_id, profiles:user_id(display_name, avatar_url)')
+      .select('id, content, created_at, user_id, profiles:user_id(full_name, avatar_url)')
       .single()
 
     if (insertError) throw insertError

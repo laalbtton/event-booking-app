@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Bell, BellOff, Send, X } from 'lucide-react'
+import { Bell, BellOff, ChevronLeft, Send } from 'lucide-react'
 
 type ChatMessage = {
   id: string
@@ -10,13 +10,14 @@ type ChatMessage = {
   created_at: string
   user_id: string
   profiles: {
-    display_name: string | null
+    full_name: string | null
     avatar_url: string | null
   } | null
 }
 
 type Props = {
   eventId: string
+  eventTitle: string
   isHost: boolean
   chatMode: 'open' | 'host_only'
   currentUserId: string
@@ -25,7 +26,15 @@ type Props = {
   onClose: () => void
 }
 
-export default function EventChat({ eventId, isHost, chatMode, currentUserId, canSendMessages, onClose }: Props) {
+export default function EventChat({
+  eventId,
+  eventTitle,
+  isHost,
+  chatMode,
+  currentUserId,
+  canSendMessages,
+  onClose,
+}: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -36,7 +45,7 @@ export default function EventChat({ eventId, isHost, chatMode, currentUserId, ca
   // Can send = has a confirmed booking for this event (or is host) AND mode allows it
   const canSend = canSendMessages && (isHost || chatMode === 'open')
 
-  // Load message history
+  // Load message history and notification pref
   useEffect(() => {
     async function load() {
       try {
@@ -96,7 +105,7 @@ export default function EventChat({ eventId, isHost, chatMode, currentUserId, ca
     return () => { supabase.removeChannel(channel) }
   }, [eventId])
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -157,38 +166,54 @@ export default function EventChat({ eventId, isHost, chatMode, currentUserId, ca
     return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
+  function getInitial(name: string | null | undefined) {
+    return (name || '?')[0].toUpperCase()
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-900">
-        <h2 className="text-white font-semibold text-base">Event Chat</h2>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={toggleNotif}
-            className="text-zinc-400 hover:text-yellow-400 transition-colors"
-            title={notifEnabled ? 'Mute notifications' : 'Unmute notifications'}
-          >
-            {notifEnabled ? <Bell size={18} /> : <BellOff size={18} />}
-          </button>
-          <button
-            onClick={onClose}
-            className="text-zinc-400 hover:text-white transition-colors"
-          >
-            <X size={20} />
-          </button>
+      <div className="flex items-center gap-3 px-3 py-3 border-b border-zinc-800 bg-zinc-900">
+        {/* Back button */}
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 text-zinc-400 hover:text-white transition-colors p-1 -ml-1 rounded"
+          aria-label="Back"
+        >
+          <ChevronLeft size={22} />
+        </button>
+
+        {/* Title */}
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-semibold text-sm leading-tight truncate">{eventTitle}</p>
+          <p className="text-zinc-500 text-xs">
+            {chatMode === 'host_only' ? 'Host announcements' : 'Performer chat'}
+          </p>
         </div>
+
+        {/* Bell notification toggle */}
+        <button
+          onClick={toggleNotif}
+          className="flex-shrink-0 text-zinc-400 hover:text-yellow-400 transition-colors p-1"
+          title={notifEnabled ? 'Mute chat notifications' : 'Unmute chat notifications'}
+        >
+          {notifEnabled ? <Bell size={20} /> : <BellOff size={20} />}
+        </button>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {loadError && (
-          <p className="text-red-400 text-sm text-center">{loadError}</p>
+          <p className="text-red-400 text-sm text-center pt-8">{loadError}</p>
         )}
         {!loadError && messages.length === 0 && (
-          <p className="text-zinc-500 text-sm text-center pt-8">No messages yet. Be the first to say something!</p>
+          <p className="text-zinc-500 text-sm text-center pt-8">
+            No messages yet.{canSend ? ' Be the first to say something!' : ''}
+          </p>
         )}
         {messages.map((msg) => {
           const isOwn = msg.user_id === currentUserId
+          const name = msg.profiles?.full_name
           return (
             <div
               key={msg.id}
@@ -199,21 +224,20 @@ export default function EventChat({ eventId, isHost, chatMode, currentUserId, ca
                 {msg.profiles?.avatar_url ? (
                   <img
                     src={msg.profiles.avatar_url}
-                    alt={msg.profiles.display_name || ''}
+                    alt={name || ''}
                     className="w-8 h-8 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-zinc-300">
-                    {(msg.profiles?.display_name?.[0] || '?').toUpperCase()}
+                  <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-zinc-300 font-medium">
+                    {getInitial(name)}
                   </div>
                 )}
               </div>
+
               {/* Bubble */}
-              <div className={`max-w-[75%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
+              <div className={`max-w-[75%] flex flex-col gap-0.5 ${isOwn ? 'items-end' : 'items-start'}`}>
                 {!isOwn && (
-                  <span className="text-xs text-zinc-400 px-1">
-                    {msg.profiles?.display_name || 'Unknown'}
-                  </span>
+                  <span className="text-xs text-zinc-400 px-1">{name || 'Unknown'}</span>
                 )}
                 <div
                   className={`px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words ${
@@ -232,14 +256,19 @@ export default function EventChat({ eventId, isHost, chatMode, currentUserId, ca
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
+      {/* Input / read-only footer */}
       {canSend ? (
         <div className="flex items-center gap-2 px-4 py-3 border-t border-zinc-800 bg-zinc-900">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSend()
+              }
+            }}
             placeholder="Type a message…"
             maxLength={1000}
             className="flex-1 bg-zinc-800 text-white placeholder-zinc-500 rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-400"
@@ -247,7 +276,7 @@ export default function EventChat({ eventId, isHost, chatMode, currentUserId, ca
           <button
             onClick={handleSend}
             disabled={!input.trim() || sending}
-            className="w-9 h-9 rounded-full bg-yellow-400 text-zinc-950 flex items-center justify-center disabled:opacity-40 transition-opacity"
+            className="w-9 h-9 rounded-full bg-yellow-400 text-zinc-950 flex items-center justify-center disabled:opacity-40 transition-opacity flex-shrink-0"
           >
             <Send size={16} />
           </button>

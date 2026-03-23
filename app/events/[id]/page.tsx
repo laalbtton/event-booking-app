@@ -994,19 +994,6 @@ export default function EventDetailsPage() {
                     </Link>
                   </Button>
                 )}
-                {(event as any).chat_enabled &&
-                  currentUser &&
-                  (isHost || isEventCreator || profile?.role === 'event_creator') && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowChat(true)}
-                    className="gap-1.5"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    Chat
-                  </Button>
-                )}
               </div>
               {profile && (
                 event.status === 'cancelled' ? (
@@ -1053,6 +1040,22 @@ export default function EventDetailsPage() {
 
             {waitlistBookings.length > 0 && (
               <p className="text-sm md:text-base text-muted-foreground">⏳ {waitlistBookings.length} on waitlist</p>
+            )}
+
+            {/* Full-width chat row — visible to all performers when chat is enabled */}
+            {(event as any).chat_enabled &&
+              currentUser &&
+              (isHost || isEventCreator || profile?.role === 'event_creator') && (
+              <div className="flex items-center gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-2"
+                  onClick={() => setShowChat(true)}
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Open Event Chat
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -1187,6 +1190,7 @@ export default function EventDetailsPage() {
       {showChat && currentUser && (
         <EventChat
           eventId={(event as any).id || eventId}
+          eventTitle={event.title}
           isHost={isHost || isEventCreator}
           chatMode={(event as any).chat_mode || 'open'}
           currentUserId={currentUser.id}

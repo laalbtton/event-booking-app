@@ -55,7 +55,7 @@ export async function GET(
 
     const { data: messages, error: msgError } = await supabase
       .from('event_chat_messages')
-      .select('id, content, created_at, user_id, profiles:user_id(display_name, avatar_url)')
+      .select('id, content, created_at, user_id, profiles:user_id(full_name, avatar_url)')
       .eq('event_id', eventId)
       .order('created_at', { ascending: true })
       .limit(100)
