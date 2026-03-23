@@ -76,35 +76,32 @@ export async function GET(
       return NextResponse.json({ events: [] })
     }
 
-    // Build a union query: pending_approval events that are EITHER linked via
-    // event_communities OR created by a member of this community
-    // We query both sets and deduplicate by id.
-    const queries: Promise<{ data: any[] | null }>[] = []
+    // Run both strategies in parallel; use Promise.resolve() to convert
+    // PostgrestFilterBuilder (PromiseLike) into a real Promise for TypeScript.
+    const empty = Promise.resolve({ data: [] as any[] })
 
-    if (ecEventIds.length > 0) {
-      queries.push(
-        supabase
-          .from('events')
-          .select('id, title, date, created_by')
-          .in('id', ecEventIds)
-          .eq('status', 'pending_approval')
-          .then((r) => r)
-      )
-    }
+    const [ecResult, creatorResult] = await Promise.all([
+      ecEventIds.length > 0
+        ? Promise.resolve(
+            supabase
+              .from('events')
+              .select('id, title, date, created_by')
+              .in('id', ecEventIds)
+              .eq('status', 'pending_approval')
+          )
+        : empty,
+      creatorUserIds.length > 0
+        ? Promise.resolve(
+            supabase
+              .from('events')
+              .select('id, title, date, created_by')
+              .in('created_by', creatorUserIds)
+              .eq('status', 'pending_approval')
+          )
+        : empty,
+    ])
 
-    if (creatorUserIds.length > 0) {
-      queries.push(
-        supabase
-          .from('events')
-          .select('id, title, date, created_by')
-          .in('created_by', creatorUserIds)
-          .eq('status', 'pending_approval')
-          .then((r) => r)
-      )
-    }
-
-    const results = await Promise.all(queries)
-    const allEvents = results.flatMap((r) => r.data || [])
+    const allEvents = [...(ecResult.data || []), ...(creatorResult.data || [])]
 
     // Deduplicate by event id
     const seen = new Set<string>()
