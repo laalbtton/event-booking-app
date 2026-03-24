@@ -43,21 +43,24 @@ export async function GET(
 
     if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
 
+    // Read: any platform performer or host — no booking required for event_creator/admin.
+    // Also: signed-up performers on this event (confirmed or waitlist, non-audience) so they can read alongside global performers.
     const isPerformerRole = profile?.role === 'event_creator' || profile?.role === 'admin'
     const isHost = event.host_user_id === userId || event.created_by === userId
 
-    const { data: performerBooking } = await supabase
+    const { data: engagementRows } = await supabase
       .from('bookings')
-      .select('id')
+      .select('id, booking_scope')
       .eq('event_id', eventId)
       .eq('user_id', userId)
-      .eq('status', 'confirmed')
-      .eq('booking_scope', 'performer')
-      .maybeSingle()
+      .in('status', ['confirmed', 'waitlist'])
+      .limit(1)
 
-    const isConfirmedPerformerForEvent = !!performerBooking
+    const eventPerformerBooking = engagementRows?.[0]
+    const isSignedUpPerformerOnEvent =
+      !!eventPerformerBooking && eventPerformerBooking.booking_scope !== 'audience'
 
-    if (!isPerformerRole && !isHost && !isConfirmedPerformerForEvent) {
+    if (!isPerformerRole && !isHost && !isSignedUpPerformerOnEvent) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 

@@ -1,6 +1,9 @@
--- Allow confirmed performers for the event to SELECT chat messages (Realtime + direct queries).
--- Run in Supabase SQL editor after event_chat_migration.sql.
--- Fixes: users with platform role "audience" but a performer booking could not read/subscribe before.
+-- SELECT on chat messages (Realtime + polling):
+-- - Platform event_creator / admin: read any event's chat (no booking required).
+-- - Host / event creator: read their events.
+-- - Signed-up performers on that event: confirmed or waitlist, non-audience (read-only for waitlist in app logic).
+--
+-- Run in Supabase SQL editor after event_chat_migration.sql (replaces prior chat_select_performers).
 
 DROP POLICY IF EXISTS "chat_select_performers" ON event_chat_messages;
 
@@ -16,8 +19,8 @@ CREATE POLICY "chat_select_performers"
       SELECT 1 FROM bookings b
       WHERE b.event_id = event_chat_messages.event_id
         AND b.user_id = auth.uid()
-        AND b.status = 'confirmed'
-        AND b.booking_scope = 'performer'
+        AND b.status IN ('confirmed', 'waitlist')
+        AND b.booking_scope IS DISTINCT FROM 'audience'
     )
     OR EXISTS (
       SELECT 1 FROM events e

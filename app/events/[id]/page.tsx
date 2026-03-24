@@ -231,11 +231,27 @@ export default function EventDetailsPage() {
     return { enabled, credits }
   }
 
-  /** Confirmed performer for this event (matches chat push + send rules; excludes audience bookings). */
-  const isConfirmedPerformerForChat =
+  /** Signed up on this event as a performer (confirmed or waitlist); excludes audience bookings. */
+  const isPerformerSignedUpForEvent =
     !!userBooking &&
-    userBooking.status === 'confirmed' &&
+    ['confirmed', 'waitlist'].includes(userBooking.status) &&
     userBooking.booking_scope !== 'audience'
+
+  /** Read chat: platform performers, hosts, or performer signup on this event (event_creator/admin need no booking). */
+  const canReadEventChat =
+    isHost ||
+    isEventCreator ||
+    profile?.role === 'event_creator' ||
+    profile?.role === 'admin' ||
+    isPerformerSignedUpForEvent
+
+  /** Send chat: host/creator or confirmed (not waitlist) non-audience signup; EventChat + API enforce host_only vs open. */
+  const canSendChatMessages =
+    isHost ||
+    isEventCreator ||
+    (!!userBooking &&
+      userBooking.status === 'confirmed' &&
+      userBooking.booking_scope !== 'audience')
 
   function getBookingArtTypeLabel(booking: AttendeeBooking): string | null {
     if (!event || event.event_type !== 'open_mic' || (event as any).open_mic_type !== 'variety_arts_open_mic') return null
@@ -1045,14 +1061,8 @@ export default function EventDetailsPage() {
               <p className="text-sm md:text-base text-muted-foreground">⏳ {waitlistBookings.length} on waitlist</p>
             )}
 
-            {/* Full-width chat row — host/creator, performer-role accounts, or confirmed performers for this event */}
-            {(event as any).chat_enabled &&
-              currentUser &&
-              (isHost ||
-                isEventCreator ||
-                profile?.role === 'event_creator' ||
-                profile?.role === 'admin' ||
-                isConfirmedPerformerForChat) && (
+            {/* Full-width chat row — read for all performers; send rules inside EventChat / API */}
+            {(event as any).chat_enabled && currentUser && canReadEventChat && (
               <div className="flex items-center gap-2 pt-2">
                 <Button
                   variant="outline"
@@ -1201,11 +1211,7 @@ export default function EventDetailsPage() {
           isHost={isHost || isEventCreator}
           chatMode={(event as any).chat_mode || 'open'}
           currentUserId={currentUser.id}
-          canSendMessages={
-            isHost ||
-            isEventCreator ||
-            isConfirmedPerformerForChat
-          }
+          canSendMessages={canSendChatMessages}
           onClose={() => setShowChat(false)}
         />
       )}

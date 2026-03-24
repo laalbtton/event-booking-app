@@ -50,18 +50,19 @@ export async function POST(
       return NextResponse.json({ error: 'Only the host can send messages in this chat' }, { status: 403 })
     }
 
-    // Verify sender is a confirmed performer (or is host)
+    // Sender must be host/creator, or a confirmed non-audience signup for this event (host_only / open handled above).
     if (!isHost) {
       const { data: booking } = await supabase
         .from('bookings')
-        .select('id')
+        .select('id, booking_scope')
         .eq('event_id', eventId)
         .eq('user_id', userId)
         .eq('status', 'confirmed')
-        .eq('booking_scope', 'performer')
         .maybeSingle()
 
-      if (!booking) return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+      if (!booking || booking.booking_scope === 'audience') {
+        return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+      }
     }
 
     // Insert the message

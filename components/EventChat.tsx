@@ -313,7 +313,7 @@ export default function EventChat({
         <div className="px-4 py-3 border-t border-zinc-800 bg-zinc-900">
           <p className="text-zinc-500 text-sm text-center">
             {!canSendMessages
-              ? 'Register for this event as a performer to send messages.'
+              ? 'You can read this chat. Sending is only for hosts and confirmed performers signed up for this event.'
               : 'Only the host can send messages in this chat.'}
           </p>
         </div>
