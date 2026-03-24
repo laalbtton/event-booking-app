@@ -45,7 +45,19 @@ export async function GET(
 
     const isPerformerRole = profile?.role === 'event_creator' || profile?.role === 'admin'
     const isHost = event.host_user_id === userId || event.created_by === userId
-    if (!isPerformerRole && !isHost) {
+
+    const { data: performerBooking } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('user_id', userId)
+      .eq('status', 'confirmed')
+      .eq('booking_scope', 'performer')
+      .maybeSingle()
+
+    const isConfirmedPerformerForEvent = !!performerBooking
+
+    if (!isPerformerRole && !isHost && !isConfirmedPerformerForEvent) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 

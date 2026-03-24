@@ -231,6 +231,12 @@ export default function EventDetailsPage() {
     return { enabled, credits }
   }
 
+  /** Confirmed performer for this event (matches chat push + send rules; excludes audience bookings). */
+  const isConfirmedPerformerForChat =
+    !!userBooking &&
+    userBooking.status === 'confirmed' &&
+    userBooking.booking_scope !== 'audience'
+
   function getBookingArtTypeLabel(booking: AttendeeBooking): string | null {
     if (!event || event.event_type !== 'open_mic' || (event as any).open_mic_type !== 'variety_arts_open_mic') return null
     if (!booking.event_art_type_id) return null
@@ -1039,10 +1045,14 @@ export default function EventDetailsPage() {
               <p className="text-sm md:text-base text-muted-foreground">⏳ {waitlistBookings.length} on waitlist</p>
             )}
 
-            {/* Full-width chat row — visible to all performers when chat is enabled */}
+            {/* Full-width chat row — host/creator, performer-role accounts, or confirmed performers for this event */}
             {(event as any).chat_enabled &&
               currentUser &&
-              (isHost || isEventCreator || profile?.role === 'event_creator') && (
+              (isHost ||
+                isEventCreator ||
+                profile?.role === 'event_creator' ||
+                profile?.role === 'admin' ||
+                isConfirmedPerformerForChat) && (
               <div className="flex items-center gap-2 pt-2">
                 <Button
                   variant="outline"
@@ -1194,7 +1204,7 @@ export default function EventDetailsPage() {
           canSendMessages={
             isHost ||
             isEventCreator ||
-            (userBooking?.status === 'confirmed' && (userBooking as any)?.booking_scope !== 'audience')
+            isConfirmedPerformerForChat
           }
           onClose={() => setShowChat(false)}
         />
