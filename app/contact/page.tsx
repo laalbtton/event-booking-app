@@ -1,6 +1,5 @@
 'use client'
 
-import NavigationTabs from '@/components/NavigationTabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 
@@ -44,7 +43,6 @@ export default function ContactPage() {
           </CardContent>
         </Card>
       </div>
-      <NavigationTabs />
-    </div>
+</div>
   )
 }

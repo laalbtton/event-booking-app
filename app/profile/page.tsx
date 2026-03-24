@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Profile, Event } from '@/lib/supabase'
 import { formatDateTime, formatDate, formatTime } from '@/lib/dateUtils'
-import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -121,7 +120,7 @@ export default function ProfilePage() {
   const [cancellingBooking, setCancellingBooking] = useState<string | null>(null)
   const [expandedPosterActions, setExpandedPosterActions] = useState<Set<string>>(new Set())
   const [profileDetailsExpanded, setProfileDetailsExpanded] = useState(false)
-  const [calendarExpanded, setCalendarExpanded] = useState(true)
+  const [calendarExpanded, setCalendarExpanded] = useState(false)
   const [calendarCursor, setCalendarCursor] = useState(new Date())
   const { confirm } = useConfirmDialog()
   const touchStartX = useRef<Record<string, number>>({})
@@ -1026,9 +1025,6 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      {/* Navigation Tabs */}
-      <NavigationTabs />
-
       <div className="max-w-4xl mx-auto px-0 py-4 sm:py-8 sm:px-6 lg:px-8">
         <div className="mb-1 px-4 sm:px-0">
           <div className="flex items-center justify-end gap-1">
@@ -1046,7 +1042,7 @@ export default function ProfilePage() {
           </div>
         </div>
         {/* Profile Card */}
-        <Card className="mb-0 shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
+        <Card className="mb-0 shadow-sm rounded-none sm:rounded-lg">
           <CardContent className="p-6 sm:p-8">
           {!isEditing ? (
             <>
@@ -1270,7 +1266,7 @@ export default function ProfilePage() {
 
         {/* My Invites - only when invites exist */}
         {invites.length > 0 && (
-          <Card className="shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
+          <Card className="shadow-sm rounded-none sm:rounded-lg">
             <CardHeader className="cursor-pointer p-4 sm:p-6" onClick={() => setInvitesExpanded((p) => !p)}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1320,8 +1316,8 @@ export default function ProfilePage() {
           </Card>
         )}
 
-        <Card className="mb-0 shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
-          <CardHeader className="p-4 sm:p-6">
+        <Card className="mb-0 shadow-sm rounded-none sm:rounded-lg">
+          <CardHeader className="p-6 sm:p-6">
             <button
               type="button"
               className="w-full flex items-center justify-between"
@@ -1360,7 +1356,7 @@ export default function ProfilePage() {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
-              <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', calendarExpanded && 'rotate-180')} />
+              <ChevronDown className={cn('h-4 w-4 transition-transform', calendarExpanded && 'rotate-180')} />
             </button>
           </CardHeader>
           {calendarExpanded && (
@@ -1395,7 +1391,7 @@ export default function ProfilePage() {
         </Card>
 
         {/* My Bookings - always visible, no dropdown, full-bleed on mobile */}
-        <Card className="shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
+        <Card className="shadow-sm rounded-none sm:rounded-lg">
           <CardContent className="p-4 sm:p-6">
             <Tabs value={bookingsTab} onValueChange={(v) => setBookingsTab(v as typeof bookingsTab)} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
@@ -1696,7 +1692,7 @@ export default function ProfilePage() {
         </Card>
 
         {/* My Transactions - collapsible at bottom, full-bleed on mobile */}
-        <Card className="shadow-sm -mx-4 sm:mx-0 rounded-none sm:rounded-lg">
+        <Card className="shadow-sm rounded-none sm:rounded-lg">
           <CardHeader className="cursor-pointer p-4 sm:p-6" onClick={() => setTransactionsExpanded((p) => !p)}>
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">My Transactions</CardTitle>

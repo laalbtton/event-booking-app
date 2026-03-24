@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Profile, Event, Booking } from '@/lib/supabase'
 import { formatDateTime, formatTime } from '@/lib/dateUtils'
-import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
 import { createNotification } from '@/lib/notifications'
 import { sendBookingConfirmationEmail, sendWaitlistPromotionEmail, sendWaitlistPositionEmail } from '@/lib/emailService'
@@ -1052,7 +1051,6 @@ export default function Dashboard() {
           <EventCardSkeleton />
           <EventCardSkeleton />
         </div>
-        <NavigationTabs />
       </div>
     )
   }
@@ -1139,9 +1137,7 @@ export default function Dashboard() {
         loading={pushActionLoading}
       />
       {/* Navigation Tabs */}
-      <NavigationTabs />
-
-      <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 pb-28">
+<div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 pb-28">
         {/* Role Request Status / Apply Section — only for performers who aren't community event_creators */}
         {userRole === 'performer' && !isCommunityEventCreator && (
           <div className="mb-6">

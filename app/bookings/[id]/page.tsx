@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import NavigationTabs from '@/components/NavigationTabs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -217,7 +216,6 @@ export default function BookingDetailsPage() {
     return (
       <div className="min-h-screen bg-background">
         <BookingDetailSkeleton />
-        <NavigationTabs />
       </div>
     )
   }
@@ -225,7 +223,6 @@ export default function BookingDetailsPage() {
   if (!booking) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <NavigationTabs />
         <div className="max-w-2xl mx-auto px-4 py-8">
           <h1 className="text-2xl font-bold mb-4">Booking not found</h1>
           <p className="text-muted-foreground mb-4">This booking may have been cancelled or you don&apos;t have access to it.</p>
@@ -286,7 +283,6 @@ export default function BookingDetailsPage() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <NavigationTabs />
       <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8">
         <div className="flex items-center gap-2 mb-6">
           <Link

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
-import NavigationTabs from '@/components/NavigationTabs'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -1191,8 +1190,7 @@ export default function EventManagementPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <NavigationTabs />
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+<div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
           <div className="space-y-4">
             <Skeleton className="h-10 w-48" />
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -1209,9 +1207,7 @@ export default function EventManagementPage() {
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Navigation Tabs */}
-      <NavigationTabs />
-
-      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+<div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">My Events</CardTitle>
           <Button onClick={() => {

@@ -1,6 +1,5 @@
 'use client'
 
-import NavigationTabs from '@/components/NavigationTabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import CreditPurchaseOptions from '@/components/CreditPurchaseOptions'
 import { createCheckoutSession } from '@/lib/stripe-client'
@@ -38,7 +37,6 @@ export default function BuyCreditsPage() {
           </CardContent>
         </Card>
       </div>
-      <NavigationTabs />
-    </div>
+</div>
   )
 }

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import NavigationTabs from '@/components/NavigationTabs'
 import { ChevronLeft } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -185,7 +184,6 @@ export default function CreditsHistoryPage() {
           })()
         )}
       </div>
-      <NavigationTabs />
-    </div>
+</div>
   )
 }

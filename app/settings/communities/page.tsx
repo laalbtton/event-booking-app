@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
-import NavigationTabs from '@/components/NavigationTabs'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -141,8 +140,7 @@ export default function SettingsCommunitiesPage() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <NavigationTabs />
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+<div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
         <div className="flex items-center gap-2 mb-2">
           <Link href="/settings" className="p-1 -ml-1 rounded hover:bg-muted shrink-0" aria-label="Back">
             <ChevronLeft className="w-5 h-5" />

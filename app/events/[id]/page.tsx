@@ -5,7 +5,6 @@ import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
-import NavigationTabs from '@/components/NavigationTabs'
 import { sendBookingConfirmationEmail } from '@/lib/emailService'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,7 +18,6 @@ import { toast } from 'sonner'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import EventChat from '@/components/EventChat'
-
 
 
 type EventDetails = {
@@ -664,8 +662,7 @@ export default function EventDetailsPage() {
         <div className="min-h-screen flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-background pb-28 text-muted-foreground">
           <p>Loading event…</p>
         </div>
-        <NavigationTabs />
-      </>
+</>
     )
   }
   if (loading) return null
@@ -1215,9 +1212,7 @@ export default function EventDetailsPage() {
       )}
 
       {/* Bottom Navigation */}
-      <NavigationTabs />
-
-      <Dialog open={venueOpen} onOpenChange={setVenueOpen}>
+<Dialog open={venueOpen} onOpenChange={setVenueOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Venue Details</DialogTitle>

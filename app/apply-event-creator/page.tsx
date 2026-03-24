@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
-import NavigationTabs from '@/components/NavigationTabs'
 import { ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -168,8 +167,7 @@ export default function ApplyEventCreatorPage() {
             </CardContent>
           </Card>
         </div>
-        <NavigationTabs />
-      </div>
+</div>
     )
   }
 
@@ -204,8 +202,7 @@ export default function ApplyEventCreatorPage() {
             </CardContent>
           </Card>
         </div>
-        <NavigationTabs />
-      </div>
+</div>
     )
   }
 
@@ -246,8 +243,7 @@ export default function ApplyEventCreatorPage() {
             </CardContent>
           </Card>
         </div>
-        <NavigationTabs />
-      </div>
+</div>
     )
   }
 
@@ -324,8 +320,7 @@ export default function ApplyEventCreatorPage() {
             </form>
           </CardContent>
         </Card>
-        <NavigationTabs />
-      </div>
+</div>
     </div>
   )
 }

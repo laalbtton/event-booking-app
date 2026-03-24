@@ -9,6 +9,7 @@ import { AuthBootstrapProvider } from '@/components/providers/auth-bootstrap-pro
 import { PushServiceWorkerProvider } from '@/components/providers/push-service-worker-provider'
 import { InstallBonusProvider } from '@/components/providers/install-bonus-provider'
 import { ThemeProvider } from '@/components/providers/theme-provider'
+import AppNavigationShell from '@/components/AppNavigationShell'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -75,6 +76,7 @@ export default function RootLayout({
             {/* Main content area */}
             <main className="flex-1">
               {children}
+              <AppNavigationShell />
             </main>
 
             {/* Footer */}

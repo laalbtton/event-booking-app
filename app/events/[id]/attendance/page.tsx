@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import { createNotification } from '@/lib/notifications'
 import Link from 'next/link'
-import NavigationTabs from '@/components/NavigationTabs'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -2474,7 +2473,6 @@ export default function AttendancePage() {
       </div>
 
       {/* Bottom Navigation */}
-      <NavigationTabs />
-    </div>
+</div>
   )
 }

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import NavigationTabs from '@/components/NavigationTabs'
 import { formatDateTime } from '@/lib/dateUtils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -934,7 +933,6 @@ export default function VenueRedemptionsPage() {
         )}
       </div>
 
-      <NavigationTabs />
-    </div>
+</div>
   )
 }

@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import NavigationTabs from '@/components/NavigationTabs'
 import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -448,16 +447,14 @@ export default function SettingsPage() {
         <div className="max-w-2xl mx-auto px-4 py-6">
           <SettingsSkeleton />
         </div>
-        <NavigationTabs />
-      </div>
+</div>
     )
   }
 
   if (isMobile) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <NavigationTabs />
-        <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
+<div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2 mb-6">
             <Link href="/profile" className="p-1 -ml-1 rounded hover:bg-muted shrink-0" aria-label="Back to profile">
               <ChevronLeft className="w-5 h-5" />
@@ -503,8 +500,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <NavigationTabs />
-      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8 space-y-6">
+<div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8 space-y-6">
         <div className="flex items-center gap-2">
           <Link href="/profile" className="p-1 -ml-1 rounded hover:bg-muted shrink-0" aria-label="Back to profile">
             <ChevronLeft className="w-5 h-5" />
