@@ -956,7 +956,7 @@ export default function ProfilePage() {
       <div className="max-w-4xl mx-auto px-0 py-4 sm:py-8 sm:px-6 lg:px-8">
         <header className="sticky top-0 z-[45] -mx-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 pt-[env(safe-area-inset-top,0px)] mb-3 sm:mb-4 rounded-none sm:rounded-lg overflow-hidden sm:border sm:border-border sm:shadow-sm">
           <div className="flex items-center justify-between gap-2 px-4 sm:px-4 min-h-11">
-            <p className="text-sm font-semibold tracking-tight truncate min-w-0 pr-2">
+            <p className="text-base sm:text-lg font-semibold tracking-tight truncate min-w-0 pr-2">
               {(profile.full_name || '').trim() || 'Account'}
             </p>
             <div className="flex items-center gap-1 shrink-0">

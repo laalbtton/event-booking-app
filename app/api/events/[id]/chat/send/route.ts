@@ -99,18 +99,31 @@ async function fanOutNotifications(
   if (!url || !key) return
   const client = createClient(url, key)
 
-  // Get all confirmed performers (minus sender)
+  // Get chat participants who should receive notifications:
+  // performer signups (confirmed + waitlist, non-audience), plus host/creator.
   const { data: bookings } = await client
     .from('bookings')
-    .select('user_id')
+    .select('user_id, status')
     .eq('event_id', eventId)
-    .eq('status', 'confirmed')
     .eq('booking_scope', 'performer')
-    .neq('user_id', senderId)
+    .in('status', ['confirmed', 'waitlist'])
 
-  if (!bookings || bookings.length === 0) return
+  const { data: eventRow } = await client
+    .from('events')
+    .select('host_user_id, created_by')
+    .eq('id', eventId)
+    .maybeSingle()
 
-  const recipientIds = bookings.map((b: { user_id: string }) => b.user_id)
+  const recipientSet = new Set<string>()
+  for (const booking of bookings || []) {
+    if (booking.user_id && booking.user_id !== senderId) {
+      recipientSet.add(booking.user_id)
+    }
+  }
+  if (eventRow?.host_user_id && eventRow.host_user_id !== senderId) recipientSet.add(eventRow.host_user_id)
+  if (eventRow?.created_by && eventRow.created_by !== senderId) recipientSet.add(eventRow.created_by)
+  const recipientIds = Array.from(recipientSet)
+  if (recipientIds.length === 0) return
 
   // Fetch muted prefs
   const { data: mutedPrefs } = await client
@@ -125,12 +138,43 @@ async function fanOutNotifications(
   const eventUrl = eventSlug ? `/events/${eventSlug}` : `/events/${eventId}`
   const truncated = content.length > 80 ? content.slice(0, 77) + '…' : content
 
+  let attempted = 0
+  let sent = 0
+  let failed = 0
+  let skippedMuted = 0
+
   for (const recipientId of recipientIds) {
-    if (mutedSet.has(recipientId)) continue
-    sendPushToUser(client, recipientId, {
-      title: `New message in ${eventTitle}`,
-      body: truncated,
-      data: { url: eventUrl },
-    }, 'booking_updates').catch(() => {})
+    if (mutedSet.has(recipientId)) {
+      skippedMuted += 1
+      continue
+    }
+    attempted += 1
+    try {
+      const result = await sendPushToUser(
+        client,
+        recipientId,
+        {
+          title: `New message in ${eventTitle}`,
+          body: truncated,
+          data: { url: eventUrl },
+        },
+        'booking_updates'
+      )
+      sent += Number(result.sent || 0)
+      failed += Number(result.failed || 0)
+    } catch (err) {
+      failed += 1
+      console.error('chat push send error:', { eventId, recipientId, err })
+    }
   }
+
+  console.log('chat push fanout complete', {
+    eventId,
+    senderId,
+    recipients: recipientIds.length,
+    attempted,
+    sent,
+    failed,
+    skippedMuted,
+  })
 }

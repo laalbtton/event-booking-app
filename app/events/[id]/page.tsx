@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
-import { Bell, BellOff, ChevronLeft, ChevronDown, ChevronUp, Copy, Instagram, MessageCircle } from 'lucide-react'
+import { Bell, BellOff, ChevronLeft, ChevronDown, ChevronUp, Copy, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
@@ -1159,7 +1159,12 @@ export default function EventDetailsPage() {
                 >
                   <span className="relative inline-flex items-center justify-center">
                     <Copy className="h-4 w-4" />
-                    <Instagram className="absolute -top-1 -right-1 h-3 w-3 text-pink-400 bg-white/0" />
+                    <span
+                      className="pointer-events-none absolute -top-0.5 -right-1.5 z-10 text-[8px] font-semibold leading-none tracking-tight text-pink-500"
+                      aria-hidden
+                    >
+                      ig
+                    </span>
                   </span>
                 </Button>
               )}

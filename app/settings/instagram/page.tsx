@@ -146,12 +146,12 @@ export default function SettingsInstagramPage() {
           <Link href="/settings" className="p-1 -ml-1 rounded hover:bg-muted shrink-0" aria-label="Back to Settings">
             <ChevronLeft className="w-5 h-5" />
           </Link>
-          <h1 className="text-2xl font-bold">Instagram & Poster Auto-Post</h1>
+          <h1 className="text-2xl font-bold">Instagram, Auto-Post & Event Handle Copy</h1>
         </div>
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="text-xl">Instagram & Poster Auto-Post</CardTitle>
-            <CardDescription>Connect Instagram and control poster auto-post behavior.</CardDescription>
+            <CardTitle className="text-xl">Instagram, Auto-Post & Event Handle Copy</CardTitle>
+            <CardDescription>Connect Instagram, control poster auto-post, and show/hide Instagram handle copy on event pages.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-lg">

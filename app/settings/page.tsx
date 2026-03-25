@@ -478,7 +478,7 @@ export default function SettingsPage() {
                 <SettingsListRow href="/settings/faq" icon={HelpCircle} title="FAQ" description="Credits and events" />
               </div>
               <div className="px-4 py-1">
-                <SettingsListRow href="/settings/instagram" icon={Instagram} title="Instagram & Poster Auto-Post" description={instagramConnected ? (instagramUsername ? `@${instagramUsername}` : 'connected') : 'Connect account'} />
+                <SettingsListRow href="/settings/instagram" icon={Instagram} title="Instagram, Auto-Post & Event Handle Copy" description={instagramConnected ? (instagramUsername ? `@${instagramUsername} · copy handles toggle inside` : 'connected · copy handles toggle inside') : 'Connect account + manage copy handles toggle'} />
               </div>
               <div className="px-4 py-1">
                 <SettingsListRow href="/settings/communities" icon={Users} title="Communities" description="Your communities & memberships" />
@@ -698,8 +698,8 @@ export default function SettingsPage() {
 
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="text-xl">Instagram & Poster Auto-Post</CardTitle>
-            <CardDescription>Connect Instagram and control poster auto-post behavior.</CardDescription>
+            <CardTitle className="text-xl">Instagram, Auto-Post & Event Handle Copy</CardTitle>
+            <CardDescription>Connect Instagram, control poster auto-post, and enable Instagram handle copy on event pages.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-lg">
