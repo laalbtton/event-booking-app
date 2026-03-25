@@ -51,12 +51,28 @@ type VarietyArtOption = {
   waitlistCount: number
 }
 
+type InviteItem = {
+  id: string
+  status: 'pending' | 'accepted' | 'declined'
+  created_at: string
+  events: {
+    id: string
+    title: string
+    date: string
+    location: string | null
+    credits_required: number | null
+    event_type: string | null
+  }
+}
+
 export default function Dashboard() {
   const { confirm } = useConfirmDialog()
   const { authResolved, user } = useAuthBootstrap()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [myBookings, setMyBookings] = useState<any[]>([])
+  const [invites, setInvites] = useState<InviteItem[]>([])
+  const [respondingInvite, setRespondingInvite] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [bookingLoading, setBookingLoading] = useState<string | null>(null)
   const [optimisticBookings, setOptimisticBookings] = useState<Set<string>>(new Set())
@@ -782,8 +798,8 @@ export default function Dashboard() {
         }
       }
 
-      // Load user-specific data in parallel — all four only need userId
-      const [bookingsResult, inviteResult, alertsResult, pushPrefsResult] = await Promise.all([
+      // Load user-specific data in parallel — all need userId
+      const [bookingsResult, inviteResult, pendingInvitesResult, alertsResult, pushPrefsResult] = await Promise.all([
         supabase
           .from('bookings')
           .select('*, events (*)')
@@ -794,6 +810,12 @@ export default function Dashboard() {
           .select('event_id, status')
           .eq('invited_user_id', userId)
           .in('status', ['pending', 'accepted']),
+        supabase
+          .from('event_invites')
+          .select('id, status, created_at, events (id, title, date, location, credits_required, event_type)')
+          .eq('invited_user_id', userId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false }),
         supabase
           .from('registration_alerts')
           .select('event_id')
@@ -812,6 +834,12 @@ export default function Dashboard() {
         setInvitedEventIds(new Set(inviteResult.data.map((invite: any) => invite.event_id)))
       }
 
+      if (!pendingInvitesResult.error) {
+        setInvites((pendingInvitesResult.data || []) as any)
+      } else {
+        setInvites([])
+      }
+
       if (alertsResult.error) {
         const missingTable = alertsResult.error.code === '42P01' || alertsResult.error.message?.includes('registration_alerts')
         if (!missingTable) console.warn('Error loading registration alerts:', alertsResult.error)
@@ -828,6 +856,53 @@ export default function Dashboard() {
       setError(error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function respondToInvite(inviteId: string, action: 'accept' | 'decline', invite?: InviteItem) {
+    // Show credit charge confirmation for booked shows with a non-zero credit cost
+    if (action === 'accept' && invite) {
+      const creditsRequired = invite.events.credits_required ?? 0
+      const isBookedShow = invite.events.event_type === 'booked_show'
+      if (isBookedShow && creditsRequired > 0) {
+        const shouldProceed = await confirm({
+          title: 'Confirm acceptance',
+          message: `Accepting this invite will charge you ${creditsRequired} credit${creditsRequired !== 1 ? 's' : ''}.\n\nOnly proceed if you are okay with this charge.`,
+          confirmText: `Accept & pay ${creditsRequired} credit${creditsRequired !== 1 ? 's' : ''}`,
+          cancelText: 'Cancel',
+          variant: 'default',
+        })
+        if (!shouldProceed) return
+      }
+    }
+
+    setRespondingInvite(inviteId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/invites/respond', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ inviteId, action }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to respond to invite')
+      }
+
+      if (profile) {
+        await loadData(profile.id, profile)
+      }
+    } catch (error: any) {
+      console.error('Error responding to invite:', error)
+      toast.error(error.message || 'Failed to respond to invite')
+    } finally {
+      setRespondingInvite(null)
     }
   }
 
@@ -1256,6 +1331,47 @@ export default function Dashboard() {
           <Card className="border-destructive bg-destructive/15 mb-6 shadow-sm">
             <CardContent className="p-4">
               <p className="text-destructive text-sm leading-relaxed">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {invites.length > 0 && (
+          <Card className="shadow-sm mb-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg sm:text-xl">Event invites ({invites.length})</CardTitle>
+              <CardDescription>Accept or decline invites before you book other events.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {invites.map((invite) => (
+                <div key={invite.id} className="flex items-center justify-between gap-3 p-3 border rounded-lg">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{invite.events.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{formatDateTime(invite.events.date)}</p>
+                    {invite.events.event_type === 'booked_show' && (invite.events.credits_required ?? 0) > 0 && (
+                      <p className="text-xs text-amber-600 font-medium mt-0.5">
+                        {invite.events.credits_required} credit{invite.events.credits_required !== 1 ? 's' : ''} required
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      onClick={() => respondToInvite(invite.id, 'accept', invite)}
+                      disabled={respondingInvite === invite.id}
+                    >
+                      {respondingInvite === invite.id ? 'Working…' : 'Accept'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => respondToInvite(invite.id, 'decline', invite)}
+                      disabled={respondingInvite === invite.id}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}

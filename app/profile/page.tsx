@@ -47,20 +47,6 @@ type EventBooking = {
   event_status?: string | null
 }
 
-type InviteItem = {
-  id: string
-  status: 'pending' | 'accepted' | 'declined'
-  created_at: string
-  events: {
-    id: string
-    title: string
-    date: string
-    location: string | null
-    credits_required: number | null
-    event_type: string | null
-  }
-}
-
 type PushNotificationPrefs = {
   user_id: string
   preprompt_dismissed_at: string | null
@@ -84,8 +70,6 @@ export default function ProfilePage() {
   const { authResolved, user } = useAuthBootstrap()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [eventBookings, setEventBookings] = useState<EventBooking[]>([])
-  const [invites, setInvites] = useState<InviteItem[]>([])
-  const [respondingInvite, setRespondingInvite] = useState<string | null>(null)
   const [attendedCount, setAttendedCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -109,7 +93,6 @@ export default function ProfilePage() {
   const [showInstallHelp, setShowInstallHelp] = useState(false)
   const [installActionLoading, setInstallActionLoading] = useState(false)
   const [isStandalone, setIsStandalone] = useState(false)
-  const [invitesExpanded, setInvitesExpanded] = useState(true)
   const [transactionsExpanded, setTransactionsExpanded] = useState(false)
   const [myBookings, setMyBookings] = useState<any[]>([])
   const [myCoupons, setMyCoupons] = useState<MyCoupon[]>([])
@@ -249,19 +232,13 @@ export default function ProfilePage() {
       })
 
       // Load all three booking/invite datasets in parallel — all only need userId
-      const [bookingsResult, invitesResult, bookingsFullResult] = await Promise.all([
+      const [bookingsResult, bookingsFullResult] = await Promise.all([
         supabase
           .from('bookings')
           .select('id, event_id, credits_used, status, attendance_status, waitlist_position, booked_at, events (id, title, date, location, status)')
           .eq('user_id', userId)
           .gt('credits_used', 0)
           .order('booked_at', { ascending: false }),
-        supabase
-          .from('event_invites')
-          .select('id, status, created_at, events (id, title, date, location, credits_required, event_type)')
-          .eq('invited_user_id', userId)
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false }),
         supabase
           .from('bookings')
           .select('*, events (*)')
@@ -286,8 +263,6 @@ export default function ProfilePage() {
       }))
       setEventBookings(events)
       setAttendedCount(events.filter((e: any) => e.attendance_status === 'attended').length)
-
-      if (!invitesResult.error) setInvites(invitesResult.data as any)
 
       if (!bookingsFullResult.error) {
         setMyBookings(bookingsFullResult.data || [])
@@ -697,53 +672,6 @@ export default function ProfilePage() {
     }
   }
 
-  async function respondToInvite(inviteId: string, action: 'accept' | 'decline', invite?: InviteItem) {
-    // Show credit charge confirmation for booked shows with a non-zero credit cost
-    if (action === 'accept' && invite) {
-      const creditsRequired = invite.events.credits_required ?? 0
-      const isBookedShow = invite.events.event_type === 'booked_show'
-      if (isBookedShow && creditsRequired > 0) {
-        const shouldProceed = await confirm({
-          title: 'Confirm acceptance',
-          message: `Accepting this invite will charge you ${creditsRequired} credit${creditsRequired !== 1 ? 's' : ''}.\n\nOnly proceed if you are okay with this charge.`,
-          confirmText: `Accept & pay ${creditsRequired} credit${creditsRequired !== 1 ? 's' : ''}`,
-          cancelText: 'Cancel',
-          variant: 'default',
-        })
-        if (!shouldProceed) return
-      }
-    }
-
-    setRespondingInvite(inviteId)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) throw new Error('Not authenticated')
-
-      const response = await fetch('/api/invites/respond', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ inviteId, action }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.error || 'Failed to respond to invite')
-      }
-
-      if (profile) {
-        await loadProfile(profile.id)
-      }
-    } catch (error: any) {
-      console.error('Error responding to invite:', error)
-      alert('Error responding to invite: ' + error.message)
-    } finally {
-      setRespondingInvite(null)
-    }
-  }
-
   async function handleEnablePushNotifications() {
     if (!profile) return
     setPushActionLoading(true)
@@ -1026,7 +954,7 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-background pb-20">
       <div className="max-w-4xl mx-auto px-0 py-4 sm:py-8 sm:px-6 lg:px-8">
-        <header className="sticky top-0 z-[45] -mx-0 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 pt-[env(safe-area-inset-top,0px)] mb-3 sm:mb-4 rounded-none sm:rounded-lg overflow-hidden sm:border sm:border-border sm:shadow-sm">
+        <header className="sticky top-0 z-[45] -mx-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 pt-[env(safe-area-inset-top,0px)] mb-3 sm:mb-4 rounded-none sm:rounded-lg overflow-hidden sm:border sm:border-border sm:shadow-sm">
           <div className="flex items-center justify-between gap-2 px-4 sm:px-4 min-h-11">
             <p className="text-sm font-semibold tracking-tight truncate min-w-0 pr-2">
               {(profile.full_name || '').trim() || 'Account'}
@@ -1259,58 +1187,6 @@ export default function ProfilePage() {
           )}
           </CardContent>
         </Card>
-
-        {/* My Invites - only when invites exist */}
-        {invites.length > 0 && (
-          <Card className="shadow-sm rounded-none sm:rounded-lg">
-            <CardHeader className="cursor-pointer p-4 sm:p-6" onClick={() => setInvitesExpanded((p) => !p)}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">
-                    My Invites{invites.filter((i) => i.status === 'pending').length > 0 ? ` (${invites.filter((i) => i.status === 'pending').length})` : ''}
-                  </CardTitle>
-                </div>
-                <ChevronDown className={cn('h-5 w-5 text-muted-foreground transition-transform', invitesExpanded && 'rotate-180')} />
-              </div>
-            </CardHeader>
-            {invitesExpanded && (
-              <CardContent className="p-4 sm:p-6 pt-0">
-                <div className="space-y-3">
-                  {invites.map((invite) => (
-                    <div key={invite.id} className="flex items-center justify-between gap-3 p-3 border rounded-lg">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{invite.events.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{formatDate(invite.events.date)}</p>
-                        {invite.events.event_type === 'booked_show' && (invite.events.credits_required ?? 0) > 0 && (
-                          <p className="text-xs text-amber-600 font-medium mt-0.5">
-                            {invite.events.credits_required} credit{invite.events.credits_required !== 1 ? 's' : ''} required
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => respondToInvite(invite.id, 'accept', invite)}
-                          disabled={respondingInvite === invite.id}
-                        >
-                          Accept
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => respondToInvite(invite.id, 'decline', invite)}
-                          disabled={respondingInvite === invite.id}
-                        >
-                          Decline
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        )}
 
         <Card className="mb-0 shadow-sm rounded-none sm:rounded-lg">
           <CardHeader className="px-6 py-[1.2rem] sm:px-6 sm:py-[1.2rem]">
