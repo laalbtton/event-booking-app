@@ -21,7 +21,7 @@ type Props = {
   isHost: boolean
   chatMode: 'open' | 'host_only'
   currentUserId: string
-  /** true when the user has a confirmed performer booking for this event (or is host/creator) */
+  /** true when the user may send (host/creator, or confirmed non-audience signup); host_only mode still enforced below */
   canSendMessages: boolean
   onClose: () => void
 }

@@ -6,9 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, LogOut } from 'lucide-react'
 import { signOutAndCleanup } from '@/lib/authClient'
+import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 
 export default function SettingsAccountPage() {
   const router = useRouter()
+  const { user } = useAuthBootstrap()
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -22,7 +24,12 @@ export default function SettingsAccountPage() {
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="text-xl">Sign out</CardTitle>
-            <CardDescription>Sign out of your account on this device.</CardDescription>
+            <CardDescription className="space-y-1">
+              {user?.email && (
+                <span className="block text-muted-foreground break-all">{user.email}</span>
+              )}
+              <span className="block">Sign out of your account on this device.</span>
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Button

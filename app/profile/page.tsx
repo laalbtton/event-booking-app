@@ -1026,21 +1026,26 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-background pb-20">
       <div className="max-w-4xl mx-auto px-0 py-4 sm:py-8 sm:px-6 lg:px-8">
-        <div className="mb-1 px-4 sm:px-0">
-          <div className="flex items-center justify-end gap-1">
-            <Button onClick={copyPublicProfileLink} variant="ghost" size="icon" className="h-8 w-8" title="Share Profile">
-              <Share2 className="h-4 w-4" />
-            </Button>
-            <Button onClick={() => setIsEditing(true)} variant="ghost" size="icon" className="h-8 w-8" title="Edit Profile">
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8" title="Settings" asChild>
-              <Link href="/settings">
-                <Settings className="w-4 h-4" />
-              </Link>
-            </Button>
+        <header className="sticky top-0 z-[45] -mx-0 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 pt-[env(safe-area-inset-top,0px)] mb-3 sm:mb-4 rounded-none sm:rounded-lg overflow-hidden sm:border sm:border-border sm:shadow-sm">
+          <div className="flex items-center justify-between gap-2 px-4 sm:px-4 min-h-11">
+            <p className="text-sm font-semibold tracking-tight truncate min-w-0 pr-2">
+              {(profile.full_name || '').trim() || 'Account'}
+            </p>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button onClick={copyPublicProfileLink} variant="ghost" size="icon" className="h-8 w-8" title="Share Profile">
+                <Share2 className="h-4 w-4" />
+              </Button>
+              <Button onClick={() => setIsEditing(true)} variant="ghost" size="icon" className="h-8 w-8" title="Edit Profile">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" title="Settings" asChild>
+                <Link href="/settings">
+                  <Settings className="w-4 h-4" />
+                </Link>
+              </Button>
+            </div>
           </div>
-        </div>
+        </header>
         {/* Profile Card */}
         <Card className="mb-0 shadow-sm rounded-none sm:rounded-lg">
           <CardContent className="p-6 sm:p-8">
@@ -1056,17 +1061,8 @@ export default function ProfilePage() {
               </Avatar>
 
               <div className="flex-1 min-w-0">
-                <div className="mb-4">
-                  <div className="min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1 truncate">
-                      {profile.full_name || 'No name set'}
-                    </h2>
-                    <p className="text-sm text-muted-foreground truncate">{profile.email}</p>
-                  </div>
-                </div>
-
-                {/* Consolidated Stats - Horizontal Layout */}
-                <div className="flex flex-col gap-2 pt-4 border-t">
+                {/* Name lives in sticky app header; email is shown under Settings → Account */}
+                <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-6">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-muted-foreground">Credits:</span>
@@ -1317,7 +1313,7 @@ export default function ProfilePage() {
         )}
 
         <Card className="mb-0 shadow-sm rounded-none sm:rounded-lg">
-          <CardHeader className="p-6 sm:p-6">
+          <CardHeader className="px-6 py-[1.2rem] sm:px-6 sm:py-[1.2rem]">
             <button
               type="button"
               className="w-full flex items-center justify-between"

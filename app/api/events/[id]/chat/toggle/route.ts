@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { userCanManageEventChatSettings } from '@/lib/eventChatPermissions'
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -37,8 +38,16 @@ export async function PATCH(
 
     if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
 
-    const isHost = event.host_user_id === userId || event.created_by === userId
-    if (!isHost) return NextResponse.json({ error: 'Only the host can modify chat settings' }, { status: 403 })
+    const canManage = await userCanManageEventChatSettings(supabase, eventId, userId, {
+      host_user_id: event.host_user_id,
+      created_by: event.created_by,
+    })
+    if (!canManage) {
+      return NextResponse.json(
+        { error: 'Only the host, event creator, platform admin, or a community admin for this event can modify chat settings' },
+        { status: 403 }
+      )
+    }
 
     const updates: Record<string, unknown> = {}
     if (typeof body.chat_enabled === 'boolean') updates.chat_enabled = body.chat_enabled

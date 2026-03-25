@@ -10,6 +10,7 @@ import { PushServiceWorkerProvider } from '@/components/providers/push-service-w
 import { InstallBonusProvider } from '@/components/providers/install-bonus-provider'
 import { ThemeProvider } from '@/components/providers/theme-provider'
 import AppNavigationShell from '@/components/AppNavigationShell'
+import AppStickyHeader from '@/components/AppStickyHeader'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -75,6 +76,7 @@ export default function RootLayout({
             <GlobalAlertsProvider />
             {/* Main content area */}
             <main className="flex-1">
+              <AppStickyHeader />
               {children}
               <AppNavigationShell />
             </main>

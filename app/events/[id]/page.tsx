@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
-import { ChevronLeft, ChevronDown, ChevronUp, Copy, Instagram, MessageCircle } from 'lucide-react'
+import { Bell, BellOff, ChevronLeft, ChevronDown, ChevronUp, Copy, Instagram, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
@@ -120,6 +120,7 @@ export default function EventDetailsPage() {
   const [selectedVarietyOptionId, setSelectedVarietyOptionId] = useState('')
   const [posterExpanded, setPosterExpanded] = useState(false)
   const [showChat, setShowChat] = useState(false)
+  const [chatNotifEnabled, setChatNotifEnabled] = useState(true)
 
 
   function copyPublicLink() {
@@ -305,6 +306,49 @@ export default function EventDetailsPage() {
   useEffect(() => {
     loadEventDetails()
   }, [eventId])
+
+  useEffect(() => {
+    const chatOn = !!(event as any)?.chat_enabled
+    const userId = currentUser?.id
+    if (!chatOn || !userId || !eventId) return
+    let cancelled = false
+    ;(async () => {
+      const { data: pref } = await supabase
+        .from('event_chat_notification_prefs')
+        .select('enabled')
+        .eq('user_id', userId)
+        .eq('event_id', eventId)
+        .maybeSingle()
+      if (!cancelled && pref != null) {
+        setChatNotifEnabled(!!pref.enabled)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [eventId, currentUser?.id, event, (event as any)?.chat_enabled])
+
+  async function toggleChatNotif() {
+    const next = !chatNotifEnabled
+    setChatNotifEnabled(next)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) return
+
+      await fetch(`/api/events/${eventId}/chat/notification-pref`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ enabled: next }),
+      })
+    } catch (err) {
+      console.error('chat notif pref error:', err)
+      setChatNotifEnabled(!next)
+    }
+  }
 
   useEffect(() => {
     // Default OFF (matches settings). Preference is stored on-device.
@@ -855,6 +899,34 @@ export default function EventDetailsPage() {
           </Card>
         )}
 
+        {(event as any).chat_enabled && currentUser && canReadEventChat && (
+          <Card className="mb-6 rounded-none sm:rounded-lg border-x-0 sm:border-x">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1 gap-2"
+                  onClick={() => setShowChat(true)}
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Open Event Chat
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  onClick={toggleChatNotif}
+                  aria-label={chatNotifEnabled ? 'Turn off chat notifications' : 'Turn on chat notifications'}
+                  title={chatNotifEnabled ? 'Chat notifications on' : 'Chat notifications off'}
+                >
+                  {chatNotifEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Event Info Card */}
         <Card className="mb-6 rounded-none sm:rounded-lg border-x-0 sm:border-x">
           <CardHeader>
@@ -1059,20 +1131,6 @@ export default function EventDetailsPage() {
 
             {waitlistBookings.length > 0 && (
               <p className="text-sm md:text-base text-muted-foreground">⏳ {waitlistBookings.length} on waitlist</p>
-            )}
-
-            {/* Full-width chat row — read for all performers; send rules inside EventChat / API */}
-            {(event as any).chat_enabled && currentUser && canReadEventChat && (
-              <div className="flex items-center gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  className="flex-1 gap-2"
-                  onClick={() => setShowChat(true)}
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  Open Event Chat
-                </Button>
-              </div>
             )}
           </CardContent>
         </Card>

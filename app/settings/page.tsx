@@ -488,8 +488,13 @@ export default function SettingsPage() {
                   <SettingsListRow href="/admin" icon={Settings2} title="Admin" description="Manage users, events, requests" />
                 </div>
               )}
+              {user?.email && (
+                <div className="px-4 py-3 text-sm text-muted-foreground break-all border-t border-border">
+                  {user.email}
+                </div>
+              )}
               <div className="px-4 py-1 pb-2">
-                <SettingsListRow href="/settings/account" icon={User} title="Account" description="Sign out" />
+                <SettingsListRow href="/settings/account" icon={User} title="Account" description="Sign out & account" />
               </div>
             </CardContent>
           </Card>
@@ -773,7 +778,12 @@ export default function SettingsPage() {
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="text-xl">Account</CardTitle>
-            <CardDescription>Sign out of your account on this device.</CardDescription>
+            <CardDescription>
+              {user?.email ? (
+                <span className="block text-muted-foreground break-all">{user.email}</span>
+              ) : null}
+              <span className="block mt-1">Sign out of your account on this device.</span>
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Button variant="destructive" onClick={async () => { await signOutAndCleanup(); router.push('/') }}>

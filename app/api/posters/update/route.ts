@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { enqueuePosterAutopostJobs } from '@/lib/posterAutopost'
 import { getUserFromAuthHeader } from '@/lib/server/supabaseAdmin'
+import { buildDefaultPosterCaption, sanitizePosterCaption } from '@/lib/posterCaption'
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     const { data: eventRow, error: eventError } = await supabase
       .from('events')
-      .select('id, title, created_by, host_user_id')
+      .select('id, title, date, location, event_type, theme, languages, tickets_enabled, external_event, external_ticket_url, credits_required, created_by, host_user_id')
       .eq('id', eventId)
       .single()
 
@@ -68,7 +69,20 @@ export async function POST(request: NextRequest) {
     }
 
     const posterUpdatedAt = new Date().toISOString()
-    const captionValue = typeof posterCaption === 'string' ? posterCaption : null
+    const captionValue =
+      sanitizePosterCaption(posterCaption) ||
+      buildDefaultPosterCaption({
+        title: eventRow.title,
+        date: (eventRow as any).date,
+        location: (eventRow as any).location,
+        event_type: (eventRow as any).event_type,
+        theme: (eventRow as any).theme,
+        languages: (eventRow as any).languages,
+        tickets_enabled: (eventRow as any).tickets_enabled,
+        external_event: (eventRow as any).external_event,
+        external_ticket_url: (eventRow as any).external_ticket_url,
+        credits_required: (eventRow as any).credits_required,
+      })
 
     const { error: updateError } = await supabase
       .from('events')

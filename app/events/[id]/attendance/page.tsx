@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ChevronLeft, GripVertical, User, Copy, ChevronDown, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { userCanManageEventChatSettings } from '@/lib/eventChatPermissions'
 
 type BookingWithProfile = {
   id: string
@@ -457,11 +458,17 @@ export default function AttendancePage() {
       // Check access: event creators can only access their own events
       // Admins can access all events
       // Hosts can access events where they are assigned as host
+      // Community admin/co_admin for a linked community can access (e.g. chat settings)
       const isEventCreator = currentUserRole === 'event_creator' && eventData.created_by === userId
       const isAdmin = currentUserRole === 'admin'
       const isHost = eventData.host_user_id === userId
 
-      if (!isEventCreator && !isAdmin && !isHost) {
+      const canAccessViaCommunity = await userCanManageEventChatSettings(supabase, resolvedEventId, userId, {
+        host_user_id: eventData.host_user_id,
+        created_by: eventData.created_by,
+      })
+
+      if (!isEventCreator && !isAdmin && !isHost && !canAccessViaCommunity) {
         router.push('/dashboard')
         return
       }
