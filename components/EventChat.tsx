@@ -41,6 +41,7 @@ export default function EventChat({
   const [notifEnabled, setNotifEnabled] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   // Cache of user_id -> profile so real-time messages can be enriched immediately
   const profileCache = useRef<Record<string, { full_name: string | null; avatar_url: string | null }>>({})
 
@@ -137,6 +138,14 @@ export default function EventChat({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Grow textarea with content (cap height, scroll inside)
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = '0px'
+    el.style.height = `${Math.min(el.scrollHeight, 128)}px`
+  }, [input])
 
   async function handleSend() {
     const trimmed = input.trim()
@@ -286,20 +295,22 @@ export default function EventChat({
 
       {/* Input / read-only footer */}
       {canSend ? (
-        <div className="flex items-center gap-2 px-4 py-3 border-t border-zinc-800 bg-zinc-900">
-          <input
-            type="text"
+        <div className="flex items-end gap-2 px-4 py-3 border-t border-zinc-800 bg-zinc-900">
+          <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault()
-                handleSend()
+                void handleSend()
               }
             }}
             placeholder="Type a message…"
             maxLength={1000}
-            className="flex-1 bg-zinc-800 text-white placeholder-zinc-500 rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-400"
+            rows={1}
+            title="Enter adds a new line. Ctrl+Enter or ⌘+Enter to send."
+            className="flex-1 min-h-[42px] max-h-32 resize-none overflow-y-auto bg-zinc-800 text-white placeholder-zinc-500 rounded-2xl px-4 py-2.5 text-sm leading-snug outline-none focus:ring-2 focus:ring-yellow-400"
           />
           <button
             onClick={handleSend}
