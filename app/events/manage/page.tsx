@@ -70,6 +70,7 @@ export default function EventManagementPage() {
   const [venueRequestName, setVenueRequestName] = useState('')
   const [venueRequestAddress, setVenueRequestAddress] = useState('')
   const [venueRequestSubmitting, setVenueRequestSubmitting] = useState(false)
+  const [communitySubmissionEnabled, setCommunitySubmissionEnabled] = useState(false)
   
   const [formData, setFormData] = useState({
     title: '',
@@ -306,7 +307,28 @@ export default function EventManagementPage() {
     }
 
     setUserRole(profile.role)
+    await loadCommunitySubmissionFlag()
     loadEvents()
+  }
+
+  async function loadCommunitySubmissionFlag() {
+    // Default OFF unless explicitly enabled by a super admin.
+    setCommunitySubmissionEnabled(false)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) return
+
+      const response = await fetch('/api/admin/debug/event-submission', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!response.ok) return
+      const result = await response.json().catch(() => ({}))
+      setCommunitySubmissionEnabled(Boolean(result.enabled))
+    } catch {
+      // Keep default OFF if debug flag cannot be read.
+      setCommunitySubmissionEnabled(false)
+    }
   }
 
   async function loadEvents() {
@@ -566,8 +588,8 @@ export default function EventManagementPage() {
             : null,
         created_by: user.id,
         host_user_id: user.id,
-        // Platform admins create events live; everyone else goes through approval
-        status: userRole === 'admin' ? 'active' : 'pending_approval',
+        // Community approval flow is controlled by a super-admin debug toggle.
+        status: userRole === 'admin' || !communitySubmissionEnabled ? 'active' : 'pending_approval',
       }
 
       const { data, error } = await supabase
@@ -614,43 +636,43 @@ export default function EventManagementPage() {
         console.warn('Failed to auto-book creator as attendee:', bookingError)
       }
 
-      // Associate event with communities where the creator is an event_creator or above
-      // Use ORDER BY joined_at so the primary community is deterministic
-      let primaryCommunityId: string | null = null
-      try {
-        const { data: creatorMemberships } = await supabase
-          .from('community_members')
-          .select('community_id, role')
-          .eq('user_id', user.id)
-          .in('role', ['event_creator', 'co_admin', 'admin'])
-          .order('joined_at', { ascending: true })
+      if (communitySubmissionEnabled && userRole !== 'admin') {
+        // Associate event with communities where the creator is an event_creator or above
+        // Use ORDER BY joined_at so the primary community is deterministic
+        let primaryCommunityId: string | null = null
+        try {
+          const { data: creatorMemberships } = await supabase
+            .from('community_members')
+            .select('community_id, role')
+            .eq('user_id', user.id)
+            .in('role', ['event_creator', 'co_admin', 'admin'])
+            .order('joined_at', { ascending: true })
 
-        if (creatorMemberships && creatorMemberships.length > 0) {
-          primaryCommunityId = creatorMemberships[0].community_id
-          const commSession = await supabase.auth.getSession()
-          const accessToken = commSession.data.session?.access_token
-          if (accessToken) {
-            for (let idx = 0; idx < Math.min(creatorMemberships.length, 3); idx++) {
-              const membership = creatorMemberships[idx]
-              const res = await fetch(`/api/communities/${membership.community_id}/submit-event`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-                body: JSON.stringify({ eventId: data.id, isPrimary: idx === 0 }),
-              }).catch((err) => { console.warn('submit-event fetch error:', err); return null })
-              if (res && !res.ok) {
-                const errBody = await res.json().catch(() => ({}))
-                console.warn(`submit-event failed for community ${membership.community_id}:`, errBody)
+          if (creatorMemberships && creatorMemberships.length > 0) {
+            primaryCommunityId = creatorMemberships[0].community_id
+            const commSession = await supabase.auth.getSession()
+            const accessToken = commSession.data.session?.access_token
+            if (accessToken) {
+              for (let idx = 0; idx < Math.min(creatorMemberships.length, 3); idx++) {
+                const membership = creatorMemberships[idx]
+                const res = await fetch(`/api/communities/${membership.community_id}/submit-event`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                  body: JSON.stringify({ eventId: data.id, isPrimary: idx === 0 }),
+                }).catch((err) => { console.warn('submit-event fetch error:', err); return null })
+                if (res && !res.ok) {
+                  const errBody = await res.json().catch(() => ({}))
+                  console.warn(`submit-event failed for community ${membership.community_id}:`, errBody)
+                }
               }
             }
           }
+        } catch (communityErr) {
+          console.warn('Failed to link event to communities:', communityErr)
         }
-      } catch (communityErr) {
-        console.warn('Failed to link event to communities:', communityErr)
-      }
 
-      // If event is pending approval, notify community admins for review
-      // Use the same primaryCommunityId determined above for consistency
-      if (userRole !== 'admin') {
+        // If event is pending approval, notify community admins for review
+        // Use the same primaryCommunityId determined above for consistency
         try {
           if (primaryCommunityId) {
             const { data: communityAdmins } = await supabase
@@ -692,7 +714,7 @@ export default function EventManagementPage() {
         }
       }
 
-      if (userRole === 'admin') {
+      if (userRole === 'admin' || !communitySubmissionEnabled) {
         toast.success('Event created successfully!')
       } else {
         toast.success('Event submitted for review! You\'ll be notified within 24 hours once approved.')

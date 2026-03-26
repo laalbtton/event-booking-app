@@ -23,7 +23,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users } from 'lucide-react'
+import { ChevronLeft, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { useIsMobile } from '@/hooks/useMediaQuery'
@@ -488,6 +488,11 @@ export default function SettingsPage() {
                   <SettingsListRow href="/admin" icon={Settings2} title="Admin" description="Manage users, events, requests" />
                 </div>
               )}
+              {isAdmin && (
+                <div className="px-4 py-1">
+                  <SettingsListRow href="/settings/debug" icon={Wrench} title="Debug" description="Super-admin debug toggles" />
+                </div>
+              )}
               {user?.email && (
                 <div className="px-4 py-3 text-sm text-muted-foreground break-all border-t border-border">
                   {user.email}
@@ -769,6 +774,25 @@ export default function SettingsPage() {
               <Button asChild variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50">
                 <Link href="/admin">
                   Open Admin Panel
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {isAdmin && (
+          <Card className="shadow-sm border-amber-200">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-amber-600" />
+                Debug
+              </CardTitle>
+              <CardDescription>Super-admin tools and feature toggles.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50">
+                <Link href="/settings/debug">
+                  Open Debug Settings
                 </Link>
               </Button>
             </CardContent>
