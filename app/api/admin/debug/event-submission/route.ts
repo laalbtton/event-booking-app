@@ -41,7 +41,10 @@ async function requireSuperAdmin(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireSuperAdmin(request)
-    if (auth.error || !auth.supabase) return auth.error
+    if (auth.error) return auth.error
+    if (!auth.supabase) {
+      return NextResponse.json({ error: 'Server config error' }, { status: 500 })
+    }
 
     const { data, error } = await auth.supabase
       .from('system_feature_flags')
@@ -60,7 +63,10 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const auth = await requireSuperAdmin(request)
-    if (auth.error || !auth.supabase || !auth.userId) return auth.error
+    if (auth.error) return auth.error
+    if (!auth.supabase || !auth.userId) {
+      return NextResponse.json({ error: 'Server config error' }, { status: 500 })
+    }
 
     const body = await request.json().catch(() => ({}))
     const enabled = body?.enabled
