@@ -13,9 +13,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { ChevronLeft, GripVertical, User, Copy, ChevronDown, MessageCircle } from 'lucide-react'
+import { ChevronLeft, GripVertical, User, Copy, ChevronDown, MessageCircle, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { userCanManageEventChatSettings } from '@/lib/eventChatPermissions'
+import { EventCommunitiesDialog } from '@/components/EventCommunitiesDialog'
 
 type BookingWithProfile = {
   id: string
@@ -178,6 +179,7 @@ export default function AttendancePage() {
   const [chatEnabled, setChatEnabled] = useState(false)
   const [chatMode, setChatMode] = useState<'open' | 'host_only'>('open')
   const [savingChat, setSavingChat] = useState(false)
+  const [communitiesDialogOpen, setCommunitiesDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
@@ -1481,18 +1483,32 @@ export default function AttendancePage() {
       {/* Header */}
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/events/${resolvedId}`}
-              className="text-blue-600 hover:text-blue-800 p-1 -ml-1 rounded hover:bg-gray-100"
-              aria-label="Back to Event Details"
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Link
+                href={`/events/${resolvedId}`}
+                className="text-blue-600 hover:text-blue-800 p-1 -ml-1 rounded hover:bg-gray-100 shrink-0"
+                aria-label="Back to Event Details"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </Link>
+              <h1 className="text-2xl font-bold text-gray-900 truncate">Attendance</h1>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => setCommunitiesDialogOpen(true)}
             >
-              <ChevronLeft className="w-5 h-5" />
-            </Link>
-            <h1 className="text-2xl font-bold text-gray-900">Attendance</h1>
+              <Users className="h-4 w-4" />
+              Communities
+            </Button>
           </div>
         </div>
       </div>
+
+      <EventCommunitiesDialog eventId={resolvedId} open={communitiesDialogOpen} onOpenChange={setCommunitiesDialogOpen} />
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* Event Info */}
