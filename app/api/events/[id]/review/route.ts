@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { ensureApprovedCommunityLinksForEvent } from '@/lib/server/ensureEventCommunityLinks'
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -99,6 +100,14 @@ export async function POST(
           },
           { onConflict: 'event_id,community_id' }
         )
+
+      if (typedEvent.created_by) {
+        try {
+          await ensureApprovedCommunityLinksForEvent(supabase, eventId, typedEvent.created_by)
+        } catch (healErr) {
+          console.warn('ensureApprovedCommunityLinksForEvent after review:', healErr)
+        }
+      }
 
       // Notify the event creator
       if (typedEvent.created_by) {

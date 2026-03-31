@@ -23,7 +23,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench } from 'lucide-react'
+import { ChevronLeft, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { useIsMobile } from '@/hooks/useMediaQuery'
@@ -493,6 +493,11 @@ export default function SettingsPage() {
                   <SettingsListRow href="/settings/debug" icon={Wrench} title="Debug" description="Super-admin debug toggles" />
                 </div>
               )}
+              {isAdmin && (
+                <div className="px-4 py-1">
+                  <SettingsListRow href="/settings/push-broadcast" icon={Megaphone} title="Broadcast push" description="Send a custom notification to all users" />
+                </div>
+              )}
               {user?.email && (
                 <div className="px-4 py-3 text-sm text-muted-foreground break-all border-t border-border">
                   {user.email}
@@ -794,6 +799,25 @@ export default function SettingsPage() {
                 <Link href="/settings/debug">
                   Open Debug Settings
                 </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {isAdmin && (
+          <Card className="shadow-sm border-border">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Megaphone className="h-5 w-5" />
+                Broadcast push
+              </CardTitle>
+              <CardDescription>
+                Send a title and message to all users with push enabled. Opens a confirmation step before delivery.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="outline">
+                <Link href="/settings/push-broadcast">Open broadcast tool</Link>
               </Button>
             </CardContent>
           </Card>

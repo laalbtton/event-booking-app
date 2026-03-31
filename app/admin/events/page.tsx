@@ -349,6 +349,11 @@ export default function AdminEventsPage() {
       const endTimeValue = formData.end_time || computeEndTime(formData.date, durationMinutes)
       const endTimeIso = endTimeValue ? new Date(endTimeValue).toISOString() : null
 
+      const {
+        data: { session: createSession },
+      } = await supabase.auth.getSession()
+      const creatorId = createSession?.user?.id ?? null
+
       const isBookedShow = formData.event_type === 'booked_show'
       const isTicketed = formData.tickets_enabled
       const normalizedLanguages = normalizeLanguages()
@@ -389,7 +394,9 @@ export default function AdminEventsPage() {
           ? null 
           : formData.registration_opens_at 
             ? new Date(formData.registration_opens_at).toISOString() 
-            : null
+            : null,
+        created_by: creatorId,
+        host_user_id: creatorId,
       }
 
       const { data, error } = await supabase
@@ -420,11 +427,14 @@ export default function AdminEventsPage() {
         })
       }
 
-      // Send push notification to all users about the new event
       try {
         const { data: sessionData } = await supabase.auth.getSession()
         const accessToken = sessionData.session?.access_token
         if (accessToken) {
+          await fetch(`/api/events/${data.id}/ensure-community-links`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }).catch((err) => console.warn('ensure-community-links:', err))
           await fetch('/api/events/notify-new', {
             method: 'POST',
             headers: {

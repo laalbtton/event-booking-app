@@ -12,6 +12,11 @@ type PushPayload = {
 
 type PushCategory = 'booking_updates' | 'event_reminders' | 'new_events'
 
+export type SendPushOptions = {
+  /** When true, sends to all active subscriptions regardless of user category toggles (for super-admin broadcasts). */
+  bypassCategoryPrefs?: boolean
+}
+
 let configured = false
 
 function ensureWebPushConfigured() {
@@ -49,24 +54,29 @@ export async function sendPushToUser(
   supabase: SupabaseClient,
   userId: string,
   payload: PushPayload,
-  category: PushCategory = 'booking_updates'
+  category: PushCategory = 'booking_updates',
+  options?: SendPushOptions
 ) {
   ensureWebPushConfigured()
 
-  const { data: prefs } = await supabase
-    .from('push_notification_prefs')
-    .select('booking_updates_enabled, event_reminders_enabled, new_events_enabled')
-    .eq('user_id', userId)
-    .maybeSingle()
+  const bypass = options?.bypassCategoryPrefs === true
 
-  const categoryEnabledMap: Record<PushCategory, boolean> = {
-    booking_updates: prefs?.booking_updates_enabled !== false,
-    event_reminders: prefs?.event_reminders_enabled !== false,
-    new_events: prefs?.new_events_enabled !== false,
-  }
+  if (!bypass) {
+    const { data: prefs } = await supabase
+      .from('push_notification_prefs')
+      .select('booking_updates_enabled, event_reminders_enabled, new_events_enabled')
+      .eq('user_id', userId)
+      .maybeSingle()
 
-  if (!categoryEnabledMap[category]) {
-    return { sent: 0, failed: 0, skipped: true }
+    const categoryEnabledMap: Record<PushCategory, boolean> = {
+      booking_updates: prefs?.booking_updates_enabled !== false,
+      event_reminders: prefs?.event_reminders_enabled !== false,
+      new_events: prefs?.new_events_enabled !== false,
+    }
+
+    if (!categoryEnabledMap[category]) {
+      return { sent: 0, failed: 0, skipped: true }
+    }
   }
 
   const { data: subscriptions, error } = await supabase
@@ -111,7 +121,8 @@ export async function sendPushToUser(
 export async function sendPushToAllUsers(
   supabase: SupabaseClient,
   payload: PushPayload,
-  category: PushCategory = 'new_events'
+  category: PushCategory = 'new_events',
+  options?: SendPushOptions
 ) {
   ensureWebPushConfigured()
 
@@ -131,7 +142,7 @@ export async function sendPushToAllUsers(
     if (!users || users.length === 0) break
 
     for (const user of users) {
-      const result = await sendPushToUser(supabase, user.id, payload, category)
+      const result = await sendPushToUser(supabase, user.id, payload, category, options)
       totalSent += result.sent || 0
       totalFailed += result.failed || 0
       if ('skipped' in result && result.skipped) totalSkipped += 1

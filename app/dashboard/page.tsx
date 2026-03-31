@@ -1396,11 +1396,13 @@ export default function Dashboard() {
           {(() => {
             const isAudienceUser = userRole === 'audience'
             const now = new Date()
+            // Perform: open mics you can book + booked shows (invite-only for booking; still discoverable here)
+            // Attend: ticketed / booked-show attendance (see filter below)
             const filteredEvents = events.filter((event) =>
               isAudienceUser
                 ? event.event_type === 'open_mic'
                 : eventTab === 'perform'
-                ? event.event_type === 'open_mic'
+                ? event.event_type === 'open_mic' || event.event_type === 'booked_show'
                 : event.event_type === 'booked_show'
                   ? !invitedEventIds.has(event.id)
                   : event.tickets_enabled && event.event_type !== 'open_mic'
@@ -1417,6 +1419,12 @@ export default function Dashboard() {
               { key: 'later', label: 'Later' },
             ]
 
+            const hiddenByPerformFilter =
+              userRole !== 'audience' &&
+              eventTab === 'perform' &&
+              events.length > 0 &&
+              filteredEvents.length === 0
+
             if (filteredEvents.length === 0) {
               return (
                 <Card className="-mx-4 sm:mx-0 rounded-none sm:rounded-lg">
@@ -1428,11 +1436,30 @@ export default function Dashboard() {
                     </p>
                     {events.length === 0 && (
                       <div>
-                        <p className="text-xs mb-2">Join communities to see their events here.</p>
+                        <p className="text-xs mb-2">
+                          The list is scoped to communities you belong to, with an approved event link. Join a community to see its events here.
+                        </p>
                         <Link href="/communities">
                           <Button variant="outline" size="sm">Browse Communities</Button>
                         </Link>
                       </div>
+                    )}
+                    {hiddenByPerformFilter && (
+                      <p className="text-xs text-left max-w-md mx-auto">
+                        You have upcoming community events, but none match this tab&apos;s filters. Try the{' '}
+                        <button
+                          type="button"
+                          className="underline font-medium text-foreground"
+                          onClick={() => setEventTab('attend')}
+                        >
+                          Attend
+                        </button>{' '}
+                        tab for ticketed shows, or open an event from the public{' '}
+                        <Link href="/events" className="underline font-medium text-foreground">
+                          Events
+                        </Link>{' '}
+                        list.
+                      </p>
                     )}
                   </CardContent>
                 </Card>

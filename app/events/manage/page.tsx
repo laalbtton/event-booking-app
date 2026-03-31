@@ -637,33 +637,41 @@ export default function EventManagementPage() {
       }
 
       if (communitySubmissionEnabled && userRole !== 'admin') {
-        // Associate event with communities where the creator is an event_creator or above
-        // Use ORDER BY joined_at so the primary community is deterministic
+        // Primary community = first event_creator membership by join date, then co_admin, then admin.
+        // Only the primary community is linked on create; additional communities are added later from the event.
         let primaryCommunityId: string | null = null
         try {
           const { data: creatorMemberships } = await supabase
             .from('community_members')
-            .select('community_id, role')
+            .select('community_id, role, joined_at')
             .eq('user_id', user.id)
             .in('role', ['event_creator', 'co_admin', 'admin'])
-            .order('joined_at', { ascending: true })
 
           if (creatorMemberships && creatorMemberships.length > 0) {
-            primaryCommunityId = creatorMemberships[0].community_id
+            const roleRank = (r: string) =>
+              r === 'event_creator' ? 0 : r === 'co_admin' ? 1 : r === 'admin' ? 2 : 3
+            const sorted = [...creatorMemberships].sort((a, b) => {
+              const dr = roleRank(a.role) - roleRank(b.role)
+              if (dr !== 0) return dr
+              const ta = a.joined_at ? new Date(a.joined_at).getTime() : 0
+              const tb = b.joined_at ? new Date(b.joined_at).getTime() : 0
+              return ta - tb
+            })
+            primaryCommunityId = sorted[0].community_id
             const commSession = await supabase.auth.getSession()
             const accessToken = commSession.data.session?.access_token
-            if (accessToken) {
-              for (let idx = 0; idx < Math.min(creatorMemberships.length, 3); idx++) {
-                const membership = creatorMemberships[idx]
-                const res = await fetch(`/api/communities/${membership.community_id}/submit-event`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-                  body: JSON.stringify({ eventId: data.id, isPrimary: idx === 0 }),
-                }).catch((err) => { console.warn('submit-event fetch error:', err); return null })
-                if (res && !res.ok) {
-                  const errBody = await res.json().catch(() => ({}))
-                  console.warn(`submit-event failed for community ${membership.community_id}:`, errBody)
-                }
+            if (accessToken && sorted[0]) {
+              const res = await fetch(`/api/communities/${sorted[0].community_id}/submit-event`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ eventId: data.id, isPrimary: true }),
+              }).catch((err) => {
+                console.warn('submit-event fetch error:', err)
+                return null
+              })
+              if (res && !res.ok) {
+                const errBody = await res.json().catch(() => ({}))
+                console.warn(`submit-event failed for primary community ${sorted[0].community_id}:`, errBody)
               }
             }
           }
@@ -692,6 +700,30 @@ export default function EventManagementPage() {
             }
           }
         } catch { /* non-blocking */ }
+      }
+
+      // Always ensure event_communities rows from creator memberships (covers pending + active,
+      // members with only "member" role, and gaps when submit-event did not run).
+      try {
+        const commSession = await supabase.auth.getSession()
+        const accessToken = commSession.data.session?.access_token
+        if (accessToken) {
+          const ens = await fetch(`/api/events/${data.id}/ensure-community-links`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          })
+          const j = await ens.json().catch(() => ({}))
+          if (!ens.ok) {
+            console.warn('ensure-community-links:', j)
+          } else if (j.communitiesTargeted === 0) {
+            toast.info(
+              'You are not in any community yet — join a community so this event can appear on performer dashboards.',
+              { duration: 6000 }
+            )
+          }
+        }
+      } catch (e) {
+        console.warn('ensure-community-links failed', e)
       }
 
       // Only notify users if the event is live (admin-created); pending events notify after approval

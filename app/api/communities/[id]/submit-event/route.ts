@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { communityAutoApprovesNewEvents } from '@/lib/communityAutoApprove'
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -29,6 +30,18 @@ export async function POST(
 
     if (!eventId) return NextResponse.json({ error: 'eventId is required' }, { status: 400 })
 
+    const { data: communityRow } = await supabase
+      .from('communities')
+      .select('id, auto_approve_new_events')
+      .eq('id', communityId)
+      .maybeSingle()
+
+    if (!communityRow) return NextResponse.json({ error: 'Community not found' }, { status: 404 })
+
+    const autoApprove = communityAutoApprovesNewEvents(
+      (communityRow as { auto_approve_new_events?: boolean }).auto_approve_new_events
+    )
+
     // Must be event_creator, co_admin, or admin in this community
     const { data: membership } = await supabase
       .from('community_members')
@@ -53,18 +66,27 @@ export async function POST(
     }
 
     const now = new Date()
+    const isPrimaryBool = Boolean(isPrimary)
     // Non-primary cross-submissions expire after 7 days if not reviewed
-    const expiresAt = isPrimary ? null : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    const expiresAt = isPrimaryBool ? null : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    // Primary + auto-approve: link is approved immediately so the event appears on Perform once active.
+    // Primary + manual review: pending until a community admin approves (Pending links / New Events).
+    // Non-primary: always pending + expiry (submitted later from the event communities dialog).
+    const linkApproved = isPrimaryBool && autoApprove
+    const status: 'approved' | 'pending' = linkApproved ? 'approved' : 'pending'
+    const reviewedAt = linkApproved ? now.toISOString() : null
+    const reviewedBy = linkApproved ? authData.user.id : null
 
     const { error: insertError } = await supabase.from('event_communities').insert({
       event_id: eventId,
       community_id: communityId,
-      is_primary: Boolean(isPrimary),
-      // Always start as 'pending' — the community admin approves it via the review route
-      // (which also sets events.status = 'active')
-      status: 'pending',
+      is_primary: isPrimaryBool,
+      status,
       submitted_by: authData.user.id,
       submitted_at: now.toISOString(),
+      reviewed_by: reviewedBy,
+      reviewed_at: reviewedAt,
       expires_at: expiresAt,
     })
 
@@ -73,8 +95,9 @@ export async function POST(
     }
     if (insertError) return NextResponse.json({ error: insertError.message }, { status: 400 })
 
-    // Notify community admins of cross-community submission
-    if (!isPrimary) {
+    // Notify community admins of cross-community submission (non-primary only; primary pending
+    // is paired with the event-level notification from the manage page).
+    if (!isPrimaryBool) {
       const { data: communityAdmins } = await supabase
         .from('community_members')
         .select('user_id')
@@ -105,7 +128,11 @@ export async function POST(
       }
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      linkStatus: status,
+      autoApproveNewEvents: autoApprove,
+    })
   } catch (err: unknown) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal server error' },
