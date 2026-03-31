@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
@@ -11,11 +11,12 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { QrCode, Link as LinkIcon, Edit, Users, Image as ImageIcon, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MAX_CAPTION_CHARS } from '@/lib/posterCaption'
 import { toast } from 'sonner'
 
 type Venue = {
@@ -40,6 +41,14 @@ export default function AdminEventsPage() {
   const [languageInput, setLanguageInput] = useState('')
   const [varietyArtTypes, setVarietyArtTypes] = useState<Array<{ id?: string; art_type_name: string; slot_capacity: string }>>([])
   const [posterUploadingId, setPosterUploadingId] = useState<string | null>(null)
+  const [posterCaptionDraft, setPosterCaptionDraft] = useState<{
+    eventId: string
+    file: File
+    previewUrl: string
+    caption: string
+  } | null>(null)
+  const [posterCaptionLoadingId, setPosterCaptionLoadingId] = useState<string | null>(null)
+  const posterInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const [posterJobSummary, setPosterJobSummary] = useState<Record<string, { posted: number; failed: number; pending: number; skipped: number }>>({})
   const [posterPublishMeta, setPosterPublishMeta] = useState<Record<string, { count: number; lastPublishedAt: string | null }>>({})
   
@@ -769,6 +778,13 @@ export default function AdminEventsPage() {
     }
   }
 
+  function closePosterCaptionModal() {
+    setPosterCaptionDraft((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl)
+      return null
+    })
+  }
+
   async function handlePosterUpload(eventId: string, file: File) {
     if (!file.type.startsWith('image/')) {
       toast.error('Please upload an image file')
@@ -778,34 +794,89 @@ export default function AdminEventsPage() {
       toast.error('Poster file must be 10MB or smaller')
       return
     }
-    setPosterUploadingId(eventId)
+
+    const previewUrl = URL.createObjectURL(file)
+    setPosterCaptionLoadingId(eventId)
     try {
-      const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-')
-      const path = `${eventId}/${Date.now()}-${cleanName}`
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      let suggestedCaption = ''
+      try {
+        const suggestionResponse = await fetch('/api/posters/suggest-caption', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ eventId }),
+        })
+        const suggestionJson = await suggestionResponse.json().catch(() => ({}))
+        if (suggestionResponse.ok && typeof suggestionJson.caption === 'string') {
+          suggestedCaption = suggestionJson.caption.slice(0, MAX_CAPTION_CHARS)
+        }
+      } catch {
+        // Resilient if suggestion fails — user can still edit manually.
+      }
+
+      setPosterCaptionDraft({
+        eventId,
+        file,
+        previewUrl,
+        caption: suggestedCaption,
+      })
+    } catch (error: any) {
+      URL.revokeObjectURL(previewUrl)
+      toast.error(error.message || 'Failed to prepare poster upload')
+    } finally {
+      setPosterCaptionLoadingId(null)
+    }
+  }
+
+  async function confirmPosterCaption() {
+    const draft = posterCaptionDraft
+    if (!draft) return
+
+    setPosterUploadingId(draft.eventId)
+    try {
+      const cleanName = draft.file.name.replace(/[^a-zA-Z0-9._-]/g, '-')
+      const path = `${draft.eventId}/${Date.now()}-${cleanName}`
+
       const { error: uploadError } = await supabase.storage
         .from('event-posters')
-        .upload(path, file, { upsert: false, cacheControl: '3600' })
+        .upload(path, draft.file, { upsert: false, cacheControl: '3600' })
+
       if (uploadError) throw uploadError
 
       const {
         data: { publicUrl },
       } = supabase.storage.from('event-posters').getPublicUrl(path)
 
-      const caption = window.prompt('Poster caption (optional):') || null
       const { data: sessionData } = await supabase.auth.getSession()
       const accessToken = sessionData.session?.access_token
       if (!accessToken) throw new Error('Not authenticated')
 
+      const trimmed = draft.caption.trim()
       const response = await fetch('/api/posters/update', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ eventId, action: 'set', posterUrl: publicUrl, posterCaption: caption }),
+        body: JSON.stringify({
+          eventId: draft.eventId,
+          action: 'set',
+          posterUrl: publicUrl,
+          posterCaption: trimmed.length > 0 ? trimmed : null,
+        }),
       })
+
       const result = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(result.error || 'Failed to save poster')
+
+      URL.revokeObjectURL(draft.previewUrl)
+      setPosterCaptionDraft(null)
       toast.success(`Poster saved. Queued ${result.jobs?.jobsQueued || 0} auto-post job(s).`)
       await loadEvents()
     } catch (error: any) {
@@ -904,28 +975,39 @@ export default function AdminEventsPage() {
             </div>
 
               <div className="flex flex-wrap gap-2">
-                <label className="inline-flex">
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) handlePosterUpload(event.id, file)
-                      e.currentTarget.value = ''
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="bg-sky-50 hover:bg-sky-100 border-sky-200 text-sky-700"
-                    disabled={posterUploadingId === event.id}
-                    asChild
-                  >
-                    <span>{posterUploadingId === event.id ? 'Saving...' : event.poster_url ? 'Update Poster' : 'Add Poster'}</span>
-                  </Button>
-                </label>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  ref={(el) => {
+                    posterInputRefs.current[event.id] = el
+                  }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) handlePosterUpload(event.id, file)
+                    e.currentTarget.value = ''
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="bg-sky-50 hover:bg-sky-100 border-sky-200 text-sky-700"
+                  disabled={
+                    posterUploadingId === event.id ||
+                    posterCaptionLoadingId === event.id ||
+                    !!posterCaptionDraft
+                  }
+                  onClick={() => posterInputRefs.current[event.id]?.click()}
+                >
+                  {posterCaptionLoadingId === event.id
+                    ? 'Preparing…'
+                    : posterUploadingId === event.id
+                      ? 'Saving…'
+                      : event.poster_url
+                        ? 'Update Poster'
+                        : 'Add Poster'}
+                </Button>
                 {event.poster_url && (
                   <Button
                     type="button"
@@ -933,7 +1015,11 @@ export default function AdminEventsPage() {
                     size="sm"
                     className="bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-700"
                     onClick={() => handlePosterRemove(event.id)}
-                    disabled={posterUploadingId === event.id}
+                    disabled={
+                      posterUploadingId === event.id ||
+                      posterCaptionLoadingId === event.id ||
+                      !!posterCaptionDraft
+                    }
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -2149,6 +2235,82 @@ export default function AdminEventsPage() {
               </Button>
               </div>
             </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!posterCaptionDraft}
+        onOpenChange={(open) => {
+          if (!open) closePosterCaptionModal()
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Poster caption</DialogTitle>
+            <DialogDescription>
+              Preview your poster and edit the caption for sharing and auto-post. Caption is built from your event
+              details—only include what you have confirmed. Hashtags and length are normalized when you save.
+            </DialogDescription>
+          </DialogHeader>
+          {posterCaptionDraft && (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-2 flex justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={posterCaptionDraft.previewUrl}
+                  alt="Poster preview"
+                  className="max-h-[220px] w-auto max-w-full object-contain rounded-md"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="admin-poster-caption-textarea">Caption</Label>
+                  <span
+                    className={cn(
+                      'text-xs tabular-nums',
+                      posterCaptionDraft.caption.length > MAX_CAPTION_CHARS * 0.95
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-muted-foreground'
+                    )}
+                  >
+                    {posterCaptionDraft.caption.length} / {MAX_CAPTION_CHARS}
+                  </span>
+                </div>
+                <Textarea
+                  id="admin-poster-caption-textarea"
+                  value={posterCaptionDraft.caption}
+                  onChange={(e) =>
+                    setPosterCaptionDraft((d) =>
+                      d ? { ...d, caption: e.target.value.slice(0, MAX_CAPTION_CHARS) } : null
+                    )
+                  }
+                  rows={10}
+                  placeholder="Write or edit your Instagram-style caption…"
+                  className="min-h-[160px] resize-y font-sans text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to use the server default. Avoid adding unverified times, prices, or links.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => closePosterCaptionModal()}
+              disabled={posterCaptionDraft ? posterUploadingId === posterCaptionDraft.eventId : false}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void confirmPosterCaption()}
+              disabled={posterCaptionDraft ? posterUploadingId === posterCaptionDraft.eventId : true}
+            >
+              {posterCaptionDraft && posterUploadingId === posterCaptionDraft.eventId ? 'Saving…' : 'Save poster'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

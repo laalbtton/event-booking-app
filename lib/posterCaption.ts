@@ -81,14 +81,17 @@ export function sanitizePosterCaption(input: string | null | undefined): string 
 
   if (!text) return null
 
-  // Keep hashtags tidy (no more than MAX_HASHTAGS).
+  // Keep hashtags tidy (no more than MAX_HASHTAGS), per line, so paragraph breaks stay intact.
   let hashtagCount = 0
-  const tokens = text.split(/\s+/).map((token) => {
-    if (!token.startsWith('#')) return token
-    hashtagCount += 1
-    return hashtagCount <= MAX_HASHTAGS ? token : ''
+  const linesOut = text.split('\n').map((line) => {
+    const tokens = line.split(/\s+/).map((token) => {
+      if (!token.startsWith('#')) return token
+      hashtagCount += 1
+      return hashtagCount <= MAX_HASHTAGS ? token : ''
+    })
+    return tokens.filter(Boolean).join(' ')
   })
-  text = tokens.filter(Boolean).join(' ').replace(/\s+\n/g, '\n').trim()
+  text = linesOut.join('\n').replace(/\n{3,}/g, '\n\n').trim()
 
   if (text.length <= MAX_CAPTION_CHARS) return text
 

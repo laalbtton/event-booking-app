@@ -874,7 +874,7 @@ export default function EventDetailsPage() {
               {posterExpanded && (
                 <div className="space-y-3 pt-2">
                   {event.poster_caption && (
-                    <p className="text-sm text-muted-foreground">{event.poster_caption}</p>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{event.poster_caption}</p>
                   )}
                   <div className="flex flex-wrap gap-2">
                     <a href={event.poster_url} target="_blank" rel="noreferrer" download>
