@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { QRCodeSVG } from 'qrcode.react'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function EventQRCodePage() {
   const params = useParams()
@@ -14,7 +15,6 @@ export default function EventQRCodePage() {
 
   const [event, setEvent] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [userRole, setUserRole] = useState<string | null>(null)
   const [publicUrl, setPublicUrl] = useState('')
 
   useEffect(() => {
@@ -52,8 +52,6 @@ export default function EventQRCodePage() {
       router.push('/dashboard')
       return
     }
-
-    setUserRole(profile.role)
 
     // Load event and verify access
     const { data: eventData, error: eventError } = await supabase
@@ -93,6 +91,30 @@ export default function EventQRCodePage() {
     )
   }
 
+  function handleDownloadQr() {
+    const svg = document.querySelector('#event-qr svg') as SVGElement | null
+    if (!svg) {
+      toast.error('QR code not ready yet')
+      return
+    }
+    const serializer = new XMLSerializer()
+    const source = serializer.serializeToString(svg)
+    const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    const safeTitle = String(event?.title || 'event')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    link.download = `${safeTitle || 'event'}-qr.svg`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
@@ -113,7 +135,7 @@ export default function EventQRCodePage() {
             {publicUrl && (
               <>
                 <div className="flex justify-center mb-4">
-                  <div className="bg-white p-4 rounded-lg border-2 border-gray-200">
+                  <div id="event-qr" className="bg-white p-4 rounded-lg border-2 border-gray-200">
                     <QRCodeSVG value={publicUrl} size={256} />
                   </div>
                 </div>
@@ -128,11 +150,17 @@ export default function EventQRCodePage() {
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(publicUrl)
-                  alert('URL copied to clipboard!')
+                  toast.success('URL copied to clipboard!')
                 }}
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-medium"
               >
                 Copy URL
+              </button>
+              <button
+                onClick={handleDownloadQr}
+                className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 font-medium"
+              >
+                Download QR
               </button>
               <Link
                 href={`/events/${eventId}`}

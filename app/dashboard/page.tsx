@@ -1489,12 +1489,16 @@ export default function Dashboard() {
                   const isBooked = !!activeBooking || optimisticBookings.has(event.id)
                   const effectiveCreditsRequired = getEffectiveCreditsRequired(event)
                   const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 0))
+                  const audienceTicketCredits = Math.max(0, Number(event.credits_required || 0))
                   const audienceHasFreePass = Number(profile?.audience_free_passes_remaining || 0) > 0
+                  const audienceTicketRequiredCredits =
+                    event.tickets_enabled
+                      ? Math.max(audienceDepositCredits, audienceTicketCredits)
+                      : audienceDepositCredits
                   const creditsRequiredForCard = isAudienceUser
-                    ? (audienceHasFreePass ? 0 : audienceDepositCredits)
+                    ? (audienceHasFreePass ? 0 : audienceTicketRequiredCredits)
                     : effectiveCreditsRequired
                   const hasRedeemableCredits = event.tickets_enabled && Number((event as any).audience_deposit_credits || 0) > 0
-                  const isCashTicketed = isAudienceUser && event.tickets_enabled && creditsRequiredForCard === 0 && !audienceHasFreePass
                   const showRedeemableHelpDot = hasRedeemableCredits && isAudienceUser
                   const languageSummary = formatEventLanguages(event)
                   const canAfford = (profile?.credits || 0) >= creditsRequiredForCard
@@ -1537,15 +1541,9 @@ export default function Dashboard() {
                               )}
                               {event.event_type !== 'booked_show' && (
                                 <div className="inline-flex items-center gap-1.5">
-                                  {isCashTicketed ? (
-                                    <Badge variant="secondary" className="whitespace-nowrap text-amber-600 border-amber-400">
-                                      Ticketed
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="secondary" className="whitespace-nowrap">
-                                      {creditsRequiredForCard} Cr
-                                    </Badge>
-                                  )}
+                                  <Badge variant="secondary" className="whitespace-nowrap">
+                                    {creditsRequiredForCard} Cr
+                                  </Badge>
                                   {showRedeemableHelpDot && (
                                     <button
                                       type="button"
