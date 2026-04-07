@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { ChevronLeft, GripVertical, User, Copy, ChevronDown, MessageCircle, Users } from 'lucide-react'
+import { ChevronLeft, Clock, GripVertical, User, Copy, ChevronDown, MessageCircle, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { userCanManageEventChatSettings } from '@/lib/eventChatPermissions'
 import { EventCommunitiesDialog } from '@/components/EventCommunitiesDialog'
@@ -1494,16 +1494,24 @@ export default function AttendancePage() {
               </Link>
               <h1 className="text-2xl font-bold text-gray-900 truncate">Attendance</h1>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0 gap-1.5"
-              onClick={() => setCommunitiesDialogOpen(true)}
-            >
-              <Users className="h-4 w-4" />
-              Communities
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button type="button" variant="outline" size="sm" className="gap-1.5" asChild>
+                <Link href={`/events/${resolvedId}/hosting-info`}>
+                  <Clock className="h-4 w-4" />
+                  Hosting info
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setCommunitiesDialogOpen(true)}
+              >
+                <Users className="h-4 w-4" />
+                Communities
+              </Button>
+            </div>
           </div>
         </div>
       </div>

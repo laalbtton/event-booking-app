@@ -1405,6 +1405,14 @@ export default function EventManagementPage() {
                                 Edit Details
                               </button>
                             )}
+                            <Link
+                              href={`/events/${event.id}/attendance`}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
+                              onClick={() => setOpenMenuId(null)}
+                            >
+                              <Users className="w-4 h-4 text-muted-foreground" />
+                              {activeTab === 'upcoming' ? 'Manage Attendance' : 'View Attendance'}
+                            </Link>
                             {/* Copy public link */}
                             <button
                               type="button"
@@ -1471,15 +1479,6 @@ export default function EventManagementPage() {
                                 Generate QR Code
                               </Link>
                             )}
-                            {/* Attendance */}
-                            <Link
-                              href={`/events/${event.id}/attendance`}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
-                              onClick={() => setOpenMenuId(null)}
-                            >
-                              <Users className="w-4 h-4 text-muted-foreground" />
-                              {activeTab === 'upcoming' ? 'Manage Attendance' : 'View Attendance'}
-                            </Link>
                             {/* Duplicate */}
                             <button
                               type="button"

@@ -200,11 +200,103 @@ export async function GET(request: NextRequest) {
     }
     */
 
+    // Host poster sharing reminders (in-app notification + push). Wider time windows support daily cron; deduped per event + type.
+    let hostPosterFiveDay = 0
+    let hostPosterTwentyFourHour = 0
+
+    const twoWeeksAhead = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+    const { data: upcomingHostEvents, error: hostEventsError } = await supabase
+      .from('events')
+      .select('id, title, date, host_user_id, created_by, status')
+      .gte('date', now.toISOString())
+      .lte('date', twoWeeksAhead.toISOString())
+      .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
+
+    if (!hostEventsError && upcomingHostEvents?.length) {
+      for (const ev of upcomingHostEvents) {
+        const hostId = (ev.host_user_id as string | null) || (ev.created_by as string | null)
+        if (!hostId) continue
+
+        const eventDate = new Date(ev.date as string)
+        if (Number.isNaN(eventDate.getTime())) continue
+        const hoursUntil = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
+
+        const sendHostPosterReminder = async (
+          type: 'host_poster_reminder_5d' | 'host_poster_reminder_24h',
+          bucket: 'five' | 'dayBefore'
+        ) => {
+          const { data: existing } = await supabase
+            .from('notifications')
+            .select('id')
+            .eq('user_id', hostId)
+            .eq('related_event_id', ev.id)
+            .eq('type', type)
+            .maybeSingle()
+
+          if (existing) return
+
+          const title =
+            type === 'host_poster_reminder_5d'
+              ? 'Time to share your event poster'
+              : 'Share your event poster'
+          const message =
+            type === 'host_poster_reminder_5d'
+              ? `"${ev.title}" is about five days away. Share your event poster to build attendance.`
+              : `"${ev.title}" is about a day away. Share your event poster again so it stays top of mind.`
+
+          const { error: insErr } = await supabase.from('notifications').insert({
+            user_id: hostId,
+            type,
+            title,
+            message,
+            related_event_id: ev.id,
+            related_booking_id: null,
+          })
+
+          if (insErr) {
+            console.error('host poster reminder insert:', insErr)
+            return
+          }
+
+          try {
+            await sendPushToUser(
+              supabase,
+              hostId,
+              {
+                title,
+                body: message,
+                data: { url: `/events/${ev.id}/hosting-info` },
+              },
+              'event_reminders'
+            )
+          } catch (pushErr) {
+            console.error('host poster push:', pushErr)
+          }
+
+          if (bucket === 'five') hostPosterFiveDay += 1
+          else hostPosterTwentyFourHour += 1
+        }
+
+        if (hoursUntil >= 100 && hoursUntil <= 150) {
+          await sendHostPosterReminder('host_poster_reminder_5d', 'five')
+        }
+        if (hoursUntil >= 18 && hoursUntil <= 36) {
+          await sendHostPosterReminder('host_poster_reminder_24h', 'dayBefore')
+        }
+      }
+    } else if (hostEventsError) {
+      console.error('host poster events query:', hostEventsError)
+    }
+
     return NextResponse.json({
       success: true,
       remindersSent,
+      hostPosterReminders: {
+        fiveDay: hostPosterFiveDay,
+        twentyFourHour: hostPosterTwentyFourHour,
+      },
       errors: errors.length > 0 ? errors : undefined,
-      message: `Sent ${remindersSent} reminder${remindersSent !== 1 ? 's' : ''}`
+      message: `Sent ${remindersSent} attendee reminder${remindersSent !== 1 ? 's' : ''}; ${hostPosterFiveDay + hostPosterTwentyFourHour} host poster nudge(s)`,
     })
   } catch (error: any) {
     console.error('Error in send-reminders route:', error)

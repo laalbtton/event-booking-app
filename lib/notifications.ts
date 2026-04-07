@@ -8,6 +8,8 @@ export type NotificationType =
   | 'booking_cancelled'
   | 'event_updated'
   | 'event_reminder'
+  | 'host_poster_reminder_5d'
+  | 'host_poster_reminder_24h'
   | 'general'
 
 /**

@@ -123,6 +123,11 @@ export default function NotificationsPage() {
           .maybeSingle()
         router.push(anyLink?.community_id ? `/communities/${anyLink.community_id}` : '/dashboard')
       }
+    } else if (
+      (notification.type === 'host_poster_reminder_5d' || notification.type === 'host_poster_reminder_24h') &&
+      notification.related_event_id
+    ) {
+      router.push(`/events/${notification.related_event_id}/hosting-info`)
     } else if (notification.related_event_id) {
       router.push(`/events/${notification.related_event_id}`)
     } else if (notification.related_booking_id) {
