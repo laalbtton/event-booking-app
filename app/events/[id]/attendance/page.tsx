@@ -1495,12 +1495,6 @@ export default function AttendancePage() {
               <h1 className="text-2xl font-bold text-gray-900 truncate">Attendance</h1>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <Button type="button" variant="outline" size="sm" className="gap-1.5" asChild>
-                <Link href={`/events/${resolvedId}/hosting-info`}>
-                  <Clock className="h-4 w-4" />
-                  Hosting info
-                </Link>
-              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -1721,6 +1715,15 @@ export default function AttendancePage() {
             )}
           </CardContent>
         </Card>
+
+        <div className="mb-4">
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" asChild>
+            <Link href={`/events/${resolvedId}/hosting-info`}>
+              <Clock className="h-4 w-4" />
+              Hosting info
+            </Link>
+          </Button>
+        </div>
 
         {/* Event Chat Settings */}
         <Card className="mb-6">

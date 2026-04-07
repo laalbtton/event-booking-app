@@ -1085,6 +1085,11 @@ export default function EventDetailsPage() {
                     </Link>
                   </Button>
                 )}
+                {isHost && (
+                  <Button asChild variant="outline">
+                    <Link href={`/events/${event.id}/hosting-info`}>Hosting info</Link>
+                  </Button>
+                )}
               </div>
               {profile && (
                 event.status === 'cancelled' ? (
