@@ -726,8 +726,9 @@ export default function EventManagementPage() {
         console.warn('ensure-community-links failed', e)
       }
 
-      // Only notify users if the event is live (admin-created); pending events notify after approval
-      if (userRole === 'admin') {
+      // Notify when the event is live immediately (admin always; creators when community review is off).
+      // Pending-approval events notify after approval via /api/events/[id]/review or review-event-submission.
+      if (userRole === 'admin' || !communitySubmissionEnabled) {
         try {
           const { data: sessionData } = await supabase.auth.getSession()
           const accessToken = sessionData.session?.access_token

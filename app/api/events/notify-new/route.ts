@@ -28,6 +28,38 @@ async function isAdminOrEventCreator(supabase: any, userId: string, eventId: str
   return event?.created_by === userId
 }
 
+/** Community admin / co_admin for the event's primary community may broadcast when an event goes live. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function isCommunityAdminForPrimaryLink(supabase: any, userId: string, eventId: string) {
+  const { data: rows } = await supabase
+    .from('event_communities')
+    .select('community_id')
+    .eq('event_id', eventId)
+    .eq('is_primary', true)
+    .eq('status', 'approved')
+
+  const communityIds = Array.from(
+    new Set((rows || []).map((r: { community_id: string }) => r.community_id).filter(Boolean))
+  )
+  if (communityIds.length === 0) return false
+
+  const { data: memberships } = await supabase
+    .from('community_members')
+    .select('role')
+    .eq('user_id', userId)
+    .in('community_id', communityIds)
+
+  return (memberships || []).some((m: { role: string }) =>
+    ['admin', 'co_admin'].includes(m.role || '')
+  )
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function canTriggerNewEventBroadcast(supabase: any, userId: string, eventId: string) {
+  if (await isAdminOrEventCreator(supabase, userId, eventId)) return true
+  return isCommunityAdminForPrimaryLink(supabase, userId, eventId)
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = getAdminClient()
@@ -46,7 +78,7 @@ export async function POST(request: NextRequest) {
     const eventId = typeof body?.eventId === 'string' ? body.eventId.trim() : ''
     if (!eventId) return NextResponse.json({ error: 'Missing eventId' }, { status: 400 })
 
-    const allowed = await isAdminOrEventCreator(supabase, authData.user.id, eventId)
+    const allowed = await canTriggerNewEventBroadcast(supabase, authData.user.id, eventId)
     if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { data: event, error: eventError } = await supabase

@@ -89,6 +89,8 @@ export async function POST(
 
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 })
 
+    let activatedEvent = false
+
     // If this is the primary community link and the event is being approved,
     // also activate the event itself (same as handleReviewPendingEvent).
     // Also ensure the event_communities row is marked approved (upsert in case it was missing).
@@ -103,6 +105,7 @@ export async function POST(
           .from('events')
           .update({ status: 'active' })
           .eq('id', sub.event_id)
+        activatedEvent = true
       }
       // Ensure the event_communities row exists and is approved
       await supabase
@@ -145,6 +148,28 @@ export async function POST(
         p_related_booking_id: null,
         p_related_event_id: sub.event_id,
       })
+    }
+
+    // Same broadcast as /api/events/[id]/review — was missing here so events approved via
+    // "New Events" never triggered the new-event push.
+    if (activatedEvent) {
+      try {
+        const origin = request.nextUrl.origin
+        const res = await fetch(`${origin}/api/events/notify-new`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ eventId: sub.event_id }),
+        })
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          console.warn('notify-new after review-event-submission:', res.status, j)
+        }
+      } catch (err) {
+        console.warn('notify-new fetch failed after review-event-submission:', err)
+      }
     }
 
     return NextResponse.json({ success: true })

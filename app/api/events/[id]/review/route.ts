@@ -123,7 +123,8 @@ export async function POST(
 
       // Send new-event push to all users (now that it's live)
       try {
-        await fetch('/api/events/notify-new', {
+        const origin = request.nextUrl.origin
+        const res = await fetch(`${origin}/api/events/notify-new`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -131,8 +132,12 @@ export async function POST(
           },
           body: JSON.stringify({ eventId }),
         })
-      } catch {
-        // Non-blocking
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          console.warn('notify-new after event review:', res.status, j)
+        }
+      } catch (err) {
+        console.warn('notify-new fetch failed after event review:', err)
       }
     } else {
       // Rejected: keep as pending_approval with a note, notify creator
