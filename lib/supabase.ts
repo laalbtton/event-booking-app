@@ -30,6 +30,8 @@ export type Profile = {
   stripe_customer_id?: string | null
   stripe_customer_mode?: 'test' | 'live' | null
   instagram_link: string | null
+  instagram_prompt_snoozed_until?: string | null
+  instagram_no_account?: boolean
   youtube_link: string | null
   twitter_link: string | null
   website_link: string | null

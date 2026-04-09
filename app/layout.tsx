@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ConfirmDialogProvider } from '@/components/providers/confirm-dialog-provider'
 import { GlobalAlertsProvider } from '@/components/providers/global-alerts-provider'
 import { AuthBootstrapProvider } from '@/components/providers/auth-bootstrap-provider'
+import { InstagramUsernamePromptProvider } from '@/components/providers/instagram-username-prompt-provider'
 import { PushServiceWorkerProvider } from '@/components/providers/push-service-worker-provider'
 import { InstallBonusProvider } from '@/components/providers/install-bonus-provider'
 import { ThemeProvider } from '@/components/providers/theme-provider'
@@ -70,6 +71,7 @@ export default function RootLayout({
         <ThemeProvider>
         <ConfirmDialogProvider>
           <AuthBootstrapProvider>
+            <InstagramUsernamePromptProvider>
             <PushServiceWorkerProvider />
             <InstallBonusProvider />
             <GlobalAlertsProvider />
@@ -103,6 +105,7 @@ export default function RootLayout({
                 </div>
               </div>
             </footer>
+            </InstagramUsernamePromptProvider>
           </AuthBootstrapProvider>
         </ConfirmDialogProvider>
         </ThemeProvider>

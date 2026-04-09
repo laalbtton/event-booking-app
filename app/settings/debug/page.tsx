@@ -15,7 +15,9 @@ export default function SettingsDebugPage() {
   const [loading, setLoading] = useState(true)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [submissionsEnabled, setSubmissionsEnabled] = useState(false)
+  const [instagramPromptEnabled, setInstagramPromptEnabled] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingInstagramPrompt, setSavingInstagramPrompt] = useState(false)
 
   useEffect(() => {
     if (!authResolved) return
@@ -45,12 +47,21 @@ export default function SettingsDebugPage() {
       const token = sessionData.session?.access_token
       if (!token) throw new Error('Not authenticated')
 
-      const response = await fetch('/api/admin/debug/event-submission', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const result = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(result.error || 'Failed to load debug settings')
+      const [submissionRes, instagramPromptRes] = await Promise.all([
+        fetch('/api/admin/debug/event-submission', {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch('/api/admin/instagram-username-prompt', {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ])
+      const result = await submissionRes.json().catch(() => ({}))
+      if (!submissionRes.ok) throw new Error(result.error || 'Failed to load debug settings')
       setSubmissionsEnabled(!!result.enabled)
+
+      const igResult = await instagramPromptRes.json().catch(() => ({}))
+      if (!instagramPromptRes.ok) throw new Error(igResult.error || 'Failed to load Instagram prompt setting')
+      setInstagramPromptEnabled(igResult.enabled !== false)
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'Failed to load debug settings')
     } finally {
@@ -85,6 +96,36 @@ export default function SettingsDebugPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to update debug setting')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function updateInstagramPromptEnabled(enabled: boolean) {
+    if (savingInstagramPrompt) return
+    setSavingInstagramPrompt(true)
+    const prev = instagramPromptEnabled
+    setInstagramPromptEnabled(enabled)
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/admin/instagram-username-prompt', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ enabled }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Failed to update Instagram prompt setting')
+      toast.success('Instagram prompt setting updated')
+    } catch (error: unknown) {
+      setInstagramPromptEnabled(prev)
+      toast.error(error instanceof Error ? error.message : 'Failed to update Instagram prompt setting')
+    } finally {
+      setSavingInstagramPrompt(false)
     }
   }
 
@@ -127,6 +168,33 @@ export default function SettingsDebugPage() {
                 checked={submissionsEnabled}
                 onChange={(e) => updateSubmissionsEnabled(e.target.checked)}
                 disabled={saving}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-amber-200 mt-6">
+          <CardHeader>
+            <CardTitle className="text-xl">Instagram username prompt</CardTitle>
+            <CardDescription>
+              When enabled, users without an Instagram username on their profile are prompted after login. Disable this
+              to turn the prompt off for everyone.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div>
+                <p className="text-sm font-medium">Prompt users to add Instagram</p>
+                <p className="text-xs text-muted-foreground">
+                  Enabled by default. Turn off to stop showing the prompt app-wide.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={instagramPromptEnabled}
+                onChange={(e) => updateInstagramPromptEnabled(e.target.checked)}
+                disabled={savingInstagramPrompt}
               />
             </div>
           </CardContent>
