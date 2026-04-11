@@ -6,6 +6,7 @@ import { buildEventJsonLd } from '@/lib/seo/schemaEvent'
 import { PublicEventCTA } from '@/components/public/PublicEventCTA'
 import { PublicInstallBanner } from '@/components/public/PublicInstallBanner'
 import { PublicHeader } from '@/components/public/PublicHeader'
+import { PublicEventDateTime } from '@/components/public/PublicEventDateTime'
 import { LayoutEventSummary } from '@/components/public/LayoutEventSummary'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 import type { Metadata } from 'next'
@@ -42,15 +43,6 @@ export default async function EventLayout({ children, params }: Props) {
 
   const isPast = new Date(event.startDate) < new Date()
   const eventSlug = event.slug || event.id
-
-  function formatDate(iso: string) {
-    return new Date(iso).toLocaleDateString('en-CA', {
-      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-    })
-  }
-  function formatTime(iso: string) {
-    return new Date(iso).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })
-  }
 
   return (
     <>
@@ -113,7 +105,9 @@ export default async function EventLayout({ children, params }: Props) {
             <div className="space-y-2 text-sm text-stone-400">
               <p className="flex items-center gap-2">
                 <span>📅</span>
-                <span>{formatDate(event.startDate)} · {formatTime(event.startDate)}{event.endDate ? ` – ${formatTime(event.endDate)}` : ''}</span>
+                <span>
+                  <PublicEventDateTime startIso={event.startDate} endIso={event.endDate} />
+                </span>
               </p>
               {(event.venue || event.locationText) && (
                 <p className="flex items-center gap-2">

@@ -7,6 +7,7 @@ import { getVisitorGeo } from '@/lib/server/geo'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { PublicEventCard } from '@/components/public/PublicEventCard'
 import { PublicEventsFilters } from '@/components/public/PublicEventsFilters'
+import { PublicEventsSort } from '@/components/public/PublicEventsSort'
 
 // Must be dynamic so we can read the visitor's IP for geo-sorting on every request
 export const dynamic = 'force-dynamic'
@@ -36,6 +37,10 @@ function getDateBounds(preset: string): { from: Date; to: Date } | null {
   return null
 }
 
+function venueSortKey(e: PublicEventDetails): string {
+  return (e.venue?.name || e.locationText || '').toLowerCase()
+}
+
 function filterAndSortEvents(
   events: PublicEventDetails[],
   {
@@ -44,12 +49,14 @@ function filterAndSortEvents(
     eventType,
     free,
     geoCity,
+    sortMode,
   }: {
     city: string
     datePreset: string
     eventType: string
     free: string
     geoCity: string | null
+    sortMode: 'date' | 'near' | 'venue'
   }
 ): { upcoming: PublicEventDetails[]; past: PublicEventDetails[] } {
   const now = new Date()
@@ -93,8 +100,20 @@ function filterAndSortEvents(
   const upcoming = filtered.filter((e) => new Date(e.startDate) >= now)
   const past = filtered.filter((e) => new Date(e.startDate) < now)
 
-  // Geo-sort upcoming: events matching visitor's city appear first within their date group
-  if (geoCity && !cityQuery) {
+  if (sortMode === 'venue') {
+    upcoming.sort((a, b) => {
+      const va = venueSortKey(a)
+      const vb = venueSortKey(b)
+      if (va !== vb) return va.localeCompare(vb)
+      return new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+    })
+    past.sort((a, b) => {
+      const va = venueSortKey(a)
+      const vb = venueSortKey(b)
+      if (va !== vb) return va.localeCompare(vb)
+      return new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+    })
+  } else if (sortMode === 'near' && geoCity && !cityQuery) {
     const geoCityLower = geoCity.toLowerCase()
     upcoming.sort((a, b) => {
       const aCity = (a.venue?.city || a.locationText || '').toLowerCase()
@@ -104,16 +123,28 @@ function filterAndSortEvents(
       if (aMatch !== bMatch) return aMatch - bMatch
       return new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
     })
+    past.sort((a, b) => {
+      const aCity = (a.venue?.city || a.locationText || '').toLowerCase()
+      const bCity = (b.venue?.city || b.locationText || '').toLowerCase()
+      const aMatch = aCity.includes(geoCityLower) ? 0 : 1
+      const bMatch = bCity.includes(geoCityLower) ? 0 : 1
+      if (aMatch !== bMatch) return aMatch - bMatch
+      return new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+    })
   } else {
     upcoming.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+    past.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
   }
-
-  past.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
 
   return { upcoming, past }
 }
 
-type SearchParams = { city?: string; date?: string; type?: string; free?: string }
+type SearchParams = { city?: string; date?: string; type?: string; free?: string; sort?: string }
+
+function parseSortMode(raw: string | undefined): 'date' | 'near' | 'venue' {
+  if (raw === 'near' || raw === 'venue') return raw
+  return 'date'
+}
 
 export default async function PublicEventsPage({
   searchParams,
@@ -130,6 +161,7 @@ export default async function PublicEventsPage({
   const datePreset = params.date || ''
   const eventType = params.type || ''
   const free = params.free || ''
+  const sortMode = parseSortMode(params.sort)
 
   const { upcoming, past } = filterAndSortEvents(allEvents, {
     city,
@@ -137,6 +169,7 @@ export default async function PublicEventsPage({
     eventType,
     free,
     geoCity: geo.city,
+    sortMode,
   })
 
   const hasActiveFilters = !!(city || datePreset || eventType || free)
@@ -157,9 +190,14 @@ export default async function PublicEventsPage({
           </p>
         </div>
 
-        {/* Filters */}
+        {/* Sort + filters */}
         <Suspense fallback={null}>
-          <PublicEventsFilters />
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+            <PublicEventsSort />
+            <div className="min-w-0 flex-1">
+              <PublicEventsFilters />
+            </div>
+          </div>
         </Suspense>
 
         {/* Upcoming events */}

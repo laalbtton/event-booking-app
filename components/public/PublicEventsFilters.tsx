@@ -47,10 +47,12 @@ export function PublicEventsFilters() {
       if (next.datePreset) params.set('date', next.datePreset)
       if (next.eventType) params.set('type', next.eventType)
       if (next.free) params.set('free', next.free)
+      const sort = searchParams.get('sort')
+      if (sort === 'near' || sort === 'venue') params.set('sort', sort)
       const qs = params.toString()
       router.push(qs ? `/events?${qs}` : '/events', { scroll: false })
     },
-    [router]
+    [router, searchParams]
   )
 
   function update(key: keyof FilterState, value: string) {
@@ -67,7 +69,12 @@ export function PublicEventsFilters() {
   function clearAll() {
     const cleared: FilterState = { city: '', datePreset: '', eventType: '', free: '' }
     setFilters(cleared)
-    router.push('/events', { scroll: false })
+    const sort = searchParams.get('sort')
+    if (sort === 'near' || sort === 'venue') {
+      router.push(`/events?sort=${sort}`, { scroll: false })
+    } else {
+      router.push('/events', { scroll: false })
+    }
   }
 
   useEffect(() => {
