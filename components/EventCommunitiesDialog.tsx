@@ -68,6 +68,7 @@ export function EventCommunitiesDialog({
   const [loading, setLoading] = useState(false)
   const [publicLoading, setPublicLoading] = useState(false)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
+  const [withdrawingId, setWithdrawingId] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -178,6 +179,11 @@ export function EventCommunitiesDialog({
     [links]
   )
 
+  /** True when the link's expiry date has already passed (client-side check). */
+  function isClientExpired(link: EventCommunityLink) {
+    return link.expires_at !== null && new Date(link.expires_at) < new Date()
+  }
+
   const linkedCommunityIds = useMemo(() => new Set(links.map((l) => l.community_id)), [links])
 
   const eligibleToAdd = useMemo(() => {
@@ -196,6 +202,36 @@ export function EventCommunitiesDialog({
       ),
     [links]
   )
+
+  async function withdrawLink(link: EventCommunityLink) {
+    setWithdrawingId(link.id)
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch(`/api/communities/${link.community_id}/event-submission`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ eventId }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((json as { error?: string }).error || 'Withdrawal failed')
+
+      toast.success(`Withdrawn from ${link.community_name}`)
+      await loadData()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Could not withdraw invitation')
+    } finally {
+      setWithdrawingId(null)
+    }
+  }
 
   async function submitToCommunity(communityId: string, communityName: string) {
     if (activeCount >= MAX_COMMUNITIES) {
@@ -266,21 +302,68 @@ export function EventCommunitiesDialog({
               <p className="text-sm text-muted-foreground">This event is not linked to any communities yet.</p>
             ) : (
               <ul className="space-y-2">
-                {links.map((l) => (
-                  <li
-                    key={l.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium truncate block">{l.community_name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {l.is_primary ? 'Primary · ' : ''}
-                        {l.expires_at ? `Expires ${new Date(l.expires_at).toLocaleDateString()}` : ''}
-                      </span>
-                    </div>
-                    <Badge variant={statusBadgeVariant(l.status)}>{l.status}</Badge>
-                  </li>
-                ))}
+                {links.map((l) => {
+                  const expired = l.status === 'expired' || (l.status === 'pending' && isClientExpired(l))
+                  const canResend = expired || l.status === 'rejected'
+                  const canWithdraw = l.status === 'pending' || expired || l.status === 'rejected'
+                  const busy = submittingId === l.community_id || withdrawingId === l.id
+
+                  return (
+                    <li
+                      key={l.id}
+                      className={`rounded-md border px-3 py-2.5 text-sm ${expired ? 'border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20' : ''}`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <span className="font-medium truncate block">{l.community_name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {l.is_primary ? 'Primary · ' : ''}
+                            {expired
+                              ? `Expired ${l.expires_at ? new Date(l.expires_at).toLocaleDateString() : ''}`
+                              : l.status === 'pending' && l.expires_at
+                                ? `Expires ${new Date(l.expires_at).toLocaleDateString()}`
+                                : ''}
+                          </span>
+                          {expired && (
+                            <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                              The review window closed. Resend to start a new 7-day window.
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant={expired ? 'outline' : statusBadgeVariant(l.status)}
+                          className={expired ? 'border-amber-400 text-amber-700 dark:text-amber-400' : ''}>
+                          {expired ? 'expired' : l.status}
+                        </Badge>
+                      </div>
+
+                      {(canResend || canWithdraw) && (
+                        <div className="mt-2 flex gap-2">
+                          {canResend && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={busy || activeCount >= MAX_COMMUNITIES}
+                              onClick={() => submitToCommunity(l.community_id, l.community_name)}
+                            >
+                              {submittingId === l.community_id ? 'Resending…' : 'Resend invite'}
+                            </Button>
+                          )}
+                          {canWithdraw && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={busy}
+                              onClick={() => withdrawLink(l)}
+                            >
+                              {withdrawingId === l.id ? 'Withdrawing…' : 'Withdraw'}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

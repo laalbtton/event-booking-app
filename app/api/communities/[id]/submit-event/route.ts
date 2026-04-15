@@ -78,7 +78,7 @@ export async function POST(
     const reviewedAt = linkApproved ? now.toISOString() : null
     const reviewedBy = linkApproved ? authData.user.id : null
 
-    const { error: insertError } = await supabase.from('event_communities').insert({
+    const linkPayload = {
       event_id: eventId,
       community_id: communityId,
       is_primary: isPrimaryBool,
@@ -88,12 +88,46 @@ export async function POST(
       reviewed_by: reviewedBy,
       reviewed_at: reviewedAt,
       expires_at: expiresAt,
-    })
+    }
+
+    const { error: insertError } = await supabase.from('event_communities').insert(linkPayload)
 
     if (insertError && insertError.code === '23505') {
-      return NextResponse.json({ error: 'Event is already associated with this community' }, { status: 400 })
+      // Duplicate row: only allow re-submission if the existing link is expired or rejected
+      const { data: existingLink } = await supabase
+        .from('event_communities')
+        .select('id, status')
+        .eq('event_id', eventId)
+        .eq('community_id', communityId)
+        .single()
+
+      const existingStatus = (existingLink as { id: string; status: string } | null)?.status
+
+      if (existingStatus === 'expired' || existingStatus === 'rejected') {
+        // Revive the row: reset to pending with a fresh expiry window
+        const { error: updateError } = await supabase
+          .from('event_communities')
+          .update({
+            status,
+            is_primary: isPrimaryBool,
+            submitted_by: authData.user.id,
+            submitted_at: now.toISOString(),
+            reviewed_by: reviewedBy,
+            reviewed_at: reviewedAt,
+            expires_at: expiresAt,
+          })
+          .eq('id', (existingLink as { id: string }).id)
+
+        if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 })
+      } else {
+        return NextResponse.json(
+          { error: 'This event is already associated with this community' },
+          { status: 400 },
+        )
+      }
+    } else if (insertError) {
+      return NextResponse.json({ error: insertError.message }, { status: 400 })
     }
-    if (insertError) return NextResponse.json({ error: insertError.message }, { status: 400 })
 
     // Notify community admins of cross-community submission (non-primary only; primary pending
     // is paired with the event-level notification from the manage page).
