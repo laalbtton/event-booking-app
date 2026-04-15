@@ -43,7 +43,7 @@ export const metadata: Metadata = {
 
 // Next.js 16+ expects themeColor under `viewport`, not `metadata`.
 export const viewport: Viewport = {
-  themeColor: "#2563eb", // Keep aligned with `public/manifest.json` theme_color
+  themeColor: "#000000",
 }
 
 export default function RootLayout({
