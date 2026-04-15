@@ -7,7 +7,7 @@ import type { Event } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
-import { QrCode, Link as LinkIcon, Image as ImageIcon, Trash2, MoreVertical, Copy, Edit, X, Users } from 'lucide-react'
+import { Image as ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { appendSlugSuffix, buildEventSlugBase } from '@/lib/seo/slug'
 import { MAX_CAPTION_CHARS } from '@/lib/posterCaption'
@@ -60,10 +60,7 @@ export default function EventManagementPage() {
   const [languageSuggestions, setLanguageSuggestions] = useState<string[]>([])
   const [varietyArtTypes, setVarietyArtTypes] = useState<Array<{ id?: string; art_type_name: string; slot_capacity: string }>>([])
 
-  // Three-dot menu state
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const menuRef = useRef<HTMLDivElement | null>(null)
-  const posterInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const processedManageQueryRef = useRef<{ edit?: string; duplicate?: string }>({})
 
   // Venue request state
   const [showVenueRequestForm, setShowVenueRequestForm] = useState(false)
@@ -1077,21 +1074,7 @@ export default function EventManagementPage() {
     }
   }
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    if (!openMenuId) return
-    function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpenMenuId(null)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [openMenuId])
-
   async function handleDuplicateEvent(event: Event) {
-    setOpenMenuId(null)
-
     const eventDate = new Date(event.date)
     const localDateTime = toLocalDateTimeString(eventDate)
     const endTimeValue = (event as any).end_time
@@ -1156,6 +1139,39 @@ export default function EventManagementPage() {
     setShowCreateForm(true)
     toast.info('Fill in a new date and submit to create the duplicate event.')
   }
+
+  useEffect(() => {
+    if (!showEditForm) processedManageQueryRef.current.edit = undefined
+  }, [showEditForm])
+
+  useEffect(() => {
+    if (!showCreateForm) processedManageQueryRef.current.duplicate = undefined
+  }, [showCreateForm])
+
+  useEffect(() => {
+    if (loading || events.length === 0) return
+    const params = new URLSearchParams(window.location.search)
+    const editId = params.get('edit')
+    const dupId = params.get('duplicate')
+
+    if (editId && processedManageQueryRef.current.edit !== editId && !showEditForm) {
+      const ev = events.find((e) => e.id === editId)
+      if (ev) {
+        processedManageQueryRef.current.edit = editId
+        void handleEditEvent(ev)
+        router.replace('/events/manage', { scroll: false })
+      }
+    }
+
+    if (dupId && processedManageQueryRef.current.duplicate !== dupId && !showCreateForm) {
+      const ev = events.find((e) => e.id === dupId)
+      if (ev) {
+        processedManageQueryRef.current.duplicate = dupId
+        handleDuplicateEvent(ev)
+        router.replace('/events/manage', { scroll: false })
+      }
+    }
+  }, [loading, events, showEditForm, showCreateForm, router])
 
   function closePosterCaptionModal() {
     setPosterCaptionDraft((prev) => {
@@ -1342,7 +1358,7 @@ export default function EventManagementPage() {
 
           {/* Events Grid */}
           <TabsContent value={activeTab} className="mt-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {events
                 .filter((event) => {
                   const eventDate = new Date(event.date)
@@ -1358,195 +1374,51 @@ export default function EventManagementPage() {
                   const dateB = new Date(b.date).getTime()
                   return activeTab === 'upcoming' ? dateA - dateB : dateB - dateA
                 })
-                .map((event) => (
-                <Card key={event.id} className="shadow-sm">
-                  {/* Hidden file input for poster upload — triggered via ref */}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    ref={(el) => { posterInputRefs.current[event.id] = el }}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) handlePosterUpload(event.id, file)
-                      e.currentTarget.value = ''
-                    }}
-                  />
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-lg font-bold leading-tight">{event.title}</CardTitle>
-                        {event.status === 'cancelled' && (
-                          <Badge variant="destructive" className="mt-1">Cancelled</Badge>
-                        )}
-                        {event.status === 'pending_approval' && (
-                          <Badge variant="secondary" className="mt-1">Pending Approval</Badge>
-                        )}
-                      </div>
-                      {/* Three-dot menu */}
-                      <div className="relative shrink-0" ref={openMenuId === event.id ? menuRef : undefined}>
-                        <button
-                          type="button"
-                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                          onClick={() => setOpenMenuId(openMenuId === event.id ? null : event.id)}
-                          aria-label="Event actions"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                        {openMenuId === event.id && (
-                          <div className="absolute right-0 top-8 z-50 w-52 bg-popover border border-border rounded-lg shadow-lg py-1 text-sm">
-                            {/* Edit — upcoming only, not cancelled */}
-                            {activeTab === 'upcoming' && event.status !== 'cancelled' && (
-                              <button
-                                type="button"
-                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
-                                onClick={() => { setOpenMenuId(null); handleEditEvent(event) }}
-                              >
-                                <Edit className="w-4 h-4 text-muted-foreground" />
-                                Edit Details
-                              </button>
-                            )}
-                            <Link
-                              href={`/events/${event.id}/attendance`}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
-                              onClick={() => setOpenMenuId(null)}
-                            >
-                              <Users className="w-4 h-4 text-muted-foreground" />
-                              {activeTab === 'upcoming' ? 'Manage Attendance' : 'View Attendance'}
-                            </Link>
-                            {/* Copy public link */}
-                            <button
-                              type="button"
-                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
-                              onClick={() => {
-                                setOpenMenuId(null)
-                                const publicUrl = `${window.location.origin}/events/${event.slug || event.id}`
-                                navigator.clipboard.writeText(publicUrl)
-                                toast.success('Public link copied!')
-                              }}
-                            >
-                              <LinkIcon className="w-4 h-4 text-muted-foreground" />
-                              Copy Public Link
-                            </button>
-                            {/* Poster upload — upcoming only */}
-                            {activeTab === 'upcoming' && (
-                              <button
-                                type="button"
-                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
-                                disabled={
-                                  posterUploadingId === event.id ||
-                                  posterCaptionLoadingId === event.id ||
-                                  !!posterCaptionDraft
-                                }
-                                onClick={() => {
-                                  setOpenMenuId(null)
-                                  posterInputRefs.current[event.id]?.click()
-                                }}
-                              >
-                                <ImageIcon className="w-4 h-4 text-muted-foreground" />
-                                {posterCaptionLoadingId === event.id
-                                  ? 'Preparing…'
-                                  : posterUploadingId === event.id
-                                    ? 'Saving…'
-                                    : event.poster_url
-                                      ? 'Update Poster'
-                                      : 'Add Poster'}
-                              </button>
-                            )}
-                            {/* Remove poster — upcoming only, if poster exists */}
-                            {activeTab === 'upcoming' && event.poster_url && (
-                              <button
-                                type="button"
-                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left text-rose-600"
-                                disabled={
-                                  posterUploadingId === event.id ||
-                                  posterCaptionLoadingId === event.id ||
-                                  !!posterCaptionDraft
-                                }
-                                onClick={() => { setOpenMenuId(null); handlePosterRemove(event.id) }}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                Remove Poster
-                              </button>
-                            )}
-                            {/* QR Code — upcoming only */}
-                            {activeTab === 'upcoming' && (
-                              <Link
-                                href={`/events/${event.id}/qr`}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
-                                onClick={() => setOpenMenuId(null)}
-                              >
-                                <QrCode className="w-4 h-4 text-muted-foreground" />
-                                Generate QR Code
-                              </Link>
-                            )}
-                            {/* Duplicate */}
-                            <button
-                              type="button"
-                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left"
-                              onClick={() => handleDuplicateEvent(event)}
-                            >
-                              <Copy className="w-4 h-4 text-muted-foreground" />
-                              Duplicate Event
-                            </button>
-                            {/* Cancel — upcoming only, not already cancelled */}
-                            {activeTab === 'upcoming' && event.status !== 'cancelled' && (
-                              <>
-                                <div className="border-t border-border my-1" />
-                                <button
-                                  type="button"
-                                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted text-left text-destructive"
-                                  onClick={() => { setOpenMenuId(null); handleCancelEvent(event.id, event.title) }}
-                                >
-                                  <X className="w-4 h-4" />
-                                  Cancel Event
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-wrap break-words">{event.description}</p>
-                    
-                    <div className="text-sm text-muted-foreground space-y-1.5">
-                      <p>📅 {formatDateTime(event.date)}</p>
-                      <p>📍 {event.location}</p>
-                      {event.theme && <p>🎨 Theme: {event.theme}</p>}
-                      <p>🔞 {event.rating || '18+'}</p>
-                      {event.event_type === 'booked_show' ? (
-                        <p>🎟️ Invite only</p>
-                      ) : (
-                        <p>💳 {event.credits_required} credits</p>
-                      )}
-                      {event.max_attendees && <p>👥 Max {event.max_attendees} attendees</p>}
-                      {event.event_type !== 'booked_show' && (
-                        <p>⏱️ Cancel up to {event.cancellation_hours || 4} hours before</p>
-                      )}
-                    </div>
+                .map((event) => {
+                  const vid = (event as any).venue_id as string | undefined
+                  const venueName = vid ? venues.find((v) => v.id === vid)?.name : null
+                  const venueLine =
+                    venueName ||
+                    (event.location || '').split(',')[0]?.trim() ||
+                    event.location ||
+                    'Venue'
 
-                    {event.poster_url && (
-                      <div className="text-xs text-sky-700 space-y-1">
-                        <div className="flex items-center gap-1">
-                          <ImageIcon className="w-3.5 h-3.5" />
-                          Poster published
-                        </div>
-                        <div className="text-muted-foreground">
-                          Posted: {posterJobSummary[event.id]?.posted || 0} | Pending: {posterJobSummary[event.id]?.pending || 0} | Failed: {posterJobSummary[event.id]?.failed || 0}
-                        </div>
-                        <div className="text-muted-foreground">
-                          Publishes: {posterPublishMeta[event.id]?.count || 0}
-                          {posterPublishMeta[event.id]?.lastPublishedAt
-                            ? ` | Last: ${new Date(posterPublishMeta[event.id].lastPublishedAt as string).toLocaleString()}`
-                            : ''}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                  return (
+                    <Link
+                      key={event.id}
+                      href={`/events/manage/${event.id}`}
+                      className="block rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <Card className="h-full border shadow-sm transition-colors hover:border-primary/50 hover:bg-muted/20">
+                        <CardContent className="flex items-start gap-3 p-3 sm:p-4">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="text-sm font-semibold leading-snug sm:text-base">{event.title}</div>
+                            <p className="text-xs text-muted-foreground">{formatDateTime(event.date)}</p>
+                            <p className="truncate text-xs text-muted-foreground">📍 {venueLine}</p>
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {event.status === 'cancelled' && (
+                                <Badge variant="destructive" className="text-[10px]">
+                                  Cancelled
+                                </Badge>
+                              )}
+                              {event.status === 'pending_approval' && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  Pending
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          {event.poster_url ? (
+                            <ImageIcon
+                              className="mt-0.5 h-5 w-5 shrink-0 text-sky-600"
+                              aria-label="Poster added"
+                            />
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  )
+                })}
             </div>
 
             {events.filter((event) => {
