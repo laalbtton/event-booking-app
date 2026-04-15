@@ -14,10 +14,12 @@ type Tone = 'default' | 'onDark'
 type NotificationsBellLinkProps = {
   /** Visual style: default matches header icons; onDark for green credit banner */
   tone?: Tone
+  /** default: 32px button / 16px icon; lg: 1.25× (40px / 20px) for profile-style headers */
+  size?: 'default' | 'lg'
   className?: string
 }
 
-export function NotificationsBellLink({ tone = 'default', className }: NotificationsBellLinkProps) {
+export function NotificationsBellLink({ tone = 'default', size = 'default', className }: NotificationsBellLinkProps) {
   const { authResolved, user } = useAuthBootstrap()
   const [unreadCount, setUnreadCount] = useState(0)
   const warnedRealtimeRef = useRef(false)
@@ -123,6 +125,7 @@ export function NotificationsBellLink({ tone = 'default', className }: Notificat
   if (!authResolved || !user) return null
 
   const isDark = tone === 'onDark'
+  const isLg = size === 'lg'
 
   return (
     <div className={cn('relative inline-flex shrink-0', className)}>
@@ -131,17 +134,22 @@ export function NotificationsBellLink({ tone = 'default', className }: Notificat
         variant="ghost"
         size="icon"
         className={cn(
-          'relative h-8 w-8',
+          isLg ? 'relative h-10 w-10' : 'relative h-8 w-8',
           isDark && 'text-white hover:bg-white/15 hover:text-white border border-white/25'
         )}
         title="Notifications"
       >
         <Link href="/notifications" aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}>
-          <Bell className="h-4 w-4" />
+          <Bell className={cn(isLg ? 'h-5 w-5' : 'h-4 w-4')} />
           {unreadCount > 0 && (
             <Badge
               variant="destructive"
-              className="absolute -right-0.5 -top-0.5 h-4 min-w-4 flex items-center justify-center rounded-full p-0 text-[10px]"
+              className={cn(
+                'absolute flex items-center justify-center rounded-full p-0',
+                isLg
+                  ? '-right-0.5 -top-0.5 h-[18px] min-w-[18px] text-[11px]'
+                  : '-right-0.5 -top-0.5 h-4 min-w-4 text-[10px]'
+              )}
             >
               {unreadCount > 9 ? '9+' : unreadCount}
             </Badge>

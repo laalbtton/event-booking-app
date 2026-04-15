@@ -1679,37 +1679,43 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Credits Card */}
-        <Card className="bg-gradient-to-r from-emerald-600 to-teal-700 border-0 text-white shadow-lg mb-8">
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
-              <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className="text-2xl sm:text-3xl font-bold drop-shadow-md tracking-tight">{profile?.credits || 0}</span>
-                <span className="text-sm text-white/90">credits</span>
+        {/* Credits row: banner + notifications bell (Perform only) aligned outside the banner */}
+        <div className="flex flex-nowrap items-center gap-2 sm:gap-3 mb-8 min-w-0">
+          <Card className="bg-gradient-to-r from-emerald-600 to-teal-700 border-0 text-white shadow-lg flex-1 min-w-0">
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
+                <div className="flex items-baseline gap-1.5 shrink-0">
+                  <span className="text-2xl sm:text-3xl font-bold drop-shadow-md tracking-tight">{profile?.credits || 0}</span>
+                  <span className="text-sm text-white/90">credits</span>
+                </div>
+                <div className="flex-1 min-w-0" />
+                <Button
+                  asChild
+                  type="button"
+                  size="sm"
+                  className="bg-white text-emerald-700 hover:bg-white/90 shrink-0"
+                >
+                  <Link href="/buy-credits">Buy Credits</Link>
+                </Button>
+                <Button asChild variant="secondary" size="sm" className="bg-white/10 text-white hover:bg-white/20 shrink-0">
+                  <Link href="/credits">History</Link>
+                </Button>
               </div>
-              <div className="flex-1 min-w-0" />
-              {userRole !== 'audience' && eventTab === 'perform' && <NotificationsBellLink tone="onDark" />}
-              <Button
-                asChild
-                type="button"
-                size="sm"
-                className="bg-white text-emerald-700 hover:bg-white/90 shrink-0"
-              >
-                <Link href="/buy-credits">Buy Credits</Link>
-              </Button>
-              <Button asChild variant="secondary" size="sm" className="bg-white/10 text-white hover:bg-white/20 shrink-0">
-                <Link href="/credits">History</Link>
-              </Button>
+              {userRole === 'audience' && (
+                <p className="mt-4 text-sm text-white/90">
+                  {Number(profile?.audience_free_passes_remaining || 0) > 0
+                    ? `You have ${profile?.audience_free_passes_remaining || 0} free pass available.`
+                    : 'No free pass remaining right now.'}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          {userRole !== 'audience' && eventTab === 'perform' && (
+            <div className="flex shrink-0 items-center self-center">
+              <NotificationsBellLink />
             </div>
-            {userRole === 'audience' && (
-              <p className="mt-4 text-sm text-white/90">
-                {Number(profile?.audience_free_passes_remaining || 0) > 0
-                  ? `You have ${profile?.audience_free_passes_remaining || 0} free pass available.`
-                  : 'No free pass remaining right now.'}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+          )}
+        </div>
 
 
         {error && (

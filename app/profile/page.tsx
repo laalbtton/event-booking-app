@@ -956,21 +956,21 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-background pb-20">
       <div className="max-w-4xl mx-auto px-0 py-4 sm:py-8 sm:px-6 lg:px-8">
         <header className="sticky top-0 z-[45] -mx-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 pt-[env(safe-area-inset-top,0px)] mb-3 sm:mb-4 rounded-none sm:rounded-lg overflow-hidden sm:border sm:border-border sm:shadow-sm">
-          <div className="flex items-center justify-between gap-2 px-4 sm:px-4 min-h-11">
+          <div className="flex items-center justify-between gap-2 px-4 sm:px-4 min-h-12">
             <p className="text-base sm:text-lg font-semibold tracking-tight truncate min-w-0 pr-2">
               {(profile.full_name || '').trim() || 'Account'}
             </p>
             <div className="flex items-center gap-1 shrink-0">
-              <Button onClick={copyPublicProfileLink} variant="ghost" size="icon" className="h-8 w-8" title="Share Profile">
-                <Share2 className="h-4 w-4" />
+              <Button onClick={copyPublicProfileLink} variant="ghost" size="icon" className="h-10 w-10" title="Share Profile">
+                <Share2 className="h-5 w-5" />
               </Button>
-              <Button onClick={() => setIsEditing(true)} variant="ghost" size="icon" className="h-8 w-8" title="Edit Profile">
-                <Pencil className="h-4 w-4" />
+              <Button onClick={() => setIsEditing(true)} variant="ghost" size="icon" className="h-10 w-10" title="Edit Profile">
+                <Pencil className="h-5 w-5" />
               </Button>
-              <NotificationsBellLink />
-              <Button variant="ghost" size="icon" className="h-8 w-8" title="Settings" asChild>
+              <NotificationsBellLink size="lg" />
+              <Button variant="ghost" size="icon" className="h-10 w-10" title="Settings" asChild>
                 <Link href="/settings">
-                  <Settings className="w-4 h-4" />
+                  <Settings className="w-5 h-5" />
                 </Link>
               </Button>
             </div>
