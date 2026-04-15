@@ -81,6 +81,24 @@ const PERFORM_KIND_FILTER_OPTIONS: { value: PerformKindFilter; label: string }[]
   { value: 'booked_show', label: 'Booked show' },
 ]
 
+const PERFORM_FILTERS_STORAGE_KEY = 'dashboard-perform-filters-v1'
+
+const VALID_PERFORM_KINDS = new Set<PerformKindFilter>([
+  'comedy_open_mic',
+  'variety_arts_open_mic',
+  'booked_show',
+])
+
+function parseStoredPerformKinds(raw: unknown): PerformKindFilter[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((k): k is PerformKindFilter => typeof k === 'string' && VALID_PERFORM_KINDS.has(k as PerformKindFilter))
+}
+
+function parseStoredStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((x): x is string => typeof x === 'string' && x.length > 0)
+}
+
 export default function Dashboard() {
   const { confirm } = useConfirmDialog()
   const { authResolved, user } = useAuthBootstrap()
@@ -94,6 +112,8 @@ export default function Dashboard() {
   const [performFilterVenueKeys, setPerformFilterVenueKeys] = useState<string[]>([])
   const [performFilterLanguages, setPerformFilterLanguages] = useState<string[]>([])
   const [performFilterDialogOpen, setPerformFilterDialogOpen] = useState(false)
+  /** After load-from-storage runs; defer persist until after applied state is committed */
+  const performFiltersPersistReadyRef = useRef(false)
   const [myBookings, setMyBookings] = useState<any[]>([])
   const [invites, setInvites] = useState<InviteItem[]>([])
   const [respondingInvite, setRespondingInvite] = useState<string | null>(null)
@@ -319,6 +339,41 @@ export default function Dashboard() {
     setPerformFilterVenueKeys([])
     setPerformFilterLanguages([])
   }
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PERFORM_FILTERS_STORAGE_KEY)
+      if (raw) {
+        const p = JSON.parse(raw) as Record<string, unknown>
+        setPerformFilterKinds(parseStoredPerformKinds(p.kinds))
+        setPerformFilterCities(parseStoredStringArray(p.cities))
+        setPerformFilterVenueKeys(parseStoredStringArray(p.venueKeys))
+        setPerformFilterLanguages(parseStoredStringArray(p.languages))
+      }
+    } catch {
+      // ignore corrupt storage
+    }
+    queueMicrotask(() => {
+      performFiltersPersistReadyRef.current = true
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!performFiltersPersistReadyRef.current) return
+    try {
+      localStorage.setItem(
+        PERFORM_FILTERS_STORAGE_KEY,
+        JSON.stringify({
+          kinds: performFilterKinds,
+          cities: performFilterCities,
+          venueKeys: performFilterVenueKeys,
+          languages: performFilterLanguages,
+        })
+      )
+    } catch {
+      // quota / private mode
+    }
+  }, [performFilterKinds, performFilterCities, performFilterVenueKeys, performFilterLanguages])
 
   async function openVarietyPicker(event: Event) {
     const { data: artRows, error: artError } = await supabase
@@ -1378,26 +1433,30 @@ export default function Dashboard() {
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-2 space-y-5">
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Event format</Label>
-              <div className="space-y-1 rounded-md border bg-muted/30 p-2">
-                {PERFORM_KIND_FILTER_OPTIONS.map(({ value, label }) => (
-                  <label
-                    key={value}
-                    className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted/80"
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 shrink-0 rounded border-input"
-                      checked={performFilterKinds.includes(value)}
-                      onChange={() =>
-                        setPerformFilterKinds((prev) =>
-                          prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
-                        )
-                      }
-                    />
-                    <span>{label}</span>
-                  </label>
-                ))}
+              <Label className="text-xs text-muted-foreground">Language</Label>
+              <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
+                {performFilterOptions.languages.length === 0 ? (
+                  <p className="px-2 py-1 text-sm text-muted-foreground">No languages listed.</p>
+                ) : (
+                  performFilterOptions.languages.map((lang) => (
+                    <label
+                      key={lang}
+                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted/80"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-input"
+                        checked={performFilterLanguages.includes(lang)}
+                        onChange={() =>
+                          setPerformFilterLanguages((prev) =>
+                            prev.includes(lang) ? prev.filter((x) => x !== lang) : [...prev, lang]
+                          )
+                        }
+                      />
+                      <span>{lang}</span>
+                    </label>
+                  ))
+                )}
               </div>
             </div>
             <div className="space-y-2">
@@ -1459,30 +1518,26 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Language</Label>
-              <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
-                {performFilterOptions.languages.length === 0 ? (
-                  <p className="px-2 py-1 text-sm text-muted-foreground">No languages listed.</p>
-                ) : (
-                  performFilterOptions.languages.map((lang) => (
-                    <label
-                      key={lang}
-                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted/80"
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 shrink-0 rounded border-input"
-                        checked={performFilterLanguages.includes(lang)}
-                        onChange={() =>
-                          setPerformFilterLanguages((prev) =>
-                            prev.includes(lang) ? prev.filter((x) => x !== lang) : [...prev, lang]
-                          )
-                        }
-                      />
-                      <span>{lang}</span>
-                    </label>
-                  ))
-                )}
+              <Label className="text-xs text-muted-foreground">Event format</Label>
+              <div className="space-y-1 rounded-md border bg-muted/30 p-2">
+                {PERFORM_KIND_FILTER_OPTIONS.map(({ value, label }) => (
+                  <label
+                    key={value}
+                    className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted/80"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 shrink-0 rounded border-input"
+                      checked={performFilterKinds.includes(value)}
+                      onChange={() =>
+                        setPerformFilterKinds((prev) =>
+                          prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
+                        )
+                      }
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
               </div>
             </div>
           </div>
@@ -1679,13 +1734,24 @@ export default function Dashboard() {
             {userRole !== 'audience' && eventTab === 'perform' && (
               <Button
                 type="button"
-                variant={hasActivePerformFilters ? 'secondary' : 'outline'}
+                variant="outline"
                 size="icon"
-                className="shrink-0"
-                aria-label="Filter performer events"
+                className={cn(
+                  'relative shrink-0',
+                  hasActivePerformFilters && 'border-red-500/60 bg-red-500/10 text-red-600 hover:bg-red-500/15 hover:text-red-700'
+                )}
+                aria-label={
+                  hasActivePerformFilters ? 'Filter performer events (filters active)' : 'Filter performer events'
+                }
                 onClick={() => setPerformFilterDialogOpen(true)}
               >
                 <Filter className="h-4 w-4" />
+                {hasActivePerformFilters ? (
+                  <span
+                    className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-background"
+                    aria-hidden
+                  />
+                ) : null}
               </Button>
             )}
           </div>
@@ -2079,6 +2145,14 @@ export default function Dashboard() {
                     </div>
                   )
                 })}
+                {!isAudienceUser && eventTab === 'perform' && displayEvents.length > 0 && (
+                  <div className="w-full pt-6 mt-2 border-t text-center">
+                    <p className="text-sm text-muted-foreground mb-3">Want more shows? Explore communities hosting events.</p>
+                    <Button asChild variant="outline" size="sm">
+                      <Link href="/communities">Browse communities</Link>
+                    </Button>
+                  </div>
+                )}
               </div>
             )
           })()}
