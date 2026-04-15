@@ -13,11 +13,18 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { cn } from '@/lib/utils'
-import { ChevronDown, Download } from 'lucide-react'
+import { ChevronDown, Download, Filter } from 'lucide-react'
 import { EventCardSkeleton } from '@/components/skeletons/EventCardSkeleton'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
@@ -66,6 +73,14 @@ type InviteItem = {
   }
 }
 
+type PerformKindFilter = 'comedy_open_mic' | 'variety_arts_open_mic' | 'booked_show'
+
+const PERFORM_KIND_FILTER_OPTIONS: { value: PerformKindFilter; label: string }[] = [
+  { value: 'comedy_open_mic', label: 'Comedy open mic' },
+  { value: 'variety_arts_open_mic', label: 'Variety arts open mic' },
+  { value: 'booked_show', label: 'Booked show' },
+]
+
 export default function Dashboard() {
   const { confirm } = useConfirmDialog()
   const { authResolved, user } = useAuthBootstrap()
@@ -73,11 +88,12 @@ export default function Dashboard() {
   const [events, setEvents] = useState<Event[]>([])
   /** Venue rows keyed by id — used for city / name on Perform tab filters */
   const [venueById, setVenueById] = useState<Record<string, { name: string; city: string | null }>>({})
-  /** Perform-tab-only filters (dashboard Available Events → Perform) */
-  const [performFilterKind, setPerformFilterKind] = useState<'all' | 'comedy_open_mic' | 'variety_arts_open_mic' | 'booked_show'>('all')
-  const [performFilterCity, setPerformFilterCity] = useState('')
-  const [performFilterVenueKey, setPerformFilterVenueKey] = useState('')
-  const [performFilterLanguage, setPerformFilterLanguage] = useState('')
+  /** Perform-tab-only filters (dashboard Available Events → Perform); empty array = no filter on that dimension */
+  const [performFilterKinds, setPerformFilterKinds] = useState<PerformKindFilter[]>([])
+  const [performFilterCities, setPerformFilterCities] = useState<string[]>([])
+  const [performFilterVenueKeys, setPerformFilterVenueKeys] = useState<string[]>([])
+  const [performFilterLanguages, setPerformFilterLanguages] = useState<string[]>([])
+  const [performFilterDialogOpen, setPerformFilterDialogOpen] = useState(false)
   const [myBookings, setMyBookings] = useState<any[]>([])
   const [invites, setInvites] = useState<InviteItem[]>([])
   const [respondingInvite, setRespondingInvite] = useState<string | null>(null)
@@ -217,28 +233,30 @@ export default function Dashboard() {
       .filter(Boolean)
   }
 
+  function eventMatchesPerformKindOption(ev: Event, kind: PerformKindFilter): boolean {
+    if (kind === 'booked_show') return ev.event_type === 'booked_show'
+    if (kind === 'comedy_open_mic') {
+      if (ev.event_type !== 'open_mic') return false
+      const om = (ev as any).open_mic_type ?? 'comedy_open_mic'
+      return om === 'comedy_open_mic'
+    }
+    return ev.event_type === 'open_mic' && (ev as any).open_mic_type === 'variety_arts_open_mic'
+  }
+
   function eventMatchesPerformFilters(e: Event): boolean {
-    if (performFilterKind !== 'all') {
-      if (performFilterKind === 'booked_show') {
-        if (e.event_type !== 'booked_show') return false
-      } else if (performFilterKind === 'comedy_open_mic') {
-        if (e.event_type !== 'open_mic') return false
-        const om = (e as any).open_mic_type ?? 'comedy_open_mic'
-        if (om !== 'comedy_open_mic') return false
-      } else if (performFilterKind === 'variety_arts_open_mic') {
-        if (e.event_type !== 'open_mic' || (e as any).open_mic_type !== 'variety_arts_open_mic') return false
-      }
+    if (performFilterKinds.length > 0) {
+      if (!performFilterKinds.some((k) => eventMatchesPerformKindOption(e, k))) return false
     }
-    if (performFilterCity) {
+    if (performFilterCities.length > 0) {
       const c = getDashboardEventCity(e).toLowerCase()
-      if (c !== performFilterCity.toLowerCase()) return false
+      if (!performFilterCities.some((x) => x.toLowerCase() === c)) return false
     }
-    if (performFilterVenueKey) {
-      if (getDashboardVenueKey(e) !== performFilterVenueKey) return false
+    if (performFilterVenueKeys.length > 0) {
+      if (!performFilterVenueKeys.includes(getDashboardVenueKey(e))) return false
     }
-    if (performFilterLanguage) {
+    if (performFilterLanguages.length > 0) {
       const tags = getEventLanguageTags(e).map((t) => t.toLowerCase())
-      if (!tags.includes(performFilterLanguage.toLowerCase())) return false
+      if (!performFilterLanguages.some((lang) => tags.includes(lang.toLowerCase()))) return false
     }
     return true
   }
@@ -266,17 +284,40 @@ export default function Dashboard() {
     }
   }, [events, venueById, userRole])
 
+  const performVenueOptionsForDialog = useMemo(() => {
+    const venues = performFilterOptions.venues
+    if (performFilterCities.length === 0) return venues
+    return venues.filter((v) => {
+      const ev = events.find((e) => getDashboardVenueKey(e) === v.key)
+      if (!ev) return false
+      const city = getDashboardEventCity(ev)
+      return performFilterCities.some((c) => c.toLowerCase() === city.toLowerCase())
+    })
+  }, [performFilterOptions.venues, performFilterCities, events, venueById])
+
+  useEffect(() => {
+    if (performFilterCities.length === 0) return
+    setPerformFilterVenueKeys((keys) =>
+      keys.filter((k) => {
+        const ev = events.find((e) => getDashboardVenueKey(e) === k)
+        if (!ev) return false
+        const city = getDashboardEventCity(ev)
+        return performFilterCities.some((c) => c.toLowerCase() === city.toLowerCase())
+      })
+    )
+  }, [performFilterCities, events, venueById])
+
   const hasActivePerformFilters =
-    performFilterKind !== 'all' ||
-    !!performFilterCity ||
-    !!performFilterVenueKey ||
-    !!performFilterLanguage
+    performFilterKinds.length > 0 ||
+    performFilterCities.length > 0 ||
+    performFilterVenueKeys.length > 0 ||
+    performFilterLanguages.length > 0
 
   function clearPerformFilters() {
-    setPerformFilterKind('all')
-    setPerformFilterCity('')
-    setPerformFilterVenueKey('')
-    setPerformFilterLanguage('')
+    setPerformFilterKinds([])
+    setPerformFilterCities([])
+    setPerformFilterVenueKeys([])
+    setPerformFilterLanguages([])
   }
 
   async function openVarietyPicker(event: Event) {
@@ -1326,6 +1367,140 @@ export default function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog open={performFilterDialogOpen} onOpenChange={setPerformFilterDialogOpen}>
+        <DialogContent className="max-h-[85vh] flex flex-col gap-0 p-0 sm:max-w-lg">
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle>Filter performer events</DialogTitle>
+            <DialogDescription>
+              Select one or more options in each category. Within a category, events matching any selected option are
+              shown. Leave a category empty to include all values.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-2 space-y-5">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Event format</Label>
+              <div className="space-y-1 rounded-md border bg-muted/30 p-2">
+                {PERFORM_KIND_FILTER_OPTIONS.map(({ value, label }) => (
+                  <label
+                    key={value}
+                    className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted/80"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 shrink-0 rounded border-input"
+                      checked={performFilterKinds.includes(value)}
+                      onChange={() =>
+                        setPerformFilterKinds((prev) =>
+                          prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
+                        )
+                      }
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">City</Label>
+              <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
+                {performFilterOptions.cities.length === 0 ? (
+                  <p className="px-2 py-1 text-sm text-muted-foreground">No cities in your available events.</p>
+                ) : (
+                  performFilterOptions.cities.map((city) => (
+                    <label
+                      key={city}
+                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted/80"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-input"
+                        checked={performFilterCities.includes(city)}
+                        onChange={() =>
+                          setPerformFilterCities((prev) =>
+                            prev.includes(city) ? prev.filter((x) => x !== city) : [...prev, city]
+                          )
+                        }
+                      />
+                      <span>{city}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Venue</Label>
+              <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
+                {performVenueOptionsForDialog.length === 0 ? (
+                  <p className="px-2 py-1 text-sm text-muted-foreground">
+                    {performFilterCities.length > 0
+                      ? 'No venues match the selected cities.'
+                      : 'No venues in your available events.'}
+                  </p>
+                ) : (
+                  performVenueOptionsForDialog.map((v) => (
+                    <label
+                      key={v.key}
+                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted/80"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-input"
+                        checked={performFilterVenueKeys.includes(v.key)}
+                        onChange={() =>
+                          setPerformFilterVenueKeys((prev) =>
+                            prev.includes(v.key) ? prev.filter((x) => x !== v.key) : [...prev, v.key]
+                          )
+                        }
+                      />
+                      <span className="break-words">{v.label}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Language</Label>
+              <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
+                {performFilterOptions.languages.length === 0 ? (
+                  <p className="px-2 py-1 text-sm text-muted-foreground">No languages listed.</p>
+                ) : (
+                  performFilterOptions.languages.map((lang) => (
+                    <label
+                      key={lang}
+                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted/80"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-input"
+                        checked={performFilterLanguages.includes(lang)}
+                        onChange={() =>
+                          setPerformFilterLanguages((prev) =>
+                            prev.includes(lang) ? prev.filter((x) => x !== lang) : [...prev, lang]
+                          )
+                        }
+                      />
+                      <span>{lang}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="border-t px-6 py-4 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!hasActivePerformFilters}
+              onClick={() => clearPerformFilters()}
+            >
+              Clear all
+            </Button>
+            <Button type="button" onClick={() => setPerformFilterDialogOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <PushPermissionPrePrompt
         open={showPushPrePrompt}
         onEnable={handleEnablePushFromPrePrompt}
@@ -1499,7 +1674,21 @@ export default function Dashboard() {
 
         {/* Available Events Section */}
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold mb-5 sm:mb-6 tracking-tight">Available Events</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-5 sm:mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Available Events</h2>
+            {userRole !== 'audience' && eventTab === 'perform' && (
+              <Button
+                type="button"
+                variant={hasActivePerformFilters ? 'secondary' : 'outline'}
+                size="icon"
+                className="shrink-0"
+                aria-label="Filter performer events"
+                onClick={() => setPerformFilterDialogOpen(true)}
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
 
           {userRole !== 'audience' ? (
             <Tabs value={eventTab} onValueChange={(value) => setEventTab(value as 'perform' | 'attend')} className="mb-6">
@@ -1512,110 +1701,6 @@ export default function Dashboard() {
             <div className="mb-4 rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
               Audience mode: use Attend events only.
             </div>
-          )}
-
-          {userRole !== 'audience' && eventTab === 'perform' && events.length > 0 && (
-            <Card className="mb-5 shadow-sm">
-              <CardHeader className="py-3 px-4 pb-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CardTitle className="text-base">Filter performer events</CardTitle>
-                  {hasActivePerformFilters && (
-                    <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={clearPerformFilters}>
-                      Clear filters
-                    </Button>
-                  )}
-                </div>
-                <CardDescription className="text-xs">
-                  Narrow by format, city, venue, or language. Cities and venues are derived from your available events and linked venues.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 px-4 pb-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="perform-filter-kind" className="text-xs text-muted-foreground">
-                    Event format
-                  </Label>
-                  <select
-                    id="perform-filter-kind"
-                    value={performFilterKind}
-                    onChange={(e) =>
-                      setPerformFilterKind(e.target.value as typeof performFilterKind)
-                    }
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="all">All formats</option>
-                    <option value="comedy_open_mic">Comedy open mic</option>
-                    <option value="variety_arts_open_mic">Variety arts open mic</option>
-                    <option value="booked_show">Booked show</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="perform-filter-city" className="text-xs text-muted-foreground">
-                    City
-                  </Label>
-                  <select
-                    id="perform-filter-city"
-                    value={performFilterCity}
-                    onChange={(e) => {
-                      setPerformFilterCity(e.target.value)
-                      setPerformFilterVenueKey('')
-                    }}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">All cities</option>
-                    {performFilterOptions.cities.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="perform-filter-venue" className="text-xs text-muted-foreground">
-                    Venue
-                  </Label>
-                  <select
-                    id="perform-filter-venue"
-                    value={performFilterVenueKey}
-                    onChange={(e) => setPerformFilterVenueKey(e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">All venues</option>
-                    {performFilterOptions.venues
-                      .filter((v) => {
-                        if (!performFilterCity) return true
-                        const ev = events.find((e) => getDashboardVenueKey(e) === v.key)
-                        if (!ev) return false
-                        return (
-                          getDashboardEventCity(ev).toLowerCase() === performFilterCity.toLowerCase()
-                        )
-                      })
-                      .map((v) => (
-                        <option key={v.key} value={v.key}>
-                          {v.label}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="perform-filter-lang" className="text-xs text-muted-foreground">
-                    Language
-                  </Label>
-                  <select
-                    id="perform-filter-lang"
-                    value={performFilterLanguage}
-                    onChange={(e) => setPerformFilterLanguage(e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">All languages</option>
-                    {performFilterOptions.languages.map((lang) => (
-                      <option key={lang} value={lang}>
-                        {lang}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </CardContent>
-            </Card>
           )}
 
           {(() => {
