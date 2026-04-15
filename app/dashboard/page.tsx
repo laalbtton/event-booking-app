@@ -1679,9 +1679,19 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Credits row: banner + notifications bell (Perform only) aligned outside the banner */}
-        <div className="flex flex-nowrap items-center gap-2 sm:gap-3 mb-8 min-w-0">
-          <Card className="bg-gradient-to-r from-emerald-600 to-teal-700 border-0 text-white shadow-lg flex-1 min-w-0 overflow-hidden">
+        {/* Perform: app title row + credits row; other tabs / audience: credits only */}
+        <div className="mb-8 space-y-3">
+          {userRole !== 'audience' && eventTab === 'perform' && (
+            <div className="relative flex min-h-11 items-center justify-center px-10 sm:px-12">
+              <span className="text-center text-lg font-bold tracking-tight text-foreground sm:text-xl">
+                One Mic Stand
+              </span>
+              <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                <NotificationsBellLink />
+              </div>
+            </div>
+          )}
+          <Card className="bg-gradient-to-r from-emerald-600 to-teal-700 border-0 text-white shadow-lg w-full min-w-0 overflow-hidden">
             <CardContent className="p-3 sm:p-5">
               <div className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-3">
                 <div className="flex shrink-0 items-baseline gap-1">
@@ -1720,11 +1730,6 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
-          {userRole !== 'audience' && eventTab === 'perform' && (
-            <div className="flex shrink-0 items-center self-center">
-              <NotificationsBellLink />
-            </div>
-          )}
         </div>
 
 

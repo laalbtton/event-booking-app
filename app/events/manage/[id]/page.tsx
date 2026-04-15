@@ -73,6 +73,8 @@ export default function EventManageDetailPage() {
 
   const [posterUploadingId, setPosterUploadingId] = useState<string | null>(null)
   const [posterCaptionLoadingId, setPosterCaptionLoadingId] = useState<string | null>(null)
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false)
+
   const [posterCaptionDraft, setPosterCaptionDraft] = useState<{
     eventId: string
     file: File
@@ -352,6 +354,8 @@ export default function EventManageDetailPage() {
   }
 
   const langs = Array.isArray((event as any).languages) ? (event as any).languages : ['English']
+  const rawDescription = (event.description || '').trim()
+  const descriptionLong = rawDescription.length > 280
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -376,7 +380,31 @@ export default function EventManageDetailPage() {
             <CardDescription>Information shown on the public event page where applicable.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <p className="whitespace-pre-wrap break-words text-muted-foreground">{event.description || '—'}</p>
+            <div className="text-muted-foreground">
+              {rawDescription ? (
+                <>
+                  <p
+                    className={cn(
+                      'whitespace-pre-wrap break-words',
+                      !descriptionExpanded && descriptionLong && 'line-clamp-4'
+                    )}
+                  >
+                    {rawDescription}
+                  </p>
+                  {descriptionLong && (
+                    <button
+                      type="button"
+                      className="mt-1.5 text-sm font-medium text-primary hover:underline"
+                      onClick={() => setDescriptionExpanded((e) => !e)}
+                    >
+                      {descriptionExpanded ? 'Show less' : 'Show full description'}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <p>—</p>
+              )}
+            </div>
             <div className="space-y-1.5 border-t pt-3">
               <p>
                 <span className="font-medium text-foreground">When:</span> {formatDateTime(event.date)}

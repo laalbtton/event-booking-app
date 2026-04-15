@@ -63,6 +63,9 @@ export function GlobalAlertsProvider() {
       toastOptions={{
         className: 'text-sm',
         duration: 4500,
+        classNames: {
+          info: '!bg-red-600 !text-white !border-red-700',
+        },
       }}
     />
   )

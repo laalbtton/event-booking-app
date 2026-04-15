@@ -271,7 +271,7 @@ export default function NotificationsPage() {
       case 'booking_confirmed':
         return 'border-green-500 bg-green-50'
       case 'waitlist_position_changed':
-        return 'border-blue-500 bg-blue-50'
+        return 'border-red-500 bg-red-50'
       case 'booking_cancelled':
         return 'border-red-500 bg-red-50'
       case 'event_updated':
