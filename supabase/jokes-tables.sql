@@ -53,3 +53,7 @@ CREATE POLICY "joke_reactions: auth users manage own"
   ON joke_reactions FOR ALL
   USING      (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+-- Enable Supabase Realtime for live reaction count updates on the My Jokes tab.
+-- Run this in the SQL editor (supabase_realtime publication must exist first).
+ALTER PUBLICATION supabase_realtime ADD TABLE joke_reactions;

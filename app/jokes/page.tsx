@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { Heart, Bomb, Sword, Trash2, Send } from 'lucide-react'
+import { Heart, Bomb, Trash2, Send, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
@@ -15,6 +15,30 @@ const MAX_CHARS = 280
 const LOAD_LIMIT = 50
 
 type ReactionType = 'like' | 'bomb' | 'kill'
+
+// ── Custom knife SVG icon ────────────────────────────────────────────────────
+function KnifeIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {/* Blade: tip on the left, widens toward guard */}
+      <path d="M3 11.5 C5 8 10 8 15 8.5 L16 8.5 L16 15.5 L15 15.5 C10 16 5 15 3 11.5 Z" />
+      {/* Guard */}
+      <line x1="16" y1="7" x2="16" y2="17" strokeWidth="2" />
+      {/* Handle */}
+      <path d="M16 9 L21.5 9 L21.5 15 L16 15" />
+      {/* Handle rivet */}
+      <circle cx="19" cy="12" r="0.7" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
 
 const REACTIONS = [
   {
@@ -37,7 +61,7 @@ const REACTIONS = [
   },
   {
     type: 'kill' as ReactionType,
-    Icon: Sword,
+    Icon: KnifeIcon,
     label: 'Killed',
     tooltip: 'Killed it',
     activeClass:
@@ -45,6 +69,11 @@ const REACTIONS = [
     iconClass: 'text-violet-600 dark:text-violet-400',
   },
 ] as const
+
+// ── Types ───────────────────────────────────────────────────────────────────
+
+type Profile = { full_name: string | null; avatar_url: string | null }
+type ProfileMap = Record<string, Profile>
 
 type RawJoke = {
   id: string
@@ -60,15 +89,16 @@ type Joke = {
   content: string
   created_at: string
   author_name: string | null
+  author_avatar_url: string | null
   reactions: { like: number; bomb: number; kill: number }
   my_reaction: ReactionType | null
 }
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function processRow(
   row: RawJoke,
-  profileMap: Record<string, string | null>,
+  profileMap: ProfileMap,
   currentUserId: string | undefined,
 ): Joke {
   const reactions = { like: 0, bomb: 0, kill: 0 }
@@ -81,12 +111,14 @@ function processRow(
       my_reaction = r.reaction_type as ReactionType
     }
   }
+  const profile = profileMap[row.user_id]
   return {
     id: row.id,
     user_id: row.user_id,
     content: row.content,
     created_at: row.created_at,
-    author_name: profileMap[row.user_id] ?? null,
+    author_name: profile?.full_name ?? null,
+    author_avatar_url: profile?.avatar_url ?? null,
     reactions,
     my_reaction,
   }
@@ -108,14 +140,8 @@ function timeAgo(dateStr: string): string {
 }
 
 const AVATAR_PALETTE = [
-  'bg-red-500',
-  'bg-orange-500',
-  'bg-amber-500',
-  'bg-emerald-500',
-  'bg-teal-500',
-  'bg-blue-500',
-  'bg-violet-500',
-  'bg-pink-500',
+  'bg-red-500', 'bg-orange-500', 'bg-amber-500', 'bg-emerald-500',
+  'bg-teal-500', 'bg-blue-500', 'bg-violet-500', 'bg-pink-500',
 ]
 function avatarColor(userId: string): string {
   let h = 0
@@ -137,7 +163,7 @@ function fmtCount(n: number): string {
   return String(n)
 }
 
-// ─── page ───────────────────────────────────────────────────────────────────
+// ── Page ────────────────────────────────────────────────────────────────────
 
 export default function JokesPage() {
   const { authResolved, user } = useAuthBootstrap()
@@ -155,6 +181,9 @@ export default function JokesPage() {
   const [reactingId, setReactingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
+  // Track joke IDs I own for targeted subscription filtering
+  const myJokeIdsRef = useRef<Set<string>>(new Set())
+
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const trimmed = draft.trim()
@@ -171,6 +200,7 @@ export default function JokesPage() {
     el.style.height = `${el.scrollHeight}px`
   }, [draft])
 
+  // Initial loads
   useEffect(() => {
     void loadBrowse()
   }, [])
@@ -179,12 +209,52 @@ export default function JokesPage() {
     if (activeTab === 'mine' && !myLoaded && user) void loadMine()
   }, [activeTab, user, myLoaded])
 
-  // ── data fetching ─────────────────────────────────────────────────────────
+  // Keep myJokeIdsRef in sync so the subscription can check it without closures
+  useEffect(() => {
+    myJokeIdsRef.current = new Set(myJokes.map((j) => j.id))
+  }, [myJokes])
 
-  async function fetchProfiles(userIds: string[]): Promise<Record<string, string | null>> {
+  // ── Realtime subscription: patch reaction counts on my jokes ──────────────
+  useEffect(() => {
+    if (!user) return
+
+    const channel = supabase
+      .channel(`my-joke-reactions-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'joke_reactions' },
+        (payload) => {
+          const rec = (payload.new ?? payload.old) as
+            | { joke_id?: string; user_id?: string; reaction_type?: string }
+            | null
+          const jokeId = rec?.joke_id
+          if (!jokeId || !myJokeIdsRef.current.has(jokeId)) return
+
+          // Someone reacted to one of my jokes — silently re-fetch its reactions
+          void refreshJokeReactions(jokeId)
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [user])
+
+  // ── Data fetching ─────────────────────────────────────────────────────────
+
+  async function fetchProfiles(userIds: string[]): Promise<ProfileMap> {
     if (!userIds.length) return {}
-    const { data } = await supabase.from('profiles').select('id, full_name').in('id', userIds)
-    return Object.fromEntries((data ?? []).map((p) => [p.id, p.full_name ?? null]))
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
+      .in('id', userIds)
+    return Object.fromEntries(
+      (data ?? []).map((p) => [
+        p.id,
+        { full_name: p.full_name ?? null, avatar_url: (p as { avatar_url?: string | null }).avatar_url ?? null },
+      ]),
+    )
   }
 
   async function loadBrowse() {
@@ -202,7 +272,12 @@ export default function JokesPage() {
       const rows = (data ?? []) as RawJoke[]
       const uniqueIds = [...new Set(rows.map((r) => r.user_id))]
       const profileMap = await fetchProfiles(uniqueIds)
-      setBrowseJokes(rows.map((r) => processRow(r, profileMap, user?.id)))
+      // Own jokes are shown in "My Jokes" tab only — exclude from browse
+      setBrowseJokes(
+        rows
+          .filter((r) => r.user_id !== user?.id)
+          .map((r) => processRow(r, profileMap, user?.id)),
+      )
     } catch (err: unknown) {
       const msg = (err as { message?: string })?.message ?? 'Failed to load jokes'
       setBrowseError(
@@ -228,7 +303,7 @@ export default function JokesPage() {
       if (error) throw error
 
       const rows = (data ?? []) as RawJoke[]
-      const profileMap = { [user.id]: null } as Record<string, string | null>
+      const profileMap: ProfileMap = { [user.id]: { full_name: null, avatar_url: null } }
       setMyJokes(rows.map((r) => processRow(r, profileMap, user.id)))
       setMyLoaded(true)
     } catch {
@@ -238,7 +313,30 @@ export default function JokesPage() {
     }
   }
 
-  // ── actions ───────────────────────────────────────────────────────────────
+  /** Fetch fresh reaction counts for a single joke and patch myJokes state. */
+  async function refreshJokeReactions(jokeId: string) {
+    const { data } = await supabase
+      .from('joke_reactions')
+      .select('user_id, reaction_type')
+      .eq('joke_id', jokeId)
+
+    if (!data) return
+
+    const reactions = { like: 0, bomb: 0, kill: 0 }
+    let my_reaction: ReactionType | null = null
+    for (const r of data as { user_id: string; reaction_type: string }[]) {
+      if (r.reaction_type === 'like') reactions.like++
+      else if (r.reaction_type === 'bomb') reactions.bomb++
+      else if (r.reaction_type === 'kill') reactions.kill++
+      if (user && r.user_id === user.id) my_reaction = r.reaction_type as ReactionType
+    }
+
+    setMyJokes((prev) =>
+      prev.map((j) => (j.id === jokeId ? { ...j, reactions, my_reaction } : j)),
+    )
+  }
+
+  // ── Actions ───────────────────────────────────────────────────────────────
 
   async function handlePost() {
     if (!user || !trimmed || overLimit) return
@@ -252,12 +350,13 @@ export default function JokesPage() {
 
       if (error) throw error
 
-      const profileMap: Record<string, string | null> = {}
+      const profileMap: ProfileMap = {}
       const newJoke = processRow(data as unknown as RawJoke, profileMap, user.id)
       setDraft('')
-      setBrowseJokes((prev) => [newJoke, ...prev])
+      // New joke goes to My Jokes only; Browse excludes own
       if (myLoaded) setMyJokes((prev) => [newJoke, ...prev])
       toast.success('Joke posted!')
+      setActiveTab('mine')
     } catch (err: unknown) {
       toast.error((err as { message?: string })?.message ?? 'Failed to post')
     } finally {
@@ -275,8 +374,8 @@ export default function JokesPage() {
 
     setReactingId(joke.id)
 
-    // Optimistic update
-    const snapshot = { browse: browseJokes, mine: myJokes }
+    // Optimistic update on browse list
+    const snapshot = browseJokes
     function patch(list: Joke[]): Joke[] {
       return list.map((j) => {
         if (j.id !== joke.id) return j
@@ -289,7 +388,6 @@ export default function JokesPage() {
       })
     }
     setBrowseJokes(patch)
-    if (myLoaded) setMyJokes(patch)
 
     try {
       if (joke.my_reaction === type) {
@@ -309,8 +407,7 @@ export default function JokesPage() {
         if (error) throw error
       }
     } catch (err: unknown) {
-      setBrowseJokes(snapshot.browse)
-      setMyJokes(snapshot.mine)
+      setBrowseJokes(snapshot)
       toast.error((err as { message?: string })?.message ?? 'Failed to react')
     } finally {
       setReactingId(null)
@@ -337,11 +434,10 @@ export default function JokesPage() {
     }
   }
 
-  // ── derived ───────────────────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
 
-  const ringPct = pct
   const circumference = 2 * Math.PI * 9
-  const dashOffset = circumference * (1 - ringPct)
+  const dashOffset = circumference * (1 - pct)
   const counterColor =
     overLimit
       ? 'text-destructive font-semibold'
@@ -351,20 +447,18 @@ export default function JokesPage() {
   const ringStroke =
     overLimit ? 'stroke-destructive' : charsLeft <= 20 ? 'stroke-amber-500' : 'stroke-primary'
 
-  // ── render ────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background pb-28">
       <div className="mx-auto max-w-xl px-4 py-6 sm:px-6 sm:py-8">
         {/* Page header */}
         <div className="mb-5 flex items-center gap-2.5">
-          <span className="text-2xl leading-none" aria-hidden>
-            🎤
-          </span>
+          <span className="text-2xl leading-none" aria-hidden>🎤</span>
           <h1 className="text-2xl font-bold tracking-tight">Jokes</h1>
         </div>
 
-        {/* ── Write area ─────────────────────────────────────────────────── */}
+        {/* ── Write area ──────────────────────────────────────────────────── */}
         {!authResolved ? (
           <div className="mb-5 h-[120px] animate-pulse rounded-2xl bg-muted" />
         ) : !user ? (
@@ -385,42 +479,22 @@ export default function JokesPage() {
                 rows={2}
                 disabled={submitting}
                 className={cn(
-                  'w-full resize-none bg-transparent text-sm leading-relaxed placeholder:text-muted-foreground/50 focus:outline-none',
-                  'disabled:opacity-60',
+                  'w-full resize-none bg-transparent text-sm leading-relaxed placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-60',
                   overLimit ? 'text-destructive' : 'text-foreground',
                 )}
                 style={{ minHeight: '3.5rem', overflow: 'hidden' }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && trimmed && !overLimit) {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && trimmed && !overLimit)
                     void handlePost()
-                  }
                 }}
               />
             </div>
             <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-2.5 sm:px-5">
               <div className="flex items-center gap-2">
-                {/* Twitter-style ring counter */}
-                <svg
-                  width="22"
-                  height="22"
-                  viewBox="0 0 22 22"
-                  className="-rotate-90 shrink-0"
-                  aria-hidden
-                >
+                <svg width="22" height="22" viewBox="0 0 22 22" className="-rotate-90 shrink-0" aria-hidden>
+                  <circle cx="11" cy="11" r="9" strokeWidth="2.5" fill="none" className="stroke-muted" />
                   <circle
-                    cx="11"
-                    cy="11"
-                    r="9"
-                    strokeWidth="2.5"
-                    fill="none"
-                    className="stroke-muted"
-                  />
-                  <circle
-                    cx="11"
-                    cy="11"
-                    r="9"
-                    strokeWidth="2.5"
-                    fill="none"
+                    cx="11" cy="11" r="9" strokeWidth="2.5" fill="none"
                     strokeDasharray={circumference}
                     strokeDashoffset={dashOffset}
                     strokeLinecap="round"
@@ -444,7 +518,7 @@ export default function JokesPage() {
           </div>
         )}
 
-        {/* ── Tabs ──────────────────────────────────────────────────────── */}
+        {/* ── Tabs ────────────────────────────────────────────────────────── */}
         <div className="mb-4 flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
           {(['browse', 'mine'] as const).map((t) => (
             <button
@@ -460,10 +534,7 @@ export default function JokesPage() {
             >
               {t === 'browse' ? 'Browse All' : 'My Jokes'}
               {t === 'mine' && myJokes.length > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="h-5 min-w-[1.25rem] px-1 text-[10px] tabular-nums"
-                >
+                <Badge variant="secondary" className="h-5 min-w-[1.25rem] px-1 text-[10px] tabular-nums">
                   {myJokes.length}
                 </Badge>
               )}
@@ -471,7 +542,7 @@ export default function JokesPage() {
           ))}
         </div>
 
-        {/* ── Browse tab ────────────────────────────────────────────────── */}
+        {/* ── Browse tab ──────────────────────────────────────────────────── */}
         {activeTab === 'browse' && (
           <div className="space-y-3">
             {browseLoading &&
@@ -498,9 +569,7 @@ export default function JokesPage() {
               <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-5 py-8 text-center">
                 {browseError === 'not_setup' ? (
                   <>
-                    <p className="font-medium text-destructive">
-                      Jokes feature isn&apos;t set up yet.
-                    </p>
+                    <p className="font-medium text-destructive">Jokes feature isn&apos;t set up yet.</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       The database tables need to be created first.
                     </p>
@@ -509,12 +578,7 @@ export default function JokesPage() {
                   <>
                     <p className="font-medium text-destructive">Failed to load jokes.</p>
                     <p className="mt-1 text-sm text-muted-foreground">{browseError}</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-4"
-                      onClick={() => void loadBrowse()}
-                    >
+                    <Button variant="outline" size="sm" className="mt-4" onClick={() => void loadBrowse()}>
                       Try again
                     </Button>
                   </>
@@ -526,9 +590,7 @@ export default function JokesPage() {
               <div className="rounded-2xl border border-dashed border-muted-foreground/30 py-16 text-center">
                 <p className="mb-2 text-3xl">🎤</p>
                 <p className="font-medium text-foreground">No jokes yet.</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Be the first to drop a one-liner!
-                </p>
+                <p className="mt-1 text-sm text-muted-foreground">Be the first to drop a one-liner!</p>
               </div>
             )}
 
@@ -549,7 +611,7 @@ export default function JokesPage() {
           </div>
         )}
 
-        {/* ── My Jokes tab ──────────────────────────────────────────────── */}
+        {/* ── My Jokes tab ────────────────────────────────────────────────── */}
         {activeTab === 'mine' && (
           <div className="space-y-3">
             {!user && (
@@ -578,26 +640,38 @@ export default function JokesPage() {
               <div className="rounded-2xl border border-dashed border-muted-foreground/30 py-16 text-center">
                 <p className="mb-2 text-3xl">✍️</p>
                 <p className="font-medium text-foreground">You haven&apos;t posted any jokes yet.</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Write your first one-liner above!
-                </p>
+                <p className="mt-1 text-sm text-muted-foreground">Write your first one-liner above!</p>
               </div>
             )}
 
-            {user &&
-              !myLoading &&
-              myJokes.map((joke) => (
-                <JokeCard
-                  key={joke.id}
-                  joke={joke}
-                  currentUserId={user.id}
-                  showAuthor={false}
-                  onReact={undefined}
-                  onDelete={() => void handleDelete(joke)}
-                  isReacting={false}
-                  isDeleting={deletingId === joke.id}
-                />
-              ))}
+            {user && !myLoading && myJokes.length > 0 && (
+              <>
+                {/* Manual refresh for anyone who doesn't trust realtime */}
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs text-muted-foreground"
+                    onClick={() => void loadMine()}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Refresh
+                  </Button>
+                </div>
+                {myJokes.map((joke) => (
+                  <JokeCard
+                    key={joke.id}
+                    joke={joke}
+                    currentUserId={user.id}
+                    showAuthor={false}
+                    onReact={undefined}
+                    onDelete={() => void handleDelete(joke)}
+                    isReacting={false}
+                    isDeleting={deletingId === joke.id}
+                  />
+                ))}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -605,7 +679,44 @@ export default function JokesPage() {
   )
 }
 
-// ─── JokeCard ───────────────────────────────────────────────────────────────
+// ── JokeCard ─────────────────────────────────────────────────────────────────
+
+function AuthorAvatar({
+  userId,
+  name,
+  avatarUrl,
+}: {
+  userId: string
+  name: string | null
+  avatarUrl: string | null
+}) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const showImage = !!avatarUrl && !imgFailed
+
+  if (showImage) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={avatarUrl}
+        alt={name ?? 'Author'}
+        onError={() => setImgFailed(true)}
+        className="h-9 w-9 shrink-0 rounded-full object-cover"
+      />
+    )
+  }
+
+  return (
+    <span
+      className={cn(
+        'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white',
+        avatarColor(userId),
+      )}
+      aria-hidden
+    >
+      {initials(name)}
+    </span>
+  )
+}
 
 function JokeCard({
   joke,
@@ -633,15 +744,11 @@ function JokeCard({
       <div className="mb-3 flex items-start justify-between gap-2">
         {showAuthor ? (
           <div className="flex min-w-0 items-center gap-2.5">
-            <span
-              className={cn(
-                'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white',
-                avatarColor(joke.user_id),
-              )}
-              aria-hidden
-            >
-              {initials(joke.author_name)}
-            </span>
+            <AuthorAvatar
+              userId={joke.user_id}
+              name={joke.author_name}
+              avatarUrl={joke.author_avatar_url}
+            />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold leading-tight">
                 {joke.author_name ?? 'Comedian'}
@@ -701,10 +808,7 @@ function JokeCard({
               )}
             >
               <Icon
-                className={cn(
-                  'h-3.5 w-3.5 transition-colors',
-                  isActive ? iconClass : 'text-current',
-                )}
+                className={cn('h-3.5 w-3.5 transition-colors', isActive ? iconClass : 'text-current')}
               />
               {count > 0 && <span className="tabular-nums">{fmtCount(count)}</span>}
             </button>
