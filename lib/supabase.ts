@@ -74,6 +74,7 @@ export type Event = {
   poster_updated_at?: string | null
   date: string
   end_time: string | null
+  venue_id?: string | null
   location: string | null
   credits_required: number
   food_coupon_enabled?: boolean

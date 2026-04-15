@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Profile, Event, Booking } from '@/lib/supabase'
@@ -8,6 +8,7 @@ import { formatDateTime, formatTime } from '@/lib/dateUtils'
 import Link from 'next/link'
 import { createNotification } from '@/lib/notifications'
 import { sendBookingConfirmationEmail, sendWaitlistPromotionEmail, sendWaitlistPositionEmail } from '@/lib/emailService'
+import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -70,6 +71,13 @@ export default function Dashboard() {
   const { authResolved, user } = useAuthBootstrap()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [events, setEvents] = useState<Event[]>([])
+  /** Venue rows keyed by id — used for city / name on Perform tab filters */
+  const [venueById, setVenueById] = useState<Record<string, { name: string; city: string | null }>>({})
+  /** Perform-tab-only filters (dashboard Available Events → Perform) */
+  const [performFilterKind, setPerformFilterKind] = useState<'all' | 'comedy_open_mic' | 'variety_arts_open_mic' | 'booked_show'>('all')
+  const [performFilterCity, setPerformFilterCity] = useState('')
+  const [performFilterVenueKey, setPerformFilterVenueKey] = useState('')
+  const [performFilterLanguage, setPerformFilterLanguage] = useState('')
   const [myBookings, setMyBookings] = useState<any[]>([])
   const [invites, setInvites] = useState<InviteItem[]>([])
   const [respondingInvite, setRespondingInvite] = useState<string | null>(null)
@@ -175,6 +183,100 @@ export default function Dashboard() {
     const normalized = String(rating || '18+').trim()
     const isAllAges = normalized.toLowerCase().includes('all')
     return `${isAllAges ? '👨‍👩‍👧‍👦' : '🔞'} ${normalized}`
+  }
+
+  function inferCityFromLocationText(location: string): string {
+    if (!location) return ''
+    const parts = location.split(',').map((p) => p.trim()).filter(Boolean)
+    if (parts.length >= 2) return parts[parts.length - 2]
+    return ''
+  }
+
+  function getDashboardVenueKey(e: Event): string {
+    const vid = e.venue_id
+    if (vid) return `venue:${vid}`
+    return `loc:${formatLocationValue(e.location)}`
+  }
+
+  function getDashboardVenueLabelForFilter(e: Event): string {
+    const vid = e.venue_id
+    if (vid && venueById[vid]?.name) return venueById[vid].name
+    return formatVenueName(e.location)
+  }
+
+  function getDashboardEventCity(e: Event): string {
+    const vid = e.venue_id
+    if (vid && venueById[vid]?.city) return venueById[vid].city.trim()
+    return inferCityFromLocationText(formatLocationValue(e.location))
+  }
+
+  function getEventLanguageTags(e: Event): string[] {
+    const langs = Array.isArray((e as any).languages) ? (e as any).languages : ['English']
+    return langs
+      .map((lang: string) => String(lang || '').trim())
+      .filter(Boolean)
+  }
+
+  function eventMatchesPerformFilters(e: Event): boolean {
+    if (performFilterKind !== 'all') {
+      if (performFilterKind === 'booked_show') {
+        if (e.event_type !== 'booked_show') return false
+      } else if (performFilterKind === 'comedy_open_mic') {
+        if (e.event_type !== 'open_mic') return false
+        const om = (e as any).open_mic_type ?? 'comedy_open_mic'
+        if (om !== 'comedy_open_mic') return false
+      } else if (performFilterKind === 'variety_arts_open_mic') {
+        if (e.event_type !== 'open_mic' || (e as any).open_mic_type !== 'variety_arts_open_mic') return false
+      }
+    }
+    if (performFilterCity) {
+      const c = getDashboardEventCity(e).toLowerCase()
+      if (c !== performFilterCity.toLowerCase()) return false
+    }
+    if (performFilterVenueKey) {
+      if (getDashboardVenueKey(e) !== performFilterVenueKey) return false
+    }
+    if (performFilterLanguage) {
+      const tags = getEventLanguageTags(e).map((t) => t.toLowerCase())
+      if (!tags.includes(performFilterLanguage.toLowerCase())) return false
+    }
+    return true
+  }
+
+  const performFilterOptions = useMemo(() => {
+    if (userRole === 'audience') {
+      return { cities: [] as string[], venues: [] as { key: string; label: string }[], languages: [] as string[] }
+    }
+    const scope = events.filter((ev) => ev.event_type === 'open_mic' || ev.event_type === 'booked_show')
+    const cities = new Set<string>()
+    const venueMap = new Map<string, string>()
+    const langSet = new Set<string>()
+    for (const ev of scope) {
+      const city = getDashboardEventCity(ev)
+      if (city) cities.add(city)
+      venueMap.set(getDashboardVenueKey(ev), getDashboardVenueLabelForFilter(ev))
+      for (const lang of getEventLanguageTags(ev)) langSet.add(lang)
+    }
+    return {
+      cities: [...cities].sort((a, b) => a.localeCompare(b)),
+      venues: [...venueMap.entries()]
+        .map(([key, label]) => ({ key, label }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      languages: [...langSet].sort((a, b) => a.localeCompare(b)),
+    }
+  }, [events, venueById, userRole])
+
+  const hasActivePerformFilters =
+    performFilterKind !== 'all' ||
+    !!performFilterCity ||
+    !!performFilterVenueKey ||
+    !!performFilterLanguage
+
+  function clearPerformFilters() {
+    setPerformFilterKind('all')
+    setPerformFilterCity('')
+    setPerformFilterVenueKey('')
+    setPerformFilterLanguage('')
   }
 
   async function openVarietyPicker(event: Event) {
@@ -752,6 +854,7 @@ export default function Dashboard() {
       if (communityIds.length === 0) {
         // No communities — empty dashboard
         setEvents([])
+        setVenueById({})
       } else {
         // Get approved event IDs in those communities
         const { data: eventLinks } = await supabase
@@ -764,6 +867,7 @@ export default function Dashboard() {
 
         if (eventIds.length === 0) {
           setEvents([])
+          setVenueById({})
         } else {
           const { data: fetchedEvents, error: eventsError } = await supabase
             .from('events')
@@ -776,6 +880,23 @@ export default function Dashboard() {
           if (eventsError) throw eventsError
           eventsData = fetchedEvents || []
           setEvents(eventsData)
+
+          const venueIds = [
+            ...new Set(eventsData.map((e: Event) => e.venue_id).filter(Boolean)),
+          ] as string[]
+          if (venueIds.length > 0) {
+            const { data: venueRows } = await supabase
+              .from('venues')
+              .select('id,name,city')
+              .in('id', venueIds)
+            const map: Record<string, { name: string; city: string | null }> = {}
+            for (const row of venueRows || []) {
+              map[row.id] = { name: row.name, city: row.city ?? null }
+            }
+            setVenueById(map)
+          } else {
+            setVenueById({})
+          }
         }
       }
 
@@ -1393,6 +1514,110 @@ export default function Dashboard() {
             </div>
           )}
 
+          {userRole !== 'audience' && eventTab === 'perform' && events.length > 0 && (
+            <Card className="mb-5 shadow-sm">
+              <CardHeader className="py-3 px-4 pb-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle className="text-base">Filter performer events</CardTitle>
+                  {hasActivePerformFilters && (
+                    <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={clearPerformFilters}>
+                      Clear filters
+                    </Button>
+                  )}
+                </div>
+                <CardDescription className="text-xs">
+                  Narrow by format, city, venue, or language. Cities and venues are derived from your available events and linked venues.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 px-4 pb-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="perform-filter-kind" className="text-xs text-muted-foreground">
+                    Event format
+                  </Label>
+                  <select
+                    id="perform-filter-kind"
+                    value={performFilterKind}
+                    onChange={(e) =>
+                      setPerformFilterKind(e.target.value as typeof performFilterKind)
+                    }
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="all">All formats</option>
+                    <option value="comedy_open_mic">Comedy open mic</option>
+                    <option value="variety_arts_open_mic">Variety arts open mic</option>
+                    <option value="booked_show">Booked show</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="perform-filter-city" className="text-xs text-muted-foreground">
+                    City
+                  </Label>
+                  <select
+                    id="perform-filter-city"
+                    value={performFilterCity}
+                    onChange={(e) => {
+                      setPerformFilterCity(e.target.value)
+                      setPerformFilterVenueKey('')
+                    }}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">All cities</option>
+                    {performFilterOptions.cities.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="perform-filter-venue" className="text-xs text-muted-foreground">
+                    Venue
+                  </Label>
+                  <select
+                    id="perform-filter-venue"
+                    value={performFilterVenueKey}
+                    onChange={(e) => setPerformFilterVenueKey(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">All venues</option>
+                    {performFilterOptions.venues
+                      .filter((v) => {
+                        if (!performFilterCity) return true
+                        const ev = events.find((e) => getDashboardVenueKey(e) === v.key)
+                        if (!ev) return false
+                        return (
+                          getDashboardEventCity(ev).toLowerCase() === performFilterCity.toLowerCase()
+                        )
+                      })
+                      .map((v) => (
+                        <option key={v.key} value={v.key}>
+                          {v.label}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="perform-filter-lang" className="text-xs text-muted-foreground">
+                    Language
+                  </Label>
+                  <select
+                    id="perform-filter-lang"
+                    value={performFilterLanguage}
+                    onChange={(e) => setPerformFilterLanguage(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">All languages</option>
+                    {performFilterOptions.languages.map((lang) => (
+                      <option key={lang} value={lang}>
+                        {lang}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {(() => {
             const isAudienceUser = userRole === 'audience'
             const now = new Date()
@@ -1408,10 +1633,15 @@ export default function Dashboard() {
                   : event.tickets_enabled && event.event_type !== 'open_mic'
             )
 
+            const displayEvents =
+              !isAudienceUser && eventTab === 'perform'
+                ? filteredEvents.filter(eventMatchesPerformFilters)
+                : filteredEvents
+
             const eventsByBucket = {
-              this_week: filteredEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'this_week'),
-              next_week: filteredEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'next_week'),
-              later: filteredEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'later'),
+              this_week: displayEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'this_week'),
+              next_week: displayEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'next_week'),
+              later: displayEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'later'),
             }
             const bucketOrder: Array<{ key: 'this_week' | 'next_week' | 'later'; label: string }> = [
               { key: 'this_week', label: 'This week' },
@@ -1461,6 +1691,19 @@ export default function Dashboard() {
                         list.
                       </p>
                     )}
+                  </CardContent>
+                </Card>
+              )
+            }
+
+            if (displayEvents.length === 0) {
+              return (
+                <Card className="-mx-4 sm:mx-0 rounded-none sm:rounded-lg">
+                  <CardContent className="p-8 text-center text-muted-foreground space-y-3">
+                    <p>No events match your current filters.</p>
+                    <Button type="button" variant="outline" size="sm" onClick={clearPerformFilters}>
+                      Clear filters
+                    </Button>
                   </CardContent>
                 </Card>
               )
