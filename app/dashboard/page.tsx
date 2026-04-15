@@ -24,6 +24,7 @@ import {
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { cn } from '@/lib/utils'
+import { NotificationsBellLink } from '@/components/NotificationsBellLink'
 import { ChevronDown, Download, Filter } from 'lucide-react'
 import { EventCardSkeleton } from '@/components/skeletons/EventCardSkeleton'
 import { toast } from 'sonner'
@@ -82,6 +83,9 @@ const PERFORM_KIND_FILTER_OPTIONS: { value: PerformKindFilter; label: string }[]
 ]
 
 const PERFORM_FILTERS_STORAGE_KEY = 'dashboard-perform-filters-v1'
+
+/** Stored in performFilterLanguages alongside real language names; matches events with only English (no other languages). */
+const PERFORM_FILTER_ENGLISH_ONLY = '__english_only__'
 
 const VALID_PERFORM_KINDS = new Set<PerformKindFilter>([
   'comedy_open_mic',
@@ -253,6 +257,13 @@ export default function Dashboard() {
       .filter(Boolean)
   }
 
+  /** True when the event lists no non-English languages (empty/missing defaults to English-only for display). */
+  function eventIsEnglishOnly(e: Event): boolean {
+    const tags = getEventLanguageTags(e)
+    if (tags.length === 0) return true
+    return tags.every((t) => t.toLowerCase() === 'english')
+  }
+
   function eventMatchesPerformKindOption(ev: Event, kind: PerformKindFilter): boolean {
     if (kind === 'booked_show') return ev.event_type === 'booked_show'
     if (kind === 'comedy_open_mic') {
@@ -275,8 +286,12 @@ export default function Dashboard() {
       if (!performFilterVenueKeys.includes(getDashboardVenueKey(e))) return false
     }
     if (performFilterLanguages.length > 0) {
-      const tags = getEventLanguageTags(e).map((t) => t.toLowerCase())
-      if (!performFilterLanguages.some((lang) => tags.includes(lang.toLowerCase()))) return false
+      const tagsLower = getEventLanguageTags(e).map((t) => t.toLowerCase())
+      const matchesLang = performFilterLanguages.some((lang) => {
+        if (lang === PERFORM_FILTER_ENGLISH_ONLY) return eventIsEnglishOnly(e)
+        return tagsLower.includes(lang.toLowerCase())
+      })
+      if (!matchesLang) return false
     }
     return true
   }
@@ -1435,8 +1450,26 @@ export default function Dashboard() {
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Language</Label>
               <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
+                <label className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-0.5 rounded-sm px-2 py-1.5 text-sm hover:bg-muted/80">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0 rounded border-input"
+                    checked={performFilterLanguages.includes(PERFORM_FILTER_ENGLISH_ONLY)}
+                    onChange={() =>
+                      setPerformFilterLanguages((prev) =>
+                        prev.includes(PERFORM_FILTER_ENGLISH_ONLY)
+                          ? prev.filter((x) => x !== PERFORM_FILTER_ENGLISH_ONLY)
+                          : [...prev, PERFORM_FILTER_ENGLISH_ONLY]
+                      )
+                    }
+                  />
+                  <span className="font-medium">English only</span>
+                  <span className="text-xs text-muted-foreground">(English and no other language)</span>
+                </label>
                 {performFilterOptions.languages.length === 0 ? (
-                  <p className="px-2 py-1 text-sm text-muted-foreground">No languages listed.</p>
+                  <p className="px-2 py-1 text-xs text-muted-foreground border-t border-border/60 pt-2 mt-1">
+                    No other language tags on your available events.
+                  </p>
                 ) : (
                   performFilterOptions.languages.map((lang) => (
                     <label
@@ -1655,6 +1688,7 @@ export default function Dashboard() {
                 <span className="text-sm text-white/90">credits</span>
               </div>
               <div className="flex-1 min-w-0" />
+              {userRole !== 'audience' && eventTab === 'perform' && <NotificationsBellLink tone="onDark" />}
               <Button
                 asChild
                 type="button"

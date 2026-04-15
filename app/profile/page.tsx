@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { NotificationsBellLink } from '@/components/NotificationsBellLink'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Globe, Instagram, Pencil, Settings, Share2, Twitter, Youtube } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
@@ -966,6 +967,7 @@ export default function ProfilePage() {
               <Button onClick={() => setIsEditing(true)} variant="ghost" size="icon" className="h-8 w-8" title="Edit Profile">
                 <Pencil className="h-4 w-4" />
               </Button>
+              <NotificationsBellLink />
               <Button variant="ghost" size="icon" className="h-8 w-8" title="Settings" asChild>
                 <Link href="/settings">
                   <Settings className="w-4 h-4" />

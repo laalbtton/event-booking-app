@@ -4,9 +4,8 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,14 +22,12 @@ export default function NavigationTabs() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isVenueStaff, setIsVenueStaff] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
   const [userId, setUserId] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState('')
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [chatOverlayOpen, setChatOverlayOpen] = useState(false)
-  const warnedRealtimeRef = useRef(false)
 
   useEffect(() => {
     const check = () => setChatOverlayOpen(document.body.classList.contains('chat-overlay-open'))
@@ -52,7 +49,6 @@ export default function NavigationTabs() {
       setIsVenueStaff(false)
       setUserId(null)
       setUserEmail('')
-      setUnreadCount(0)
       return
     }
     void checkUserRole(user.id, user.email || '')
@@ -63,141 +59,6 @@ export default function NavigationTabs() {
       setFeedbackForm((prev) => ({ ...prev, email: userEmail }))
     }
   }, [feedbackOpen, userEmail, feedbackForm.email])
-
-  useEffect(() => {
-    let channel: any = null
-    let refreshInterval: NodeJS.Timeout | null = null
-
-    async function setupNotifications() {
-      try {
-        if (!user) return
-
-        // Load initial count
-        await loadUnreadCount()
-        
-        // Set up real-time subscription for notifications
-        // Use a unique channel name per user to avoid conflicts
-        try {
-          channel = supabase
-            .channel(`notifications-changes-${user.id}`)
-            .on(
-              'postgres_changes',
-              {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'notifications',
-                filter: `user_id=eq.${user.id}`,
-              },
-              (payload) => {
-                console.log('New notification received:', payload)
-                // Immediately update count when new notification is inserted
-                loadUnreadCount()
-              }
-            )
-            .on(
-              'postgres_changes',
-              {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'notifications',
-                filter: `user_id=eq.${user.id}`,
-              },
-              (payload) => {
-                console.log('Notification updated:', payload)
-                // Update count when notification is marked as read/unread
-                loadUnreadCount()
-              }
-            )
-            .on(
-              'postgres_changes',
-              {
-                event: 'DELETE',
-                schema: 'public',
-                table: 'notifications',
-                filter: `user_id=eq.${user.id}`,
-              },
-              () => {
-                console.log('Notification deleted')
-                // Update count when notification is deleted
-                loadUnreadCount()
-              }
-            )
-            .subscribe((status) => {
-              if (status === 'SUBSCRIBED') {
-                console.log('Successfully subscribed to notifications')
-              } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                // Fallback to periodic refresh; avoid spamming console
-                if (!warnedRealtimeRef.current) {
-                  console.debug('Notifications subscription unavailable, using periodic refresh')
-                  warnedRealtimeRef.current = true
-                }
-              }
-            })
-        } catch (subscriptionError) {
-          // If subscription fails, we'll rely on periodic refresh
-          if (!warnedRealtimeRef.current) {
-            console.debug('Failed to set up notifications subscription, using periodic refresh')
-            warnedRealtimeRef.current = true
-          }
-        }
-
-        // Fallback: Periodic refresh every 30 seconds to ensure count stays updated
-        // This helps catch any notifications that might be missed by real-time
-        refreshInterval = setInterval(() => {
-          loadUnreadCount()
-        }, 30000) // 30 seconds
-      } catch (error) {
-        // If setup fails completely, still try to load count periodically
-        if (!warnedRealtimeRef.current) {
-          console.debug('Error setting up notifications, using periodic refresh only')
-          warnedRealtimeRef.current = true
-        }
-        refreshInterval = setInterval(() => {
-          loadUnreadCount()
-        }, 30000)
-      }
-    }
-
-    setupNotifications()
-
-    return () => {
-      if (channel) {
-        console.log('Cleaning up notifications subscription')
-        supabase.removeChannel(channel)
-      }
-      if (refreshInterval) {
-        clearInterval(refreshInterval)
-      }
-    }
-  }, [authResolved, user?.id])
-
-  async function loadUnreadCount() {
-    try {
-      if (!user) {
-        setUnreadCount(0)
-        return
-      }
-
-      const { count, error } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('read', false)
-
-      if (error) {
-        console.error('Error loading unread count:', error)
-        return
-      }
-
-      if (count !== null) {
-        setUnreadCount(count)
-      } else {
-        setUnreadCount(0)
-      }
-    } catch (error) {
-      console.error('Exception loading unread count:', error)
-    }
-  }
 
   async function checkUserRole(userIdValue: string, userEmailValue: string) {
     setUserId(userIdValue)
@@ -356,28 +217,6 @@ export default function NavigationTabs() {
                 <span className="text-xs font-medium text-center leading-tight">Venue</span>
               </Link>
             )}
-            <Link
-              href="/notifications"
-              className={`relative ${navItemClass} ${
-                isActive('/notifications')
-                  ? 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400'
-                  : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              {unreadCount > 0 && (
-                <Badge 
-                  variant="destructive" 
-                  className="absolute top-0 right-0 w-4 h-4 flex items-center justify-center text-[10px] p-0 rounded-full"
-                >
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </Badge>
-              )}
-              <span className="text-xs font-medium hidden sm:inline">Notifications</span>
-              <span className="text-xs font-medium sm:hidden">Alerts</span>
-            </Link>
             <Button
               onClick={() => setMoreOpen(true)}
               variant="ghost"
