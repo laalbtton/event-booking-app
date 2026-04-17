@@ -11,6 +11,6 @@
     {
       "path": "/api/poster-autopost/worker",
       "schedule": "0 10 * * *"
-    },
+    }
   ]
 }
