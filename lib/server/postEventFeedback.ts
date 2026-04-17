@@ -94,7 +94,7 @@ export async function sendFeedbackEmailsForEvent(eventId: string): Promise<SendR
 
   const result: SendResult = { emailsSent: 0, skipped: 0, errors: [] }
 
-  for (const booking of (bookings ?? []) as Array<{
+  for (const booking of (bookings ?? []) as unknown as Array<{
     id: string
     user_id: string
     profiles: { id: string; full_name: string | null; email: string } | null
