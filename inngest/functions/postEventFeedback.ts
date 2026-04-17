@@ -20,16 +20,16 @@ import { sendFeedbackEmailsForEvent } from '@/lib/server/postEventFeedback'
 export const postEventFeedbackFunction = inngest.createFunction(
   {
     id: 'post-event-feedback',
+    triggers: [{ event: 'event/scheduled' as const }],
     cancelOn: [
       {
-        event: 'event/cancelled',
+        event: 'event/cancelled' as const,
         match: 'data.eventId',
       },
     ],
     // Retry once on transient failures (email service down, etc.)
     retries: 1,
   },
-  { event: 'event/scheduled' },
   async ({ event, step }) => {
     const { eventId, endTimeIso } = event.data as {
       eventId: string
