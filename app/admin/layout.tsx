@@ -7,7 +7,7 @@ import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
 import { useIsMobile } from '@/hooks/useMediaQuery'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Users, MapPin, BookOpen, CreditCard, ClipboardList, Globe, Mail } from 'lucide-react'
 
 export default function AdminLayout({
   children,
@@ -74,102 +74,58 @@ export default function AdminLayout({
     return null
   }
 
+  const NAV_ITEMS = [
+    { href: '/admin/users',            label: 'Users',           icon: Users,         exact: true },
+    { href: '/admin/venues',           label: 'Venues',          icon: MapPin,        exact: true },
+    { href: '/admin/bookings',         label: 'Bookings',        icon: BookOpen,      exact: true },
+    { href: '/admin/transactions',     label: 'Transactions',    icon: CreditCard,    exact: false },
+    { href: '/admin/requests',         label: 'Requests',        icon: ClipboardList, exact: true },
+    { href: '/admin/communities',      label: 'Communities',     icon: Globe,         exact: false },
+    { href: '/admin/email-templates',  label: 'Email Templates', icon: Mail,          exact: false },
+  ]
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Admin Sub-Navigation - hidden on mobile */}
-      {!isMobile && (
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex space-x-8 py-4">
-            <Link
-              href="/admin/users"
-              className={`font-medium transition-colors ${
-                pathname === '/admin/users'
-                  ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
-                  : 'text-gray-700 hover:text-gray-900'
-              }`}
-            >
-              Users
-            </Link>
-            <Link
-              href="/admin/venues"
-              className={`font-medium transition-colors ${
-                pathname === '/admin/venues'
-                  ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
-                  : 'text-gray-700 hover:text-gray-900'
-              }`}
-            >
-              Venues
-            </Link>
-            <Link
-              href="/admin/bookings"
-              className={`font-medium transition-colors ${
-                pathname === '/admin/bookings'
-                  ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
-                  : 'text-gray-700 hover:text-gray-900'
-              }`}
-            >
-              Bookings
-            </Link>
-            <Link
-              href="/admin/transactions"
-              className={`font-medium transition-colors ${
-                pathname.startsWith('/admin/transactions')
-                  ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
-                  : 'text-gray-700 hover:text-gray-900'
-              }`}
-            >
-              Transactions
-            </Link>
-            <Link
-              href="/admin/requests"
-              className={`font-medium transition-colors ${
-                pathname === '/admin/requests'
-                  ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
-                  : 'text-gray-700 hover:text-gray-900'
-              }`}
-            >
-              Requests
-            </Link>
-            <Link
-              href="/admin/communities"
-              className={`font-medium transition-colors ${
-                pathname.startsWith('/admin/communities')
-                  ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
-                  : 'text-gray-700 hover:text-gray-900'
-              }`}
-            >
-              Communities
-            </Link>
-            <Link
-              href="/admin/email-templates"
-              className={`font-medium transition-colors ${
-                pathname.startsWith('/admin/email-templates')
-                  ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
-                  : 'text-gray-700 hover:text-gray-900'
-              }`}
-            >
-              Email Templates
-            </Link>
+      {/* Admin Sub-Navigation — scrollable on mobile, full row on desktop */}
+      <div className="bg-white shadow sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+          {/* Back link — mobile only, above the nav strip */}
+          {isMobile && (
+            <div className="pt-2 px-2">
+              <Link
+                href={pathname === '/admin' ? '/settings' : '/settings'}
+                className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-900"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Settings
+              </Link>
+            </div>
+          )}
+          <nav className="flex overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] gap-1 py-2 sm:py-0 sm:gap-0 sm:space-x-6">
+            {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
+              const active = exact ? pathname === href : pathname.startsWith(href)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`
+                    flex-shrink-0 inline-flex flex-col sm:flex-row items-center gap-1 sm:gap-1.5
+                    px-3 py-2 sm:py-4 rounded-lg sm:rounded-none text-xs sm:text-sm font-medium
+                    transition-colors whitespace-nowrap
+                    ${active
+                      ? 'text-purple-600 bg-purple-50 sm:bg-transparent sm:border-b-2 sm:border-purple-600'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50 sm:hover:bg-transparent'
+                    }
+                  `}
+                >
+                  <Icon className="h-4 w-4 sm:hidden" />
+                  {label}
+                </Link>
+              )
+            })}
           </nav>
         </div>
       </div>
-      )}
-
-      {/* Mobile back button */}
-      {isMobile && (
-        <div className="bg-white border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
-            <Link
-              href={pathname === '/admin' ? '/settings' : '/admin'}
-              className="inline-flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              {pathname === '/admin' ? 'Back to Settings' : 'Back to Admin'}
-            </Link>
-          </div>
-        </div>
-      )}
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
