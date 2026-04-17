@@ -60,10 +60,16 @@ type VenueDetails = {
   id: string
   name: string
   address: string
+  city?: string | null
+  region?: string | null
+  country?: string | null
   parking_options: string | null
   accessibility: string | null
   food_drinks_available: boolean
   drinks_available?: boolean
+  description?: string | null
+  google_review_url?: string | null
+  website_url?: string | null
 }
 
 type AttendeeBooking = {
@@ -421,7 +427,7 @@ export default function EventDetailsPage() {
         eventData.venue_id
           ? supabase
               .from('venues')
-              .select('id, name, address, parking_options, accessibility, food_drinks_available, drinks_available')
+              .select('id, name, address, city, region, country, parking_options, accessibility, food_drinks_available, drinks_available, description, google_review_url, website_url')
               .eq('id', eventData.venue_id)
               .single()
           : Promise.resolve({ data: null, error: null }),
@@ -1302,34 +1308,96 @@ export default function EventDetailsPage() {
             <DialogTitle>Venue Details</DialogTitle>
             <DialogDescription>Additional information about this venue.</DialogDescription>
           </DialogHeader>
-          {venue && (
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <div>
-                <p className="text-base font-semibold text-foreground">{venue.name}</p>
-                <p>{venue.address}</p>
-              </div>
-              {venue.parking_options && (
+          {venue && (() => {
+            const fullAddr = [venue.address, venue.city, venue.region, venue.country]
+              .filter(Boolean).join(', ')
+            const mapsUrl = fullAddr
+              ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddr)}`
+              : null
+            return (
+              <div className="space-y-4 text-sm">
+                {/* Name + address */}
                 <div>
-                  <p className="font-medium text-foreground">Parking</p>
-                  <p>{venue.parking_options}</p>
+                  <p className="text-base font-semibold text-foreground">{venue.name}</p>
+                  <p className="text-muted-foreground">{fullAddr || venue.address}</p>
                 </div>
-              )}
-              {venue.accessibility && (
-                <div>
-                  <p className="font-medium text-foreground">Accessibility</p>
-                  <p>{venue.accessibility}</p>
+
+                {/* Description */}
+                {venue.description && (
+                  <p className="text-muted-foreground leading-relaxed">{venue.description}</p>
+                )}
+
+                {/* Operational info */}
+                {venue.parking_options && (
+                  <div>
+                    <p className="font-medium text-foreground">Parking</p>
+                    <p className="text-muted-foreground">{venue.parking_options}</p>
+                  </div>
+                )}
+                {venue.accessibility && (
+                  <div>
+                    <p className="font-medium text-foreground">Accessibility</p>
+                    <p className="text-muted-foreground">{venue.accessibility}</p>
+                  </div>
+                )}
+                {(venue.food_drinks_available || venue.drinks_available) && (
+                  <div>
+                    <p className="font-medium text-foreground">Amenities</p>
+                    <p className="text-muted-foreground">
+                      {[
+                        venue.food_drinks_available && 'Food & drinks available',
+                        venue.drinks_available && 'Drinks available',
+                      ].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                )}
+
+                {/* Action links */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Link
+                    href={`/venues/${venue.id}`}
+                    onClick={() => setVenueOpen(false)}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    View venue profile
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                  {mapsUrl && (
+                    <a
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/40 transition-colors"
+                    >
+                      📍 Get directions
+                    </a>
+                  )}
+                  {venue.google_review_url && (
+                    <a
+                      href={venue.google_review_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                    >
+                      ⭐ Leave a review
+                    </a>
+                  )}
+                  {venue.website_url && (
+                    <a
+                      href={venue.website_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/40 transition-colors"
+                    >
+                      🌐 Website
+                    </a>
+                  )}
                 </div>
-              )}
-              <div>
-                <p className="font-medium text-foreground">Food & Drinks</p>
-                <p>{venue.food_drinks_available ? 'Available' : 'Not available'}</p>
               </div>
-              <div>
-                <p className="font-medium text-foreground">Drinks</p>
-                <p>{venue.drinks_available ? 'Available' : 'Not available'}</p>
-              </div>
-            </div>
-          )}
+            )
+          })()}
         </DialogContent>
       </Dialog>
     </div>

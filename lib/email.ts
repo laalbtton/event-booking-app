@@ -519,3 +519,105 @@ export function getRegistrationOpeningEmail(data: {
     </html>
   `
 }
+
+/**
+ * Email template for post-event feedback & venue review request.
+ * Sent to all confirmed attendees and performers ~1.5 hours after event ends.
+ */
+export function getPostEventFeedbackEmail(data: {
+  userName: string
+  eventTitle: string
+  eventDate: string
+  venueName: string
+  venueGoogleReviewUrl: string | null
+  feedbackFormUrl: string
+  eventUrl: string
+}): string {
+  const venueReviewSection = data.venueGoogleReviewUrl
+    ? `
+          <!-- Venue review -->
+          <div style="background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; padding: 24px; margin: 24px 0;">
+            <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #92400e;">⭐ Support ${data.venueName}</h2>
+            <p style="margin: 0 0 16px 0; font-size: 15px; color: #78350f; line-height: 1.6;">
+              Venues like <strong>${data.venueName}</strong> are the backbone of live comedy and open-mic culture.
+              If you enjoyed the space, a quick Google review means the world to them — it only takes a minute!
+            </p>
+            <div style="text-align: center;">
+              <a href="${data.venueGoogleReviewUrl}"
+                 style="display: inline-block; background: #f59e0b; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">
+                Leave a Review on Google ⭐
+              </a>
+            </div>
+          </div>
+    `
+    : ''
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f3f4f6;">
+
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); padding: 36px 30px; text-align: center; border-radius: 12px 12px 0 0;">
+          <p style="color: rgba(255,255,255,0.8); font-size: 14px; margin: 0 0 6px 0; letter-spacing: 1px; text-transform: uppercase;">One Mic Stand</p>
+          <h1 style="color: white; margin: 0; font-size: 26px; font-weight: 700;">Thanks for a great show! 🎤</h1>
+          <p style="color: rgba(255,255,255,0.85); margin: 10px 0 0 0; font-size: 15px;">${data.eventTitle}</p>
+        </div>
+
+        <!-- Body -->
+        <div style="background: #ffffff; padding: 32px 30px; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb; border-top: none;">
+          <p style="font-size: 16px; margin: 0 0 16px 0;">Hi ${data.userName},</p>
+
+          <p style="font-size: 15px; color: #374151; margin: 0 0 20px 0; line-height: 1.7;">
+            Thank you for being part of <strong>${data.eventTitle}</strong> at <strong>${data.venueName}</strong> on ${data.eventDate}.
+            We hope you had a fantastic time and made some great memories!
+          </p>
+
+          <!-- Feedback section -->
+          <div style="background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 10px; padding: 24px; margin: 0 0 24px 0;">
+            <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #4c1d95;">💬 Share Your Feedback</h2>
+            <p style="margin: 0 0 8px 0; font-size: 15px; color: #5b21b6; line-height: 1.6;">
+              Your feedback helps us make every event better for performers and audiences alike.
+              It only takes 2 minutes — and every response genuinely matters to us.
+            </p>
+            <p style="margin: 0 0 18px 0; font-size: 13px; color: #7c3aed; font-style: italic;">
+              🔒 Your name is <strong>completely optional</strong> in the form — feel free to respond anonymously.
+            </p>
+            <div style="text-align: center;">
+              <a href="${data.feedbackFormUrl}"
+                 style="display: inline-block; background: #7c3aed; color: white; padding: 13px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">
+                Give Feedback →
+              </a>
+            </div>
+          </div>
+
+          ${venueReviewSection}
+
+          <!-- View event -->
+          <div style="text-align: center; margin: 28px 0 8px 0;">
+            <a href="${data.eventUrl}"
+               style="font-size: 13px; color: #6b7280; text-decoration: underline;">
+              View event page
+            </a>
+          </div>
+
+          <p style="font-size: 14px; color: #6b7280; margin: 24px 0 0 0; border-top: 1px solid #f3f4f6; padding-top: 20px; line-height: 1.7;">
+            Thanks again for being part of the One Mic Stand community.
+            See you at the next show! 🎭
+          </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
+          <p style="margin: 0;">© 2025 One Mic Stand. All rights reserved.</p>
+          <p style="margin: 4px 0 0 0;">You received this because you attended or performed at one of our events.</p>
+        </div>
+
+      </body>
+    </html>
+  `
+}

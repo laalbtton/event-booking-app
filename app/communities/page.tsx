@@ -1,10 +1,10 @@
-import { Suspense } from 'react'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { listPublicCommunities } from '@/lib/server/publicCommunities'
+import { listPublicVenues } from '@/lib/server/publicVenues'
 import { buildCommunityListMetadata } from '@/lib/seo/metadata'
 import { PublicHeader } from '@/components/public/PublicHeader'
-import { CommunitiesSearch } from './CommunitiesSearch'
+import { CommunitiesTabs } from './CommunitiesTabs'
 import { ChevronLeft } from 'lucide-react'
 
 export const revalidate = 300
@@ -14,7 +14,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function CommunitiesPage() {
-  const communities = await listPublicCommunities()
+  const [communities, venues] = await Promise.all([
+    listPublicCommunities(),
+    listPublicVenues(),
+  ])
 
   return (
     <>
@@ -30,15 +33,13 @@ export default async function CommunitiesPage() {
             <ChevronLeft className="h-4 w-4" />
             My Communities
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Communities</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Communities & Spaces</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Join a community to discover events and connect with performers near you.
+            Join a community or discover the venues hosting live events near you.
           </p>
         </div>
 
-        <Suspense fallback={null}>
-          <CommunitiesSearch communities={communities} />
-        </Suspense>
+        <CommunitiesTabs communities={communities} venues={venues} />
       </main>
     </>
   )

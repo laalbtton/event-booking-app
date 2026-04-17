@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
-import { Trash2, Edit, MapPin, Car, Accessibility, UtensilsCrossed, Wine } from 'lucide-react'
+import { Trash2, Edit, MapPin, Car, Accessibility, UtensilsCrossed, Wine, ExternalLink } from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/lib/dateUtils'
 import { toast } from 'sonner'
@@ -500,7 +501,16 @@ export default function AdminVenuesPage() {
             {venues.map((venue) => (
               <Card key={venue.id}>
                 <CardHeader>
-                  <CardTitle className="text-lg">{venue.name}</CardTitle>
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-lg">{venue.name}</CardTitle>
+                    <Link
+                      href={`/venues/manage/${venue.id}`}
+                      className="shrink-0 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-2 py-1 hover:bg-muted/40 transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Manage
+                    </Link>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3 mb-4">
