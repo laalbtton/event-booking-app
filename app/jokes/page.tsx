@@ -303,7 +303,7 @@ export default function JokesPage() {
       if (error) throw error
 
       const rows = (data ?? []) as RawJoke[]
-      const profileMap: ProfileMap = { [user.id]: { full_name: null, avatar_url: null } }
+      const profileMap = await fetchProfiles([user.id])
       setMyJokes(rows.map((r) => processRow(r, profileMap, user.id)))
       setMyLoaded(true)
     } catch {
@@ -743,19 +743,22 @@ function JokeCard({
       {/* Header row */}
       <div className="mb-3 flex items-start justify-between gap-2">
         {showAuthor ? (
-          <div className="flex min-w-0 items-center gap-2.5">
+          <Link
+            href={`/profile/${joke.user_id}`}
+            className="flex min-w-0 items-center gap-2.5 group/author"
+          >
             <AuthorAvatar
               userId={joke.user_id}
               name={joke.author_name}
               avatarUrl={joke.author_avatar_url}
             />
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-tight">
-                {joke.author_name ?? 'Comedian'}
+              <p className="truncate text-sm font-semibold leading-tight group-hover/author:underline">
+                {joke.author_name ?? 'Anonymous'}
               </p>
               <p className="text-xs text-muted-foreground">{timeAgo(joke.created_at)}</p>
             </div>
-          </div>
+          </Link>
         ) : (
           <p className="text-xs text-muted-foreground">{timeAgo(joke.created_at)}</p>
         )}

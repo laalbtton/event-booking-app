@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { getPublicPerformerProfile } from '@/lib/server/publicContent'
 import { buildPerformerMetadata } from '@/lib/seo/metadata'
 import { PublicHeader } from '@/components/public/PublicHeader'
+import { getPublicServerClient } from '@/lib/server/supabasePublic'
 
 type Props = {
   params: Promise<{ id: string }>
@@ -36,9 +37,43 @@ function SocialLink({ href, label, icon }: { href: string; label: string; icon: 
   )
 }
 
+type PublicJoke = {
+  id: string
+  content: string
+  created_at: string
+  likeCount: number
+  bombCount: number
+  killCount: number
+}
+
+async function getPublicJokes(userId: string): Promise<PublicJoke[]> {
+  const supabase = getPublicServerClient()
+  const { data } = await supabase
+    .from('jokes')
+    .select('id, content, created_at, joke_reactions(reaction_type)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  return ((data as any[]) || []).map((row) => {
+    const reactions = (row.joke_reactions as { reaction_type: string }[]) || []
+    return {
+      id: row.id as string,
+      content: row.content as string,
+      created_at: row.created_at as string,
+      likeCount: reactions.filter((r) => r.reaction_type === 'like').length,
+      bombCount: reactions.filter((r) => r.reaction_type === 'bomb').length,
+      killCount: reactions.filter((r) => r.reaction_type === 'kill').length,
+    }
+  })
+}
+
 export default async function PublicProfilePage({ params }: Props) {
   const { id } = await params
-  const profile = await getPublicPerformerProfile(id)
+  const [profile, jokes] = await Promise.all([
+    getPublicPerformerProfile(id),
+    getPublicJokes(id).catch(() => [] as PublicJoke[]),
+  ])
   if (!profile) notFound()
 
   const initials = profile.fullName
@@ -170,6 +205,53 @@ export default async function PublicProfilePage({ params }: Props) {
             </ul>
           )}
         </section>
+
+        {/* ── Jokes ─────────────────────────────────────────────────── */}
+        {jokes.length > 0 && (
+          <section>
+            <h2 className="text-lg font-semibold text-stone-200 mb-3">
+              Jokes{' '}
+              <span className="text-sm font-normal text-stone-500">({jokes.length})</span>
+            </h2>
+            <ul className="space-y-3">
+              {jokes.map((joke) => (
+                <li
+                  key={joke.id}
+                  className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4"
+                >
+                  <p className="text-stone-100 leading-relaxed whitespace-pre-wrap">{joke.content}</p>
+                  <div className="mt-3 flex items-center gap-4 text-xs text-stone-500">
+                    <time dateTime={joke.created_at}>
+                      {new Date(joke.created_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </time>
+                    {(joke.likeCount + joke.bombCount + joke.killCount) > 0 && (
+                      <span className="flex items-center gap-3">
+                        {joke.likeCount > 0 && (
+                          <span className="flex items-center gap-1">
+                            <span>❤️</span>
+                            <span>{joke.likeCount}</span>
+                          </span>
+                        )}
+                        {joke.bombCount > 0 && (
+                          <span className="flex items-center gap-1">
+                            <span>💣</span>
+                            <span>{joke.bombCount}</span>
+                          </span>
+                        )}
+                        {joke.killCount > 0 && (
+                          <span className="flex items-center gap-1">
+                            <span>🔪</span>
+                            <span>{joke.killCount}</span>
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
       </div>
     </div>

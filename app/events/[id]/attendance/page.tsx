@@ -1493,46 +1493,46 @@ export default function AttendancePage() {
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
       <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <Link
-                href={`/events/${resolvedId}`}
-                className="text-blue-600 hover:text-blue-800 p-1 -ml-1 rounded hover:bg-gray-100 shrink-0"
-                aria-label="Back to Event Details"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </Link>
-              <h1 className="text-2xl font-bold text-gray-900 truncate">Attendance</h1>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => {
-                  setEmailSubject(`Thanks for joining "${event?.title}" — we'd love your thoughts 🎤`)
-                  setEmailCustomNote('')
-                  setEmailPreviewMode('edit')
-                  setEmailSendResult(null)
-                  setEmailDialogOpen(true)
-                }}
-              >
-                <Mail className="h-4 w-4" />
-                Email Attendees
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => setCommunitiesDialogOpen(true)}
-              >
-                <Users className="h-4 w-4" />
-                Communities
-              </Button>
-            </div>
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 space-y-3">
+          {/* Title row */}
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              href={`/events/${resolvedId}`}
+              className="text-blue-600 hover:text-blue-800 p-1 -ml-1 rounded hover:bg-gray-100 shrink-0"
+              aria-label="Back to Event Details"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+            <h1 className="text-2xl font-bold text-gray-900 truncate">Attendance</h1>
+          </div>
+          {/* Actions row */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => {
+                setEmailSubject(`Thanks for joining "${event?.title}" — we'd love your thoughts 🎤`)
+                setEmailCustomNote('')
+                setEmailPreviewMode('edit')
+                setEmailSendResult(null)
+                setEmailDialogOpen(true)
+              }}
+            >
+              <Mail className="h-4 w-4" />
+              Email Attendees
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setCommunitiesDialogOpen(true)}
+            >
+              <Users className="h-4 w-4" />
+              Communities
+            </Button>
           </div>
         </div>
       </div>
