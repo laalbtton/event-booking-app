@@ -55,7 +55,7 @@ export async function sendFeedbackEmailsForEvent(eventId: string): Promise<SendR
 
   if (eventErr || !eventRow) throw new Error(`Event not found: ${eventId}`)
 
-  const ev = eventRow as {
+  const ev = eventRow as unknown as {
     id: string
     title: string
     date: string
