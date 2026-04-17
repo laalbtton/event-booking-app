@@ -634,3 +634,137 @@ export function getPostEventFeedbackEmail(data: {
     </html>
   `
 }
+
+// ── Weekly community digest ──────────────────────────────────────────────────
+
+export type DigestCommunitySection = {
+  communityName: string
+  communityId: string
+  events: Array<{
+    id: string
+    slug: string | null
+    title: string
+    date: string
+    venueName: string | null
+    location: string | null
+  }>
+}
+
+export function getWeeklyDigestEmail(data: {
+  userName: string
+  sections: DigestCommunitySection[]
+  intro: string
+  footer: string
+  siteUrl: string
+}): string {
+  const totalEvents = data.sections.reduce((s, c) => s + c.events.length, 0)
+
+  const communityBlocks = data.sections
+    .map(
+      (section) => `
+      <div style="margin: 0 0 28px 0;">
+        <h2 style="font-size: 17px; font-weight: 700; color: #1f2937; margin: 0 0 12px 0;
+                   padding-bottom: 8px; border-bottom: 2px solid #7c3aed;">
+          ${section.communityName}
+        </h2>
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+          ${section.events
+            .map((ev) => {
+              const eventUrl = `${data.siteUrl}/events/${ev.slug ?? ev.id}`
+              const date = new Date(ev.date).toLocaleDateString('en-CA', {
+                weekday: 'short', month: 'short', day: 'numeric',
+              })
+              const venue = ev.venueName ?? ev.location ?? 'Venue TBA'
+              return `
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; vertical-align: top;">
+                  <a href="${eventUrl}" style="font-size: 15px; font-weight: 600; color: #7c3aed; text-decoration: none;">${ev.title}</a>
+                  <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">📅 ${date} &nbsp;·&nbsp; 📍 ${venue}</div>
+                </td>
+                <td style="padding: 10px 0 10px 12px; border-bottom: 1px solid #f3f4f6;
+                           vertical-align: middle; text-align: right; white-space: nowrap;">
+                  <a href="${eventUrl}" style="font-size: 12px; font-weight: 600; color: #7c3aed;
+                     text-decoration: none; border: 1px solid #7c3aed; padding: 4px 10px; border-radius: 6px;">View →</a>
+                </td>
+              </tr>`
+            })
+            .join('')}
+        </table>
+      </div>`,
+    )
+    .join('')
+
+  return `
+    <!DOCTYPE html><html>
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f3f4f6;">
+        <div style="background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); padding: 32px 30px; text-align: center; border-radius: 12px 12px 0 0;">
+          <p style="color: rgba(255,255,255,0.8); font-size: 13px; margin: 0 0 6px 0; letter-spacing: 1px; text-transform: uppercase;">One Mic Stand</p>
+          <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">What's on this week 🎤</h1>
+          <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0 0; font-size: 14px;">${totalEvents} upcoming show${totalEvents !== 1 ? 's' : ''} across your communities</p>
+        </div>
+        <div style="background: #ffffff; padding: 28px 30px; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb; border-top: none;">
+          <p style="font-size: 16px; margin: 0 0 20px 0;">Hi ${data.userName},</p>
+          <p style="font-size: 15px; color: #374151; margin: 0 0 24px 0; line-height: 1.7;">${data.intro}</p>
+          ${communityBlocks}
+          <div style="text-align: center; margin: 28px 0 8px 0;">
+            <a href="${data.siteUrl}/events" style="display: inline-block; background: #7c3aed; color: white; padding: 13px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">Browse All Events →</a>
+          </div>
+          <p style="font-size: 14px; color: #6b7280; margin: 24px 0 0 0; border-top: 1px solid #f3f4f6; padding-top: 20px; line-height: 1.7;">${data.footer}</p>
+        </div>
+        <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
+          <p style="margin: 0;">© 2025 One Mic Stand. All rights reserved.</p>
+          <p style="margin: 4px 0 0 0;">You received this because you are a member of at least one community on One Mic Stand.</p>
+        </div>
+      </body>
+    </html>`
+}
+
+// ── 48-hour pre-event reminder ───────────────────────────────────────────────
+
+export function getPreEventReminderEmail(data: {
+  userName: string
+  eventTitle: string
+  eventDate: string
+  eventUrl: string
+  venueName: string | null
+  venueAddress: string | null
+  communityName: string | null
+  intro: string
+  footer: string
+}): string {
+  const venue = data.venueName ?? 'TBA'
+  const address = data.venueAddress ?? ''
+  const communityBadge = data.communityName
+    ? `<span style="display:inline-block; background:#ede9fe; color:#6d28d9; font-size:12px; padding:2px 10px; border-radius:9999px; font-weight:600; margin-bottom:16px;">${data.communityName}</span>`
+    : ''
+
+  return `
+    <!DOCTYPE html><html>
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f3f4f6;">
+        <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); padding: 32px 30px; text-align: center; border-radius: 12px 12px 0 0;">
+          <p style="color: rgba(255,255,255,0.8); font-size: 13px; margin: 0 0 6px 0; letter-spacing: 1px; text-transform: uppercase;">One Mic Stand</p>
+          <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">Your event is in 48 hours ⏰</h1>
+        </div>
+        <div style="background: #ffffff; padding: 28px 30px; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb; border-top: none;">
+          <p style="font-size: 16px; margin: 0 0 16px 0;">Hi ${data.userName},</p>
+          <p style="font-size: 15px; color: #374151; margin: 0 0 24px 0; line-height: 1.7;">${data.intro}</p>
+          <div style="background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 12px; padding: 20px 24px; margin: 0 0 24px 0;">
+            ${communityBadge}
+            <h2 style="font-size: 20px; font-weight: 700; color: #1f2937; margin: 0 0 12px 0;">${data.eventTitle}</h2>
+            <div style="font-size: 14px; color: #374151; margin-bottom: 6px;">📅 ${data.eventDate}</div>
+            <div style="font-size: 14px; color: #374151; margin-bottom: 20px;">📍 ${venue}${address ? ` — ${address}` : ''}</div>
+            <div style="text-align: center;">
+              <a href="${data.eventUrl}" style="display: inline-block; background: #7c3aed; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">View Event Details →</a>
+            </div>
+          </div>
+          <p style="font-size: 14px; color: #6b7280; margin: 24px 0 0 0; border-top: 1px solid #f3f4f6; padding-top: 20px; line-height: 1.7;">${data.footer}</p>
+        </div>
+        <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
+          <p style="margin: 0;">© 2025 One Mic Stand. All rights reserved.</p>
+          <p style="margin: 4px 0 0 0;">You received this because you have a confirmed registration for this event.</p>
+        </div>
+      </body>
+    </html>`
+}

@@ -141,6 +141,16 @@ export default function AdminLayout({
             >
               Communities
             </Link>
+            <Link
+              href="/admin/email-templates"
+              className={`font-medium transition-colors ${
+                pathname.startsWith('/admin/email-templates')
+                  ? 'text-purple-600 border-b-2 border-purple-600 pb-1'
+                  : 'text-gray-700 hover:text-gray-900'
+              }`}
+            >
+              Email Templates
+            </Link>
           </nav>
         </div>
       </div>

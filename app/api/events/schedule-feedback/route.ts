@@ -6,18 +6,17 @@
  * in the `events` table.
  *
  * What it does:
- *  - If the event is active → sends an "event/scheduled" Inngest event so the
- *    post-event feedback function wakes up 1.5h after the event ends.
- *  - If the event is cancelled/archived → sends an "event/cancelled" Inngest
- *    event which auto-cancels any in-flight scheduled job for that event.
+ *  - If the event is active:
+ *      • Sends "event/scheduled"         → post-event feedback fires 1.5h after end
+ *      • Sends "event/reminder-scheduled" → 48h pre-event reminder fires 48h before start
+ *  - If the event is cancelled/archived:
+ *      • Sends "event/cancelled"          → cancels feedback job
+ *      • Sends "event/reminder-cancelled" → cancels reminder job
  *
  * Supabase Webhook setup (do this once in the Supabase Dashboard):
- *   Table: events
- *   Events: INSERT, UPDATE
- *   Type: HTTP Request (HTTPS)
- *   URL: https://your-app.vercel.app/api/events/schedule-feedback
- *   HTTP Headers:
- *     x-webhook-secret: <value of SUPABASE_WEBHOOK_SECRET env var>
+ *   Table: events  |  Events: INSERT, UPDATE  |  Type: HTTP Request
+ *   URL: https://laalbutton.com/api/events/schedule-feedback
+ *   HTTP Headers: x-webhook-secret: <SUPABASE_WEBHOOK_SECRET env var value>
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -27,7 +26,6 @@ const CANCELLED_STATUSES = new Set(['cancelled', 'archived'])
 
 export async function POST(request: NextRequest) {
   try {
-    // Validate the shared secret Supabase sends with every webhook
     const secret = process.env.SUPABASE_WEBHOOK_SECRET
     if (secret) {
       const incoming = request.headers.get('x-webhook-secret')
@@ -39,7 +37,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null)
     if (!body) return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
 
-    // Supabase webhook payload shape: { type, table, schema, record, old_record }
     const record = (body.record ?? {}) as {
       id?: string
       date?: string
@@ -53,15 +50,15 @@ export async function POST(request: NextRequest) {
     const status = (record.status ?? '').toLowerCase()
 
     if (CANCELLED_STATUSES.has(status)) {
-      // Signal any sleeping Inngest job to cancel itself
-      await inngest.send({
-        name: 'event/cancelled',
-        data: { eventId },
-      })
+      // Cancel both the feedback job and the reminder job
+      await inngest.send([
+        { name: 'event/cancelled',         data: { eventId } },
+        { name: 'event/reminder-cancelled', data: { eventId } },
+      ])
       return NextResponse.json({ ok: true, action: 'cancelled', eventId })
     }
 
-    // Compute the end time: use explicit end_time, or estimate start + 2h
+    // Compute end time (feedback fires 1.5h after end)
     let endTimeIso: string
     if (record.end_time) {
       endTimeIso = record.end_time
@@ -71,17 +68,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: 'no date' })
     }
 
-    // Only schedule if the event is in the future
-    if (new Date(endTimeIso) <= new Date()) {
+    // Start time is the event date field (ISO)
+    const startTimeIso = record.date ? new Date(record.date).toISOString() : endTimeIso
+
+    const now = new Date()
+
+    // Only schedule if the event hasn't ended yet
+    if (new Date(endTimeIso) <= now) {
       return NextResponse.json({ ok: true, skipped: 'event already ended' })
     }
 
-    await inngest.send({
-      name: 'event/scheduled',
-      data: { eventId, endTimeIso, status },
-    })
+    const events: { name: string; data: Record<string, unknown> }[] = [
+      { name: 'event/scheduled', data: { eventId, endTimeIso, status } },
+    ]
 
-    return NextResponse.json({ ok: true, action: 'scheduled', eventId, sendAt: new Date(new Date(endTimeIso).getTime() + 90 * 60 * 1000).toISOString() })
+    // Only schedule reminder if event is more than 48h away
+    const reminderAt = new Date(new Date(startTimeIso).getTime() - 48 * 60 * 60 * 1000)
+    if (reminderAt > now) {
+      events.push({ name: 'event/reminder-scheduled', data: { eventId, startTimeIso } })
+    }
+
+    await inngest.send(events)
+
+    return NextResponse.json({
+      ok: true,
+      action: 'scheduled',
+      eventId,
+      feedbackAt: new Date(new Date(endTimeIso).getTime() + 90 * 60 * 1000).toISOString(),
+      reminderAt: reminderAt > now ? reminderAt.toISOString() : 'skipped (< 48h away)',
+    })
   } catch (err: unknown) {
     console.error('schedule-feedback webhook error:', err)
     return NextResponse.json(
