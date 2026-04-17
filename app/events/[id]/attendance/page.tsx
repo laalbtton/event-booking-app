@@ -13,10 +13,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { ChevronLeft, Clock, GripVertical, User, Copy, ChevronDown, MessageCircle, Users } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { ChevronLeft, Clock, GripVertical, User, Copy, ChevronDown, MessageCircle, Users, Mail, Send, Eye, Star, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { userCanManageEventChatSettings } from '@/lib/eventChatPermissions'
 import { EventCommunitiesDialog } from '@/components/EventCommunitiesDialog'
+import { toast } from 'sonner'
 
 type BookingWithProfile = {
   id: string
@@ -180,6 +185,12 @@ export default function AttendancePage() {
   const [chatMode, setChatMode] = useState<'open' | 'host_only'>('open')
   const [savingChat, setSavingChat] = useState(false)
   const [communitiesDialogOpen, setCommunitiesDialogOpen] = useState(false)
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailCustomNote, setEmailCustomNote] = useState('')
+  const [emailPreviewMode, setEmailPreviewMode] = useState<'edit' | 'preview'>('edit')
+  const [sendingEmails, setSendingEmails] = useState(false)
+  const [emailSendResult, setEmailSendResult] = useState<{ emailsSent: number; skipped: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
@@ -1500,6 +1511,22 @@ export default function AttendancePage() {
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
+                onClick={() => {
+                  setEmailSubject(`Thanks for joining "${event?.title}" — we'd love your thoughts 🎤`)
+                  setEmailCustomNote('')
+                  setEmailPreviewMode('edit')
+                  setEmailSendResult(null)
+                  setEmailDialogOpen(true)
+                }}
+              >
+                <Mail className="h-4 w-4" />
+                Email Attendees
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
                 onClick={() => setCommunitiesDialogOpen(true)}
               >
                 <Users className="h-4 w-4" />
@@ -1511,6 +1538,228 @@ export default function AttendancePage() {
       </div>
 
       <EventCommunitiesDialog eventId={resolvedId} open={communitiesDialogOpen} onOpenChange={setCommunitiesDialogOpen} />
+
+      {/* Email Attendees Dialog */}
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-violet-600" />
+              Email Attendees
+            </DialogTitle>
+          </DialogHeader>
+
+          {emailSendResult ? (
+            /* ── Success state ── */
+            <div className="py-6 text-center space-y-3">
+              <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                <Send className="h-7 w-7 text-green-600" />
+              </div>
+              <h3 className="text-lg font-semibold">Emails sent!</h3>
+              <p className="text-muted-foreground text-sm">
+                <span className="font-medium text-foreground">{emailSendResult.emailsSent}</span> email{emailSendResult.emailsSent !== 1 ? 's' : ''} sent
+                {emailSendResult.skipped > 0 && (
+                  <span className="ml-1">· {emailSendResult.skipped} skipped (already received or no email)</span>
+                )}
+              </p>
+              <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>Close</Button>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Tab toggle */}
+              <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+                <button
+                  type="button"
+                  onClick={() => setEmailPreviewMode('edit')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                    emailPreviewMode === 'edit' ? 'bg-white shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Compose
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEmailPreviewMode('preview')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                    emailPreviewMode === 'preview' ? 'bg-white shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Preview
+                </button>
+              </div>
+
+              {emailPreviewMode === 'edit' ? (
+                <div className="space-y-4">
+                  {/* Recipient info */}
+                  <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-800">
+                    Will be sent to all <strong>confirmed</strong> performers and attendees
+                    {stats.confirmed > 0 && (
+                      <span className="ml-1">({stats.confirmed} {stats.confirmed === 1 ? 'person' : 'people'})</span>
+                    )}.
+                    Anyone who already received this email will be skipped.
+                  </div>
+
+                  {/* Subject */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-subject">Subject line</Label>
+                    <Input
+                      id="email-subject"
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      placeholder="Email subject…"
+                    />
+                  </div>
+
+                  {/* Custom note */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-custom-note">
+                      Personal note from you{' '}
+                      <span className="text-muted-foreground font-normal">(optional)</span>
+                    </Label>
+                    <Textarea
+                      id="email-custom-note"
+                      value={emailCustomNote}
+                      onChange={(e) => setEmailCustomNote(e.target.value)}
+                      placeholder='Add a personal message that appears at the top of the email, e.g. "What a night! Thank you all for making this show so special."'
+                      rows={3}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This note will appear in a green box at the top of the email body, before the feedback section.
+                    </p>
+                  </div>
+
+                  {/* What's included */}
+                  <div className="rounded-lg border p-4 space-y-2">
+                    <p className="text-sm font-medium">What the email includes:</p>
+                    <ul className="text-sm text-muted-foreground space-y-1.5">
+                      <li className="flex items-start gap-2">
+                        <MessageSquare className="h-4 w-4 mt-0.5 text-violet-500 shrink-0" />
+                        <span>A feedback form link — name is optional so they can respond anonymously</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Star className="h-4 w-4 mt-0.5 text-amber-500 shrink-0" />
+                        <span>A Google review prompt for the venue (if the venue has a review link set up)</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                /* ── Preview mode ── */
+                <div className="rounded-xl border overflow-hidden text-sm shadow-sm">
+                  {/* Email header */}
+                  <div className="bg-gradient-to-r from-violet-700 to-indigo-600 px-6 py-7 text-white text-center">
+                    <p className="text-violet-200 uppercase tracking-widest text-xs mb-1">One Mic Stand</p>
+                    <h2 className="text-xl font-bold">Thanks for a great show! 🎤</h2>
+                    <p className="text-violet-200 mt-1 text-sm">{event?.title}</p>
+                  </div>
+
+                  {/* Email body */}
+                  <div className="bg-white px-6 py-6 space-y-4">
+                    <p className="text-gray-800">Hi <span className="italic text-gray-500">[Attendee Name]</span>,</p>
+                    <p className="text-gray-700 leading-relaxed">
+                      Thank you for being part of <strong>{event?.title}</strong> at <span className="italic text-gray-500">[Venue Name]</span> on{' '}
+                      {event ? formatDateTime(event.date) : '…'}. We hope you had a fantastic time and made some great memories!
+                    </p>
+
+                    {emailCustomNote && (
+                      <div className="bg-green-50 border-l-4 border-green-500 rounded-r-lg px-4 py-3">
+                        <p className="text-green-800 whitespace-pre-line">{emailCustomNote}</p>
+                      </div>
+                    )}
+
+                    {/* Feedback box */}
+                    <div className="bg-violet-50 border border-violet-200 rounded-xl px-5 py-4 space-y-2">
+                      <p className="font-semibold text-violet-900">💬 Share Your Feedback</p>
+                      <p className="text-violet-700 text-xs leading-relaxed">
+                        Your feedback helps us make every event better. It only takes 2 minutes — and every response genuinely matters.
+                      </p>
+                      <p className="text-violet-600 text-xs italic">🔒 Your name is completely optional — feel free to respond anonymously.</p>
+                      <div className="mt-2">
+                        <span className="inline-block bg-violet-700 text-white text-xs font-bold px-4 py-2 rounded-lg">Give Feedback →</span>
+                      </div>
+                    </div>
+
+                    {/* Venue review placeholder */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 space-y-2">
+                      <p className="font-semibold text-amber-900">⭐ Support <span className="italic text-amber-700">[Venue Name]</span></p>
+                      <p className="text-amber-700 text-xs leading-relaxed">
+                        Venues are the backbone of live comedy and open-mic culture. A quick Google review means the world to them!
+                      </p>
+                      <div className="mt-2">
+                        <span className="inline-block bg-amber-500 text-white text-xs font-bold px-4 py-2 rounded-lg">Leave a Review on Google ⭐</span>
+                      </div>
+                      <p className="text-amber-600 text-xs italic">
+                        Only shown if the venue has a Google review link in its profile.
+                      </p>
+                    </div>
+
+                    <p className="text-gray-500 text-xs border-t pt-3">
+                      Thanks again for being part of the One Mic Stand community. See you at the next show! 🎭
+                    </p>
+                  </div>
+
+                  {/* Email footer */}
+                  <div className="bg-gray-50 px-6 py-3 text-center text-xs text-gray-400 border-t">
+                    © 2025 One Mic Stand · You received this because you attended or performed at one of our events.
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter className="pt-2">
+                <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={sendingEmails}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={sendingEmails || !emailSubject.trim()}
+                  onClick={async () => {
+                    setSendingEmails(true)
+                    try {
+                      const { data: sessionData } = await supabase.auth.getSession()
+                      const token = sessionData.session?.access_token
+                      const res = await fetch('/api/send-post-event-feedback', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                        },
+                        body: JSON.stringify({
+                          eventId: resolvedId,
+                          subject: emailSubject,
+                          customNote: emailCustomNote || undefined,
+                        }),
+                      })
+                      const json = await res.json()
+                      if (!res.ok) throw new Error(json.error || 'Failed to send')
+                      setEmailSendResult({ emailsSent: json.emailsSent, skipped: json.skipped })
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : 'Failed to send emails')
+                    } finally {
+                      setSendingEmails(false)
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  {sendingEmails ? (
+                    <>
+                      <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                      Sending…
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Send to All Attendees
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* Event Info */}

@@ -532,7 +532,18 @@ export function getPostEventFeedbackEmail(data: {
   venueGoogleReviewUrl: string | null
   feedbackFormUrl: string
   eventUrl: string
+  /** Optional custom note from the host, shown at the top of the email body */
+  customNote?: string | null
 }): string {
+  const customNoteSection = data.customNote
+    ? `
+          <!-- Custom note from host -->
+          <div style="background: #f0fdf4; border-left: 4px solid #22c55e; border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 0 0 24px 0;">
+            <p style="margin: 0; font-size: 15px; color: #166534; line-height: 1.7; white-space: pre-line;">${data.customNote}</p>
+          </div>
+    `
+    : ''
+
   const venueReviewSection = data.venueGoogleReviewUrl
     ? `
           <!-- Venue review -->
@@ -576,6 +587,8 @@ export function getPostEventFeedbackEmail(data: {
             Thank you for being part of <strong>${data.eventTitle}</strong> at <strong>${data.venueName}</strong> on ${data.eventDate}.
             We hope you had a fantastic time and made some great memories!
           </p>
+
+          ${customNoteSection}
 
           <!-- Feedback section -->
           <div style="background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 10px; padding: 24px; margin: 0 0 24px 0;">

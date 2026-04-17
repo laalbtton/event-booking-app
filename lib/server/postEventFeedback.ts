@@ -30,7 +30,17 @@ export type SendResult = {
   errors: Array<{ userId: string; error: string }>
 }
 
-export async function sendFeedbackEmailsForEvent(eventId: string): Promise<SendResult> {
+export type EmailOverrides = {
+  /** Custom subject line. Falls back to the default if omitted. */
+  subject?: string
+  /** Optional personalised note from the host, shown at the top of the email body. */
+  customNote?: string
+}
+
+export async function sendFeedbackEmailsForEvent(
+  eventId: string,
+  overrides: EmailOverrides = {},
+): Promise<SendResult> {
   const supabase = getAdminSupabase()
   const siteUrl = getSiteUrl()
 
@@ -121,11 +131,16 @@ export async function sendFeedbackEmailsForEvent(eventId: string): Promise<SendR
       venueGoogleReviewUrl,
       feedbackFormUrl: FEEDBACK_FORM_URL,
       eventUrl,
+      customNote: overrides.customNote ?? null,
     })
+
+    const subject =
+      overrides.subject?.trim() ||
+      `Thanks for joining "${ev.title}" — we'd love your thoughts 🎤`
 
     const sent = await sendEmail({
       to: profile.email,
-      subject: `Thanks for joining "${ev.title}" — we'd love your thoughts 🎤`,
+      subject,
       html,
     })
 
