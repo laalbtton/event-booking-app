@@ -48,10 +48,10 @@ export async function sendWeeklyDigest(): Promise<DigestResult> {
   const todayStr = today.toISOString().split('T')[0]
   const cutoffStr = cutoff.toISOString().split('T')[0]
 
-  // ── 2. Fetch upcoming events with their venue name ────────────────────────
+  // ── 2. Fetch upcoming events (including poster_url for card images) ─────────
   const { data: events, error: evErr } = await supabase
     .from('events')
-    .select('id, title, date, slug, location, venue_id')
+    .select('id, title, date, slug, location, venue_id, poster_url')
     .gte('date', todayStr)
     .lte('date', cutoffStr)
     .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
@@ -80,24 +80,35 @@ export async function sendWeeklyDigest(): Promise<DigestResult> {
     )
   }
 
-  // ── 4. Fetch approved event→community links ───────────────────────────────
+  // ── 4. Fetch approved event→community links (primary links first) ──────────
   const { data: links, error: linkErr } = await supabase
     .from('event_communities')
-    .select('event_id, community_id')
+    .select('event_id, community_id, is_primary')
     .in('event_id', eventIds)
     .eq('status', 'approved')
+    .order('is_primary', { ascending: false }) // primary rows come first
 
   if (linkErr || !links || links.length === 0) {
     return result
   }
 
-  // community_id → event IDs
+  // Each event is assigned to exactly ONE community for the digest email.
+  // Priority: the row where is_primary = true; otherwise the first approved link.
+  const eventAssignedComm = new Map<string, string>() // event_id → community_id
+  ;(links as { event_id: string; community_id: string; is_primary: boolean }[])
+    .forEach(({ event_id, community_id, is_primary }) => {
+      if (!eventAssignedComm.has(event_id) || is_primary) {
+        eventAssignedComm.set(event_id, community_id)
+      }
+    })
+
+  // community_id → event IDs (deduplicated — each event in one community only)
   const commToEvents = new Map<string, string[]>()
-  ;(links as { event_id: string; community_id: string }[]).forEach(({ event_id, community_id }) => {
+  for (const [event_id, community_id] of eventAssignedComm) {
     const arr = commToEvents.get(community_id) ?? []
     arr.push(event_id)
     commToEvents.set(community_id, arr)
-  })
+  }
 
   const communityIds = [...commToEvents.keys()]
 
@@ -164,16 +175,15 @@ export async function sendWeeklyDigest(): Promise<DigestResult> {
   // Build event lookup map
   const eventById = new Map<
     string,
-    { id: string; title: string; date: string; slug: string | null; location: string | null; venue_id: string | null }
+    {
+      id: string; title: string; date: string; slug: string | null
+      location: string | null; venue_id: string | null; poster_url: string | null
+    }
   >()
   ;(
     events as {
-      id: string
-      title: string
-      date: string
-      slug: string | null
-      location: string | null
-      venue_id: string | null
+      id: string; title: string; date: string; slug: string | null
+      location: string | null; venue_id: string | null; poster_url: string | null
     }[]
   ).forEach((e) => eventById.set(e.id, e))
 
@@ -205,6 +215,7 @@ export async function sendWeeklyDigest(): Promise<DigestResult> {
           date: ev!.date,
           venueName: ev!.venue_id ? (venueMap.get(ev!.venue_id) ?? null) : null,
           location: ev!.location,
+          posterUrl: ev!.poster_url ?? null,
         }))
 
       if (eventsForSection.length === 0) continue

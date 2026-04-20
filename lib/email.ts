@@ -636,6 +636,11 @@ export function getPostEventFeedbackEmail(data: {
 }
 
 // ── Weekly community digest ──────────────────────────────────────────────────
+// Colour palette mirrors the public /events page (zinc/stone dark + yellow-400)
+// #09090b = zinc-950 (page bg)   #18181b = zinc-900 (card bg)
+// #27272a = zinc-800              #3f3f46 = zinc-700 (border)
+// #f5f5f4 = stone-100 (text)     #a8a29e = stone-400 (meta)
+// #fbbf24 = yellow-400 (accent)
 
 export type DigestCommunitySection = {
   communityName: string
@@ -647,6 +652,8 @@ export type DigestCommunitySection = {
     date: string
     venueName: string | null
     location: string | null
+    /** Event poster URL — shown as the card image when present */
+    posterUrl: string | null
   }>
 }
 
@@ -659,65 +666,151 @@ export function getWeeklyDigestEmail(data: {
 }): string {
   const totalEvents = data.sections.reduce((s, c) => s + c.events.length, 0)
 
-  const communityBlocks = data.sections
-    .map(
-      (section) => `
-      <div style="margin: 0 0 28px 0;">
-        <h2 style="font-size: 17px; font-weight: 700; color: #1f2937; margin: 0 0 12px 0;
-                   padding-bottom: 8px; border-bottom: 2px solid #7c3aed;">
-          ${section.communityName}
-        </h2>
-        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
-          ${section.events
-            .map((ev) => {
-              const eventUrl = `${data.siteUrl}/events/${ev.slug ?? ev.id}`
-              const date = new Date(ev.date).toLocaleDateString('en-CA', {
-                weekday: 'short', month: 'short', day: 'numeric',
-              })
-              const venue = ev.venueName ?? ev.location ?? 'Venue TBA'
-              return `
-              <tr>
-                <td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; vertical-align: top;">
-                  <a href="${eventUrl}" style="font-size: 15px; font-weight: 600; color: #7c3aed; text-decoration: none;">${ev.title}</a>
-                  <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">📅 ${date} &nbsp;·&nbsp; 📍 ${venue}</div>
-                </td>
-                <td style="padding: 10px 0 10px 12px; border-bottom: 1px solid #f3f4f6;
-                           vertical-align: middle; text-align: right; white-space: nowrap;">
-                  <a href="${eventUrl}" style="font-size: 12px; font-weight: 600; color: #7c3aed;
-                     text-decoration: none; border: 1px solid #7c3aed; padding: 4px 10px; border-radius: 6px;">View →</a>
-                </td>
-              </tr>`
-            })
-            .join('')}
-        </table>
-      </div>`,
-    )
-    .join('')
+  /** Build one dark event card (table-based for email-client compatibility) */
+  function eventCard(ev: DigestCommunitySection['events'][number], siteUrl: string): string {
+    const eventUrl = `${siteUrl}/events/${ev.slug ?? ev.id}`
+    const date = new Date(ev.date).toLocaleDateString('en-CA', {
+      weekday: 'long', month: 'long', day: 'numeric',
+    })
+    const time = new Date(ev.date).toLocaleTimeString('en-CA', {
+      hour: 'numeric', minute: '2-digit',
+    })
+    const venue = ev.venueName ?? ev.location ?? 'Venue TBA'
 
-  return `
-    <!DOCTYPE html><html>
-      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f3f4f6;">
-        <div style="background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); padding: 32px 30px; text-align: center; border-radius: 12px 12px 0 0;">
-          <p style="color: rgba(255,255,255,0.8); font-size: 13px; margin: 0 0 6px 0; letter-spacing: 1px; text-transform: uppercase;">One Mic Stand</p>
-          <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">What's on this week 🎤</h1>
-          <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0 0; font-size: 14px;">${totalEvents} upcoming show${totalEvents !== 1 ? 's' : ''} across your communities</p>
-        </div>
-        <div style="background: #ffffff; padding: 28px 30px; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb; border-top: none;">
-          <p style="font-size: 16px; margin: 0 0 20px 0;">Hi ${data.userName},</p>
-          <p style="font-size: 15px; color: #374151; margin: 0 0 24px 0; line-height: 1.7;">${data.intro}</p>
-          ${communityBlocks}
-          <div style="text-align: center; margin: 28px 0 8px 0;">
-            <a href="${data.siteUrl}/events" style="display: inline-block; background: #7c3aed; color: white; padding: 13px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">Browse All Events →</a>
+    const imageBlock = ev.posterUrl
+      ? `<a href="${eventUrl}" style="display:block; text-decoration:none;">
+           <img src="${ev.posterUrl}" alt="${ev.title}" width="560"
+                style="display:block; width:100%; max-height:280px; object-fit:cover;
+                       border-radius:10px 10px 0 0; background:#27272a;" />
+         </a>`
+      : `<div style="background:#27272a; border-radius:10px 10px 0 0; padding:32px;
+                     text-align:center; font-size:32px;">🎤</div>`
+
+    return `
+      <div style="margin:0 0 20px 0; border-radius:10px; border:1px solid #3f3f46;
+                  background:#18181b; overflow:hidden;">
+        ${imageBlock}
+        <div style="padding:18px 20px 20px;">
+          <a href="${eventUrl}"
+             style="display:block; font-size:17px; font-weight:700; color:#f5f5f4;
+                    text-decoration:none; line-height:1.35; margin-bottom:10px;">
+            ${ev.title}
+          </a>
+          <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">
+            <tr>
+              <td style="font-size:13px; color:#a8a29e; padding:3px 0; vertical-align:top; width:18px;">📅</td>
+              <td style="font-size:13px; color:#a8a29e; padding:3px 0;">${date} &nbsp;·&nbsp; ${time}</td>
+            </tr>
+            <tr>
+              <td style="font-size:13px; color:#a8a29e; padding:3px 0; vertical-align:top;">📍</td>
+              <td style="font-size:13px; color:#a8a29e; padding:3px 0;">${venue}</td>
+            </tr>
+          </table>
+          <div style="margin-top:16px;">
+            <a href="${eventUrl}"
+               style="display:inline-block; background:#fbbf24; color:#09090b;
+                      font-size:13px; font-weight:700; padding:9px 20px;
+                      border-radius:7px; text-decoration:none; letter-spacing:0.01em;">
+              View event →
+            </a>
           </div>
-          <p style="font-size: 14px; color: #6b7280; margin: 24px 0 0 0; border-top: 1px solid #f3f4f6; padding-top: 20px; line-height: 1.7;">${data.footer}</p>
         </div>
-        <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p style="margin: 0;">© 2025 One Mic Stand. All rights reserved.</p>
-          <p style="margin: 4px 0 0 0;">You received this because you are a member of at least one community on One Mic Stand.</p>
-        </div>
-      </body>
-    </html>`
+      </div>`
+  }
+
+  const communityBlocks = data.sections.map((section) => `
+    <div style="margin:0 0 32px 0;">
+      <h2 style="font-size:15px; font-weight:700; color:#fbbf24; margin:0 0 16px 0;
+                 text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid #3f3f46;
+                 padding-bottom:8px;">
+        ${section.communityName}
+      </h2>
+      ${section.events.map((ev) => eventCard(ev, data.siteUrl)).join('')}
+    </div>`).join('')
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What's on this week</title>
+</head>
+<body style="margin:0; padding:0; background:#09090b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#09090b; min-height:100vh;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%;">
+
+          <!-- Header -->
+          <tr>
+            <td style="padding:0 0 28px 0; text-align:center;">
+              <p style="margin:0 0 12px 0; font-size:12px; letter-spacing:2px; text-transform:uppercase;
+                         color:#78716c; font-weight:600;">One Mic Stand</p>
+              <h1 style="margin:0; font-size:30px; font-weight:800; color:#f5f5f4; line-height:1.2;">
+                What&rsquo;s on this week 🎤
+              </h1>
+              <p style="margin:10px 0 0 0; font-size:14px; color:#a8a29e;">
+                ${totalEvents} upcoming show${totalEvents !== 1 ? 's' : ''} across your communities
+              </p>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr><td style="border-top:1px solid #3f3f46; padding:0 0 28px 0;"></td></tr>
+
+          <!-- Greeting + intro -->
+          <tr>
+            <td style="padding:0 0 28px 0;">
+              <p style="margin:0 0 12px 0; font-size:16px; color:#f5f5f4;">Hi ${data.userName},</p>
+              <p style="margin:0; font-size:15px; color:#a8a29e; line-height:1.7;">${data.intro}</p>
+            </td>
+          </tr>
+
+          <!-- Event sections -->
+          <tr>
+            <td style="padding:0 0 8px 0;">
+              ${communityBlocks}
+            </td>
+          </tr>
+
+          <!-- CTA -->
+          <tr>
+            <td style="padding:12px 0 32px 0; text-align:center;">
+              <a href="${data.siteUrl}/events"
+                 style="display:inline-block; background:#fbbf24; color:#09090b;
+                        font-size:15px; font-weight:700; padding:14px 36px;
+                        border-radius:9px; text-decoration:none; letter-spacing:0.01em;">
+                Browse All Events →
+              </a>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr><td style="border-top:1px solid #3f3f46; padding:0 0 20px 0;"></td></tr>
+
+          <!-- Footer note -->
+          <tr>
+            <td style="padding:0 0 24px 0;">
+              <p style="margin:0; font-size:14px; color:#78716c; line-height:1.7;">${data.footer}</p>
+            </td>
+          </tr>
+
+          <!-- Legal footer -->
+          <tr>
+            <td style="text-align:center;">
+              <p style="margin:0; font-size:12px; color:#52525b;">© 2025 One Mic Stand. All rights reserved.</p>
+              <p style="margin:4px 0 0 0; font-size:12px; color:#52525b;">
+                You received this because you are a member of at least one community on One Mic Stand.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 }
 
 // ── 48-hour pre-event reminder ───────────────────────────────────────────────
