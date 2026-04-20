@@ -34,6 +34,10 @@ export default function AdminUsersPage() {
   const [creditSource, setCreditSource] = useState<'cash' | 'in_kind'>('cash')
   const [inKindReason, setInKindReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [creditType, setCreditType] = useState<'regular' | 'venue'>('regular')
+  const [venuePassVenueId, setVenuePassVenueId] = useState('')
+  const [venuePassExpiry, setVenuePassExpiry] = useState('')
+  const [venues, setVenues] = useState<{ id: string; name: string }[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [appInvites, setAppInvites] = useState<AppInviteLink[]>([])
   const [invitesLoading, setInvitesLoading] = useState(false)
@@ -48,7 +52,16 @@ export default function AdminUsersPage() {
   useEffect(() => {
     loadUsers()
     loadAppInvites()
+    loadVenues()
   }, [])
+
+  async function loadVenues() {
+    const { data } = await supabase
+      .from('venues')
+      .select('id, name')
+      .order('name', { ascending: true })
+    setVenues((data ?? []) as { id: string; name: string }[])
+  }
 
   async function loadUsers() {
     setLoading(true)
@@ -149,6 +162,17 @@ export default function AdminUsersPage() {
     alert('Invite URL copied.')
   }
 
+  function resetCreditDialog() {
+    setSelectedUser(null)
+    setCreditAmount('')
+    setNotes('')
+    setCreditSource('cash')
+    setInKindReason('')
+    setCreditType('regular')
+    setVenuePassVenueId('')
+    setVenuePassExpiry('')
+  }
+
   async function handleAddCredits(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedUser) return
@@ -158,38 +182,56 @@ export default function AdminUsersPage() {
     try {
       const amount = parseInt(creditAmount)
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('Credits to add must be greater than 0')
-      if (creditSource === 'in_kind' && !inKindReason.trim()) {
-        throw new Error('Reason is required for in-kind credits')
-      }
 
       const { data: sessionData } = await supabase.auth.getSession()
       const accessToken = sessionData.session?.access_token
       if (!accessToken) throw new Error('Not authenticated')
 
-      const response = await fetch('/api/admin/credits/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          amount,
-          creditSource,
-          sourceReason: creditSource === 'in_kind' ? inKindReason.trim() : null,
-          notes: notes.trim() || null,
-        }),
-      })
-      const result = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(result.error || 'Failed to add credits')
+      if (creditType === 'venue') {
+        if (!venuePassVenueId) throw new Error('Please select a venue')
+        const response = await fetch('/api/admin/venue-credits/issue', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            userId: selectedUser.id,
+            venueId: venuePassVenueId,
+            credits: amount,
+            notes: notes.trim() || null,
+            expiresAt: venuePassExpiry || null,
+          }),
+        })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error((result as { error?: string }).error || 'Failed to issue venue pass')
+        const venueName = venues.find((v) => v.id === venuePassVenueId)?.name ?? 'selected venue'
+        alert(`Venue credit pass issued successfully for ${venueName}!`)
+      } else {
+        if (creditSource === 'in_kind' && !inKindReason.trim()) {
+          throw new Error('Reason is required for in-kind credits')
+        }
+        const response = await fetch('/api/admin/credits/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            userId: selectedUser.id,
+            amount,
+            creditSource,
+            sourceReason: creditSource === 'in_kind' ? inKindReason.trim() : null,
+            notes: notes.trim() || null,
+          }),
+        })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error((result as { error?: string }).error || 'Failed to add credits')
+        alert('Credits added successfully!')
+        loadUsers()
+      }
 
-      alert('Credits added successfully!')
-      loadUsers()
-      setSelectedUser(null)
-      setCreditAmount('')
-      setNotes('')
-      setCreditSource('cash')
-      setInKindReason('')
+      resetCreditDialog()
     } catch (error: unknown) {
       console.error('Error adding credits:', error)
       alert('Error: ' + (error instanceof Error ? error.message : 'Unknown'))
@@ -398,13 +440,13 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      {/* Add Credits Dialog */}
-      <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
+      {/* Add Credits / Issue Venue Pass Dialog */}
+      <Dialog open={!!selectedUser} onOpenChange={(open) => { if (!open) resetCreditDialog() }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Credits to {selectedUser?.full_name}</DialogTitle>
+            <DialogTitle>Credits for {selectedUser?.full_name}</DialogTitle>
             <DialogDescription>
-              Add credits to this user's account
+              Add regular credits or issue a venue-specific credit pass.
             </DialogDescription>
           </DialogHeader>
 
@@ -413,45 +455,82 @@ export default function AdminUsersPage() {
             <p className="text-2xl font-bold text-blue-600">{selectedUser?.credits}</p>
           </div>
 
+          {/* Credit type toggle */}
+          <div className="flex rounded-lg border border-input overflow-hidden mb-4">
+            <button
+              type="button"
+              onClick={() => setCreditType('regular')}
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${creditType === 'regular' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted/50'}`}
+            >
+              Regular credits
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreditType('venue')}
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${creditType === 'venue' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted/50'}`}
+            >
+              🏟 Venue pass
+            </button>
+          </div>
+
           <form onSubmit={handleAddCredits} className="space-y-4">
             <div>
-              <Label htmlFor="creditAmount">Credits to Add</Label>
+              <Label htmlFor="creditAmount">Credits to {creditType === 'venue' ? 'issue' : 'add'}</Label>
               <Input
                 id="creditAmount"
                 type="number"
                 value={creditAmount}
                 onChange={(e) => setCreditAmount(e.target.value)}
-                placeholder="e.g., 10"
+                placeholder="e.g., 3"
                 required
                 min="1"
               />
             </div>
 
-            <div>
-              <Label htmlFor="notes">Notes (optional)</Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g., Payment received via e-transfer"
-                rows={3}
-              />
-            </div>
+            {creditType === 'venue' ? (
+              <>
+                <div>
+                  <Label htmlFor="venuePassVenueId">Venue</Label>
+                  <select
+                    id="venuePassVenueId"
+                    value={venuePassVenueId}
+                    onChange={(e) => setVenuePassVenueId(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                  >
+                    <option value="">Select a venue…</option>
+                    {venues.map((v) => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">Pass credits can only be spent at this venue.</p>
+                </div>
+                <div>
+                  <Label htmlFor="venuePassExpiry">Expiry date (optional)</Label>
+                  <Input
+                    id="venuePassExpiry"
+                    type="date"
+                    value={venuePassExpiry}
+                    onChange={(e) => setVenuePassExpiry(e.target.value)}
+                  />
+                </div>
+              </>
+            ) : (
+              <div>
+                <Label htmlFor="creditSource">Credit Source</Label>
+                <select
+                  id="creditSource"
+                  value={creditSource}
+                  onChange={(e) => setCreditSource(e.target.value as 'cash' | 'in_kind')}
+                  className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="cash">Cash payment</option>
+                  <option value="in_kind">In-kind (complimentary)</option>
+                </select>
+              </div>
+            )}
 
-            <div>
-              <Label htmlFor="creditSource">Credit Source</Label>
-              <select
-                id="creditSource"
-                value={creditSource}
-                onChange={(e) => setCreditSource(e.target.value as 'cash' | 'in_kind')}
-                className="w-full px-3 py-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="cash">Cash payment</option>
-                <option value="in_kind">In-kind (complimentary)</option>
-              </select>
-            </div>
-
-            {creditSource === 'in_kind' && (
+            {creditType === 'regular' && creditSource === 'in_kind' && (
               <div>
                 <Label htmlFor="inKindReason">Reason (required for in-kind)</Label>
                 <Input
@@ -464,24 +543,29 @@ export default function AdminUsersPage() {
               </div>
             )}
 
+            <div>
+              <Label htmlFor="notes">Notes (optional)</Label>
+              <Textarea
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={creditType === 'venue' ? 'e.g., Performer loyalty reward' : 'e.g., Payment received via e-transfer'}
+                rows={2}
+              />
+            </div>
+
             <div className="flex gap-3">
               <Button
                 type="submit"
                 disabled={submitting}
                 className="flex-1"
               >
-                {submitting ? 'Adding...' : 'Add Credits'}
+                {submitting ? 'Processing…' : creditType === 'venue' ? 'Issue venue pass' : 'Add Credits'}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setSelectedUser(null)
-                  setCreditAmount('')
-                  setNotes('')
-                  setCreditSource('cash')
-                  setInKindReason('')
-                }}
+                onClick={resetCreditDialog}
                 className="flex-1"
               >
                 Cancel

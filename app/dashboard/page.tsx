@@ -74,12 +74,11 @@ type InviteItem = {
   }
 }
 
-type PerformKindFilter = 'comedy_open_mic' | 'variety_arts_open_mic' | 'booked_show'
+type PerformKindFilter = 'comedy_open_mic' | 'variety_arts_open_mic'
 
 const PERFORM_KIND_FILTER_OPTIONS: { value: PerformKindFilter; label: string }[] = [
   { value: 'comedy_open_mic', label: 'Comedy open mic' },
   { value: 'variety_arts_open_mic', label: 'Variety arts open mic' },
-  { value: 'booked_show', label: 'Booked show' },
 ]
 
 const PERFORM_FILTERS_STORAGE_KEY = 'dashboard-perform-filters-v1'
@@ -90,7 +89,6 @@ const PERFORM_FILTER_ENGLISH_ONLY = '__english_only__'
 const VALID_PERFORM_KINDS = new Set<PerformKindFilter>([
   'comedy_open_mic',
   'variety_arts_open_mic',
-  'booked_show',
 ])
 
 function parseStoredPerformKinds(raw: unknown): PerformKindFilter[] {
@@ -132,6 +130,7 @@ export default function Dashboard() {
   const [isCommunityEventCreator, setIsCommunityEventCreator] = useState(false)
   const [hasCreatedEvents, setHasCreatedEvents] = useState(false)
   const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
+  const [activeVenueGrantCount, setActiveVenueGrantCount] = useState(0)
   const [eventTab, setEventTab] = useState<'perform' | 'attend'>('perform')
   const [invitedEventIds, setInvitedEventIds] = useState<Set<string>>(new Set())
   const previousBookingsRef = useRef<any[]>([])
@@ -265,7 +264,6 @@ export default function Dashboard() {
   }
 
   function eventMatchesPerformKindOption(ev: Event, kind: PerformKindFilter): boolean {
-    if (kind === 'booked_show') return ev.event_type === 'booked_show'
     if (kind === 'comedy_open_mic') {
       if (ev.event_type !== 'open_mic') return false
       const om = (ev as any).open_mic_type ?? 'comedy_open_mic'
@@ -300,7 +298,7 @@ export default function Dashboard() {
     if (userRole === 'audience') {
       return { cities: [] as string[], venues: [] as { key: string; label: string }[], languages: [] as string[] }
     }
-    const scope = events.filter((ev) => ev.event_type === 'open_mic' || ev.event_type === 'booked_show')
+    const scope = events.filter((ev) => ev.event_type === 'open_mic')
     const cities = new Set<string>()
     const venueMap = new Map<string, string>()
     const langSet = new Set<string>()
@@ -948,6 +946,18 @@ export default function Dashboard() {
         if (profileError) throw profileError
         setProfile(profileData)
       }
+
+      // Load active venue credit grants for this user
+      void (async () => {
+        const now = new Date().toISOString()
+        const { count } = await supabase
+          .from('venue_credit_grants')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .gt('credits_remaining', 0)
+          .or(`expires_at.is.null,expires_at.gt.${now}`)
+        setActiveVenueGrantCount(count ?? 0)
+      })()
 
       // Load upcoming and in-progress events, scoped to communities the user belongs to
       const nowIso = new Date().toISOString()
@@ -1718,6 +1728,16 @@ export default function Dashboard() {
                     : 'No free pass remaining right now.'}
                 </p>
               )}
+              {activeVenueGrantCount > 0 && (
+                <div className="mt-2">
+                  <Link
+                    href="/credits"
+                    className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/25 transition-colors"
+                  >
+                    🏟 {activeVenueGrantCount} venue pass{activeVenueGrantCount !== 1 ? 'es' : ''}
+                  </Link>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1817,13 +1837,13 @@ export default function Dashboard() {
           {(() => {
             const isAudienceUser = userRole === 'audience'
             const now = new Date()
-            // Perform: open mics you can book + booked shows (invite-only for booking; still discoverable here)
-            // Attend: ticketed / booked-show attendance (see filter below)
+            // Perform: open mics only (booked shows are invite-only, performers are notified separately)
+            // Attend: ticketed events + booked shows not already in the invites section
             const filteredEvents = events.filter((event) =>
               isAudienceUser
                 ? event.event_type === 'open_mic'
                 : eventTab === 'perform'
-                ? event.event_type === 'open_mic' || event.event_type === 'booked_show'
+                ? event.event_type === 'open_mic'
                 : event.event_type === 'booked_show'
                   ? !invitedEventIds.has(event.id)
                   : event.tickets_enabled && event.event_type !== 'open_mic'

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase'
@@ -10,11 +10,26 @@ import type { CreditTransaction } from '@/lib/supabase'
 import { formatDateTime, formatTime } from '@/lib/dateUtils'
 import { CreditHistorySkeleton } from '@/components/skeletons/CreditHistorySkeleton'
 
+type VenueGrant = {
+  id: string
+  credits_total: number
+  credits_remaining: number
+  notes: string | null
+  issued_at: string
+  expires_at: string | null
+  venue_name: string
+  venue_id: string
+}
+
 export default function CreditsHistoryPage() {
   const [transactions, setTransactions] = useState<CreditTransaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentBalance, setCurrentBalance] = useState<number | null>(null)
+  const [activeGrants, setActiveGrants] = useState<VenueGrant[]>([])
+  const [pastGrants, setPastGrants] = useState<VenueGrant[]>([])
+  const [showPastGrants, setShowPastGrants] = useState(false)
+  const [venueNameById, setVenueNameById] = useState<Record<string, string>>({})
 
   useEffect(() => {
     async function loadData() {
@@ -27,14 +42,21 @@ export default function CreditsHistoryPage() {
           return
         }
 
-        // Fetch profile balance and transaction history in parallel
-        const [profileResult, transactionsResult] = await Promise.all([
+        const now = new Date().toISOString()
+
+        // Fetch profile balance, transactions, and venue grants in parallel
+        const [profileResult, transactionsResult, grantsResult] = await Promise.all([
           supabase.from('profiles').select('credits').eq('id', authData.user.id).single(),
           supabase
             .from('credit_transactions')
             .select('*')
             .eq('user_id', authData.user.id)
             .order('created_at', { ascending: false }),
+          supabase
+            .from('venue_credit_grants')
+            .select('id, credits_total, credits_remaining, notes, issued_at, expires_at, venue_id')
+            .eq('user_id', authData.user.id)
+            .order('issued_at', { ascending: false }),
         ])
 
         if (profileResult.error) throw profileResult.error
@@ -42,6 +64,36 @@ export default function CreditsHistoryPage() {
 
         setCurrentBalance(profileResult.data?.credits ?? null)
         setTransactions(transactionsResult.data || [])
+
+        // Fetch venue names
+        const grants = (grantsResult.data ?? []) as Array<{
+          id: string; credits_total: number; credits_remaining: number
+          notes: string | null; issued_at: string; expires_at: string | null; venue_id: string
+        }>
+        const venueIds = [...new Set(grants.map((g) => g.venue_id).filter(Boolean))]
+        let nameMap: Record<string, string> = {}
+        if (venueIds.length > 0) {
+          const { data: venueRows } = await supabase
+            .from('venues')
+            .select('id, name')
+            .in('id', venueIds)
+          for (const v of venueRows ?? []) {
+            nameMap[v.id] = v.name ?? ''
+          }
+        }
+        setVenueNameById(nameMap)
+
+        const active: VenueGrant[] = []
+        const past: VenueGrant[] = []
+        for (const g of grants) {
+          const expired = g.expires_at ? new Date(g.expires_at) <= new Date() : false
+          const spent = g.credits_remaining === 0
+          const row: VenueGrant = { ...g, venue_name: nameMap[g.venue_id] ?? 'Venue' }
+          if (!expired && !spent) active.push(row)
+          else past.push(row)
+        }
+        setActiveGrants(active)
+        setPastGrants(past)
       } catch (err: any) {
         setError(err.message || 'Unable to load credits history.')
       } finally {
@@ -81,6 +133,85 @@ export default function CreditsHistoryPage() {
             </Link>
           </CardContent>
         </Card>
+
+        {/* ── Venue Passes ─────────────────────────────────────────── */}
+        {!loading && (activeGrants.length > 0 || pastGrants.length > 0) && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                🏟 Venue passes
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {activeGrants.length === 0 && (
+                <p className="text-sm text-muted-foreground">No active venue passes right now.</p>
+              )}
+              {activeGrants.map((g) => (
+                <div
+                  key={g.id}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                >
+                  <div className="min-w-0">
+                    <Link href={`/venues/${g.venue_id}`} className="font-medium hover:underline">
+                      {g.venue_name}
+                    </Link>
+                    {g.notes && <p className="text-xs text-muted-foreground italic mt-0.5">{g.notes}</p>}
+                  </div>
+                  <div className="shrink-0 text-right space-y-0.5">
+                    <p className="font-semibold tabular-nums">
+                      {g.credits_remaining}
+                      <span className="text-muted-foreground font-normal"> / {g.credits_total} cr</span>
+                    </p>
+                    {g.expires_at && (
+                      <p className="text-xs text-muted-foreground">
+                        Expires {new Date(g.expires_at).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {pastGrants.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPastGrants((v) => !v)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-2"
+                  >
+                    {showPastGrants ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    {showPastGrants ? 'Hide' : 'Show'} past passes ({pastGrants.length})
+                  </button>
+                  {showPastGrants && (
+                    <div className="mt-2 space-y-1.5">
+                      {pastGrants.map((g) => {
+                        const expired = g.expires_at ? new Date(g.expires_at) <= new Date() : false
+                        return (
+                          <div
+                            key={g.id}
+                            className="flex items-start justify-between gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-sm opacity-60"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-medium">{g.venue_name}</p>
+                              {g.notes && <p className="text-xs text-muted-foreground italic">{g.notes}</p>}
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="tabular-nums">
+                                {g.credits_remaining} / {g.credits_total} cr
+                              </p>
+                              <Badge variant="secondary" className="text-xs">
+                                {expired ? 'Expired' : 'Fully used'}
+                              </Badge>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {loading ? (
           <CreditHistorySkeleton />
@@ -150,7 +281,21 @@ export default function CreditsHistoryPage() {
                                 <td className="px-4 py-3">
                                   <div className="flex items-center gap-2">
                                     <div className="font-medium text-foreground truncate max-w-[220px] sm:max-w-[320px]">
-                                      {row.transaction_type === 'purchase' ? 'Credits purchased' : 'Credits update'}
+                                      {row.transaction_type === 'purchase'
+                                        ? 'Credits purchased'
+                                        : row.transaction_type === 'venue_credit_grant'
+                                        ? '🏟 Venue pass issued'
+                                        : row.transaction_type === 'venue_credit_spend'
+                                        ? '🏟 Venue pass used'
+                                        : row.transaction_type === 'manual_add'
+                                        ? 'Credits added'
+                                        : row.transaction_type === 'booking'
+                                        ? 'Booking'
+                                        : row.transaction_type === 'booking_fee'
+                                        ? 'Booking fee'
+                                        : row.transaction_type === 'refund'
+                                        ? 'Refund'
+                                        : 'Credits update'}
                                     </div>
                                     <span className="text-xs text-muted-foreground whitespace-nowrap">
                                       {formatTime(row.created_at)}
@@ -159,6 +304,8 @@ export default function CreditsHistoryPage() {
                                   <div className="text-xs text-muted-foreground">
                                     {row.transaction_type === 'purchase'
                                       ? 'Stripe Checkout'
+                                      : row.transaction_type === 'venue_credit_grant' || row.transaction_type === 'venue_credit_spend'
+                                      ? ((row as any).venue_id ? (venueNameById[(row as any).venue_id] ?? '') : '') || (row.notes || '')
                                       : (row.notes || '')}
                                   </div>
                                 </td>

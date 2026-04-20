@@ -796,6 +796,14 @@ export default function EventManagementPage() {
       .eq('event_id', event.id)
       .order('created_at', { ascending: true })
 
+    const ticketsEnabled = !!(event as any).tickets_enabled
+
+    // Default ticket price/quantity: use DB values when available, otherwise fall back to
+    // audience capacity so the user doesn't have to re-enter obvious defaults.
+    const defaultAudienceCap = ((event as any).audience_capacity ?? 15).toString()
+    const defaultTicketPrice = ticketData ? (ticketData.price_cents / 100).toFixed(2) : ''
+    const defaultTicketQty = ticketData ? ticketData.quantity.toString() : defaultAudienceCap
+
     setFormData({
       title: event.title,
       description: event.description || '',
@@ -808,11 +816,11 @@ export default function EventManagementPage() {
       languages: Array.isArray((event as any).languages) && (event as any).languages.length > 0
         ? (event as any).languages
         : ['English'],
-      tickets_enabled: !!(event as any).tickets_enabled,
+      tickets_enabled: ticketsEnabled,
       external_event: !!(event as any).external_event,
       external_ticket_url: (event as any).external_ticket_url || '',
-      ticket_price: ticketData ? (ticketData.price_cents / 100).toFixed(2) : '',
-      ticket_quantity: ticketData ? ticketData.quantity.toString() : '',
+      ticket_price: defaultTicketPrice,
+      ticket_quantity: defaultTicketQty,
       date: localDateTime,
       end_time: endTimeValue,
       duration_hours: minutesToHoursString(durationMinutes),
@@ -838,7 +846,8 @@ export default function EventManagementPage() {
       }))
     )
     setEditVarietyOpen(false)
-    setEditTicketsOpen(false)
+    // Auto-expand the ticket panel so existing settings are immediately visible
+    setEditTicketsOpen(ticketsEnabled)
     setShowEditForm(true)
   }
 

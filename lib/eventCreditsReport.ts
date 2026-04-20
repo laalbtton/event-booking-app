@@ -10,6 +10,7 @@ export type EventCreditsReportRow = {
   bookingCount: number
   purchasedCreditsUsed: number | null
   complimentaryCreditsUsed: number | null
+  venueCreditsUsed: number | null // venue-pass credits applied at this event
   venueCreditsPurchased: number | null // purchased credits used at this venue
   moneySpentCad: number | null // 1 credit = $1 CAD for purchased credits
 }
@@ -53,10 +54,9 @@ export async function fetchEventCreditsReport(
   const [{ data: bookings, error: bookingsError }, { data: vouchers, error: vouchersError }] = await Promise.all([
     supabase
       .from('bookings')
-      .select('id, event_id, credits_used, credits_purchased_used, credits_complimentary_used, user_id')
+      .select('id, event_id, credits_used, credits_purchased_used, credits_complimentary_used, credits_venue_used, user_id')
       .in('event_id', eventIds)
-      .in('status', ['confirmed', 'waitlist'])
-      .gt('credits_used', 0),
+      .in('status', ['confirmed', 'waitlist']),
     supabase
       .from('booking_vouchers')
       .select('event_id, value_cents')
@@ -73,24 +73,26 @@ export async function fetchEventCreditsReport(
     voucherTotalByEvent.set(key, (voucherTotalByEvent.get(key) || 0) + Number(v.value_cents || 0))
   }
 
-  const byEvent = new Map<string, { total: number; count: number; purchased: number; complimentary: number }>()
+  const byEvent = new Map<string, { total: number; count: number; purchased: number; complimentary: number; venue: number }>()
   for (const b of bookings || []) {
     const key = b.event_id
-    const existing = byEvent.get(key) || { total: 0, count: 0, purchased: 0, complimentary: 0 }
+    const existing = byEvent.get(key) || { total: 0, count: 0, purchased: 0, complimentary: 0, venue: 0 }
     existing.total += Number(b.credits_used || 0)
     existing.count += 1
-    const pUsed = b.credits_purchased_used ?? 0
-    const cUsed = b.credits_complimentary_used ?? 0
-    if (pUsed > 0 || cUsed > 0) {
+    const pUsed = Number(b.credits_purchased_used ?? 0)
+    const cUsed = Number(b.credits_complimentary_used ?? 0)
+    const vUsed = Number((b as any).credits_venue_used ?? 0)
+    if (pUsed > 0 || cUsed > 0 || vUsed > 0) {
       existing.purchased += pUsed
       existing.complimentary += cUsed
+      existing.venue += vUsed
     }
     byEvent.set(key, existing)
   }
 
   return (events || []).map((e: any) => {
-    const stats = byEvent.get(e.id) || { total: 0, count: 0, purchased: 0, complimentary: 0 }
-    const hasSplit = stats.purchased > 0 || stats.complimentary > 0
+    const stats = byEvent.get(e.id) || { total: 0, count: 0, purchased: 0, complimentary: 0, venue: 0 }
+    const hasSplit = stats.purchased > 0 || stats.complimentary > 0 || stats.venue > 0
     const venueName = e.venue_id ? venueMap.get(e.venue_id) ?? null : null
     const voucherTotal = voucherTotalByEvent.get(e.id) ?? 0
     return {
@@ -103,6 +105,7 @@ export async function fetchEventCreditsReport(
       bookingCount: stats.count,
       purchasedCreditsUsed: hasSplit ? stats.purchased : null,
       complimentaryCreditsUsed: hasSplit ? stats.complimentary : null,
+      venueCreditsUsed: stats.venue > 0 ? stats.venue : null,
       venueCreditsPurchased: hasSplit ? stats.purchased : null,
       moneySpentCad: hasSplit && stats.purchased > 0 ? stats.purchased : null, // 1 credit = $1 CAD
     }

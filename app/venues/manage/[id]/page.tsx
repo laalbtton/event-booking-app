@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import {
   ChevronLeft,
   MapPin,
@@ -24,6 +25,10 @@ import {
   ExternalLink,
   CalendarDays,
   Eye,
+  CreditCard,
+  Plus,
+  Search,
+  X,
 } from 'lucide-react'
 import { formatDateTime } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
@@ -54,6 +59,24 @@ type UpcomingEvent = {
   event_type: string
 }
 
+type VenueCreditGrant = {
+  id: string
+  user_id: string
+  credits_total: number
+  credits_remaining: number
+  notes: string | null
+  issued_at: string
+  expires_at: string | null
+  user_name: string
+  user_email: string
+}
+
+type UserSearchResult = {
+  id: string
+  display_name: string | null
+  email: string | null
+}
+
 export default function VenueManagePage() {
   const { id: venueId } = useParams<{ id: string }>()
   const router = useRouter()
@@ -63,6 +86,19 @@ export default function VenueManagePage() {
   const [venue, setVenue] = useState<Venue | null>(null)
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
   const [saving, setSaving] = useState(false)
+
+  // Credit Passes state
+  const [grants, setGrants] = useState<VenueCreditGrant[]>([])
+  const [grantsLoading, setGrantsLoading] = useState(false)
+  const [issueDialogOpen, setIssueDialogOpen] = useState(false)
+  const [userSearch, setUserSearch] = useState('')
+  const [userResults, setUserResults] = useState<UserSearchResult[]>([])
+  const [userSearching, setUserSearching] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null)
+  const [issueCredits, setIssueCredits] = useState('')
+  const [issueExpiry, setIssueExpiry] = useState('')
+  const [issueNotes, setIssueNotes] = useState('')
+  const [issuing, setIssuing] = useState(false)
 
   const [form, setForm] = useState({
     description: '',
@@ -83,6 +119,7 @@ export default function VenueManagePage() {
 
   useEffect(() => {
     void load()
+    void loadGrants()
   }, [venueId])
 
   async function load() {
@@ -233,6 +270,98 @@ export default function VenueManagePage() {
       toast.error(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function loadGrants() {
+    setGrantsLoading(true)
+    try {
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      if (!token) return
+      const res = await fetch(`/api/admin/venue-credits?venueId=${venueId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return
+      const json = await res.json()
+      const raw = (json.grants ?? []) as Array<{
+        id: string
+        user_id: string
+        credits_total: number
+        credits_remaining: number
+        notes: string | null
+        issued_at: string
+        expires_at: string | null
+        profiles: { display_name?: string | null; email?: string | null } | null
+      }>
+      setGrants(
+        raw.map((g) => ({
+          id: g.id,
+          user_id: g.user_id,
+          credits_total: g.credits_total,
+          credits_remaining: g.credits_remaining,
+          notes: g.notes,
+          issued_at: g.issued_at,
+          expires_at: g.expires_at,
+          user_name: g.profiles?.display_name ?? 'Unknown',
+          user_email: g.profiles?.email ?? '',
+        }))
+      )
+    } finally {
+      setGrantsLoading(false)
+    }
+  }
+
+  async function searchUsers(query: string) {
+    if (!query.trim()) { setUserResults([]); return }
+    setUserSearching(true)
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .or(`display_name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(8)
+      setUserResults((data ?? []) as UserSearchResult[])
+    } finally {
+      setUserSearching(false)
+    }
+  }
+
+  async function handleIssuePass() {
+    if (!selectedUser) return
+    const credits = parseInt(issueCredits, 10)
+    if (!credits || credits <= 0) { toast.error('Enter a valid credit amount'); return }
+    setIssuing(true)
+    try {
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      if (!token) throw new Error('Not authenticated')
+      const res = await fetch('/api/admin/venue-credits/issue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          userId: selectedUser.id,
+          venueId,
+          credits,
+          notes: issueNotes.trim() || null,
+          expiresAt: issueExpiry || null,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((json as { error?: string }).error ?? 'Failed to issue pass')
+      toast.success(`Issued ${credits} venue credit${credits !== 1 ? 's' : ''} to ${selectedUser.display_name ?? selectedUser.email}`)
+      setIssueDialogOpen(false)
+      setSelectedUser(null)
+      setUserSearch('')
+      setUserResults([])
+      setIssueCredits('')
+      setIssueExpiry('')
+      setIssueNotes('')
+      void loadGrants()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to issue pass')
+    } finally {
+      setIssuing(false)
     }
   }
 
@@ -534,7 +663,182 @@ export default function VenueManagePage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Credit Passes — admin only */}
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CreditCard className="h-4 w-4" />
+                  Credit passes
+                </CardTitle>
+                <Button size="sm" variant="outline" onClick={() => setIssueDialogOpen(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Issue pass
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground mb-3">
+                Venue credit passes are redeemable only for shows at <strong>{venue.name}</strong>. They do not affect the user's general credit balance.
+              </p>
+              {grantsLoading ? (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ) : grants.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No credit passes issued yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {grants.map((g) => {
+                    const expired = g.expires_at ? new Date(g.expires_at) <= new Date() : false
+                    const spent = g.credits_remaining === 0
+                    const dim = expired || spent
+                    return (
+                      <li
+                        key={g.id}
+                        className={cn(
+                          'rounded-lg border px-3 py-2.5 text-sm',
+                          dim ? 'border-border/50 bg-muted/30 opacity-60' : 'border-border bg-background',
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{g.user_name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{g.user_email}</p>
+                            {g.notes && <p className="text-xs text-muted-foreground mt-0.5 italic">{g.notes}</p>}
+                          </div>
+                          <div className="shrink-0 text-right space-y-0.5">
+                            <p className="font-semibold tabular-nums">
+                              {g.credits_remaining}
+                              <span className="text-muted-foreground font-normal"> / {g.credits_total} cr</span>
+                            </p>
+                            {g.expires_at && (
+                              <p className="text-xs text-muted-foreground">
+                                {expired ? 'Expired' : 'Expires'}{' '}
+                                {new Date(g.expires_at).toLocaleDateString()}
+                              </p>
+                            )}
+                            {spent && !expired && (
+                              <Badge variant="secondary" className="text-xs">Fully used</Badge>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      {/* Issue Credit Pass dialog */}
+      <Dialog open={issueDialogOpen} onOpenChange={setIssueDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Issue venue credit pass</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            {/* User search */}
+            <div className="space-y-1.5">
+              <Label>User</Label>
+              {selectedUser ? (
+                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+                  <div>
+                    <p className="font-medium">{selectedUser.display_name ?? '—'}</p>
+                    <p className="text-xs text-muted-foreground">{selectedUser.email}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedUser(null); setUserSearch(''); setUserResults([]) }}
+                    className="p-1 rounded hover:bg-muted"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    className="pl-8"
+                    placeholder="Search by name or email…"
+                    value={userSearch}
+                    onChange={(e) => {
+                      setUserSearch(e.target.value)
+                      void searchUsers(e.target.value)
+                    }}
+                  />
+                  {userResults.length > 0 && (
+                    <ul className="absolute z-10 mt-1 w-full rounded-lg border border-border bg-popover shadow-md">
+                      {userResults.map((u) => (
+                        <li key={u.id}>
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted/60 transition-colors"
+                            onClick={() => { setSelectedUser(u); setUserSearch(''); setUserResults([]) }}
+                          >
+                            <span className="font-medium">{u.display_name ?? '—'}</span>
+                            <span className="text-muted-foreground ml-1.5 text-xs">{u.email}</span>
+                          </button>
+                        </li>
+                      ))}
+                      {userSearching && (
+                        <li className="px-3 py-2 text-xs text-muted-foreground">Searching…</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Credits */}
+            <div className="space-y-1.5">
+              <Label htmlFor="issue-credits">Credits to issue</Label>
+              <Input
+                id="issue-credits"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="e.g. 3"
+                value={issueCredits}
+                onChange={(e) => setIssueCredits(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">These credits can only be used for shows at {venue.name}.</p>
+            </div>
+
+            {/* Expiry */}
+            <div className="space-y-1.5">
+              <Label htmlFor="issue-expiry">Expiry date (optional)</Label>
+              <Input
+                id="issue-expiry"
+                type="date"
+                value={issueExpiry}
+                onChange={(e) => setIssueExpiry(e.target.value)}
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-1.5">
+              <Label htmlFor="issue-notes">Notes (optional)</Label>
+              <Input
+                id="issue-notes"
+                placeholder="e.g. Performer loyalty reward"
+                value={issueNotes}
+                onChange={(e) => setIssueNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIssueDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleIssuePass()} disabled={!selectedUser || !issueCredits || issuing}>
+              {issuing ? 'Issuing…' : 'Issue pass'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -130,7 +130,43 @@ export async function POST(request: NextRequest) {
       : Math.max(0, Number(event.credits_required || 0))
 
     const hasAudienceFreePass = isAudienceBooking && Number(profile.audience_free_passes_remaining || 0) > 0
-    const creditsToDebit = hasAudienceFreePass ? 0 : totalCreditsRequired
+    const creditsToDebitBeforeVenue = hasAudienceFreePass ? 0 : totalCreditsRequired
+
+    // ── Venue credit passes ─────────────────────────────────────────────────
+    // If the event has a venue, check for active venue-restricted credit grants.
+    // Apply them FIFO (oldest first) before touching regular credits.
+    let venueCreditsApplied = 0
+    let creditsToDebit = creditsToDebitBeforeVenue
+
+    if (creditsToDebit > 0 && event.venue_id) {
+      const now = new Date().toISOString()
+      const { data: activeGrants } = await supabase
+        .from('venue_credit_grants')
+        .select('id, credits_remaining, expires_at')
+        .eq('user_id', authData.user.id)
+        .eq('venue_id', event.venue_id)
+        .gt('credits_remaining', 0)
+        .or(`expires_at.is.null,expires_at.gt.${now}`)
+        .order('issued_at', { ascending: true })
+
+      if (activeGrants && activeGrants.length > 0) {
+        let remaining = creditsToDebit
+        for (const grant of activeGrants) {
+          if (remaining <= 0) break
+          const use = Math.min(grant.credits_remaining as number, remaining)
+          if (use > 0) {
+            venueCreditsApplied += use
+            remaining -= use
+            await supabase
+              .from('venue_credit_grants')
+              .update({ credits_remaining: (grant.credits_remaining as number) - use })
+              .eq('id', grant.id)
+          }
+        }
+        creditsToDebit = remaining
+      }
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     const purchased = profile.credits_purchased ?? 0
     const complimentary = profile.credits_complimentary ?? 0
@@ -222,13 +258,14 @@ export async function POST(request: NextRequest) {
         credits_used: creditsToDebit,
         credits_purchased_used: creditSplit.purchasedUsed,
         credits_complimentary_used: creditSplit.complimentaryUsed,
+        credits_venue_used: venueCreditsApplied,
         status: bookingStatus,
         attendance_status: null,
         booking_scope: isAudienceBooking ? 'audience' : 'performer',
         event_art_type_id: isAudienceBooking ? null : selectedArtTypeId,
         audience_checkin_code: audienceCheckinCode,
       })
-      .select('id, user_id, event_id, credits_used, credits_purchased_used, credits_complimentary_used, status, booking_scope, event_art_type_id, audience_checkin_code')
+      .select('id, user_id, event_id, credits_used, credits_purchased_used, credits_complimentary_used, credits_venue_used, status, booking_scope, event_art_type_id, audience_checkin_code')
       .single()
 
     if (bookingError || !booking) {
@@ -268,6 +305,19 @@ export async function POST(request: NextRequest) {
     }
 
     const transactions = []
+
+    // Log venue credit spend if any were used
+    if (venueCreditsApplied > 0 && event.venue_id) {
+      transactions.push({
+        user_id: authData.user.id,
+        amount: -venueCreditsApplied,
+        transaction_type: 'venue_credit_spend',
+        venue_id: event.venue_id,
+        reference_id: booking.id,
+        notes: `Venue credit pass used: ${event.title}`,
+      })
+    }
+
     if (isAudienceBooking) {
       if (hasAudienceFreePass) {
         transactions.push({
