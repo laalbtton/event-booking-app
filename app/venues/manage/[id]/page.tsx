@@ -316,12 +316,15 @@ export default function VenueManagePage() {
     if (!query.trim()) { setUserResults([]); return }
     setUserSearching(true)
     try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, display_name, email')
-        .or(`display_name.ilike.%${query}%,email.ilike.%${query}%`)
-        .limit(8)
-      setUserResults((data ?? []) as UserSearchResult[])
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      if (!token) return
+      const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(query)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return
+      const json = await res.json()
+      setUserResults((json.users ?? []) as UserSearchResult[])
     } finally {
       setUserSearching(false)
     }
