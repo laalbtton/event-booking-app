@@ -9,7 +9,8 @@ function getAdminClient() {
   return createClient(supabaseUrl, serviceRoleKey)
 }
 
-async function isAdmin(supabase: ReturnType<typeof createClient>, userId: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function isAdmin(supabase: any, userId: string) {
   const { data } = await supabase
     .from('profiles')
     .select('role')
