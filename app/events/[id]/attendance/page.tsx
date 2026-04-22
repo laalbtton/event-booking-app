@@ -194,6 +194,8 @@ export default function AttendancePage() {
   const [cancelDialogBooking, setCancelDialogBooking] = useState<BookingWithProfile | null>(null)
   const [cancelNote, setCancelNote] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
@@ -220,6 +222,17 @@ export default function AttendancePage() {
   const scannerStreamRef = useRef<MediaStream | null>(null)
   const scannerIntervalRef = useRef<number | null>(null)
   const html5ScannerRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (!openMenuId) return
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [openMenuId])
 
   useEffect(() => {
     checkAuth()
