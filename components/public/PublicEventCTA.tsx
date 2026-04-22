@@ -10,11 +10,12 @@ import { Input } from '@/components/ui/input'
 type Props = {
   eventSlug: string
   eventId: string
+  eventType?: string | null
   isCancelled?: boolean
   isPast?: boolean
 }
 
-export function PublicEventCTA({ eventSlug, eventId, isCancelled, isPast }: Props) {
+export function PublicEventCTA({ eventSlug, eventId, eventType, isCancelled, isPast }: Props) {
   const { authResolved, user } = useAuthBootstrap()
   const [mounted, setMounted] = useState(false)
 
@@ -78,19 +79,23 @@ export function PublicEventCTA({ eventSlug, eventId, isCancelled, isPast }: Prop
     setSending(false)
   }
 
+  const isBookedShow = eventType === 'booked_show'
+
   return (
     <div className="rounded-xl border border-zinc-700 bg-zinc-900 shadow-sm p-5 space-y-4">
-      {/* Performer CTA */}
-      <Link
-        href={performUrl}
-        className="flex items-center gap-3 rounded-lg border-2 border-yellow-400/60 bg-yellow-400/10 p-4 hover:bg-yellow-400/15 hover:border-yellow-400 transition-colors"
-      >
-        <span className="text-2xl shrink-0">🎤</span>
-        <div>
-          <p className="font-semibold text-sm text-stone-100">I want to perform</p>
-          <p className="text-xs text-stone-400">Sign up and book a spot on stage</p>
-        </div>
-      </Link>
+      {/* Performer CTA — hidden for booked shows */}
+      {!isBookedShow && (
+        <Link
+          href={performUrl}
+          className="flex items-center gap-3 rounded-lg border-2 border-yellow-400/60 bg-yellow-400/10 p-4 hover:bg-yellow-400/15 hover:border-yellow-400 transition-colors"
+        >
+          <span className="text-2xl shrink-0">🎤</span>
+          <div>
+            <p className="font-semibold text-sm text-stone-100">I want to perform</p>
+            <p className="text-xs text-stone-400">Sign up and book a spot on stage</p>
+          </div>
+        </Link>
+      )}
 
       {/* Attend CTA — magic link form */}
       <div className="rounded-lg border-2 border-zinc-700 p-4 space-y-3">

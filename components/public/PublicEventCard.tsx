@@ -130,7 +130,9 @@ export function PublicEventCard({ event, cityFilter }: Props) {
         {!isPast && (
           <p className="text-sm text-stone-400 flex items-center gap-1.5">
             <MicIcon />
-            {event.spotsConfirmed} performer{event.spotsConfirmed !== 1 ? 's' : ''} signed up
+            {event.eventType === 'booked_show'
+              ? 'Special Acts'
+              : `${event.spotsConfirmed} performer${event.spotsConfirmed !== 1 ? 's' : ''} signed up`}
           </p>
         )}
 

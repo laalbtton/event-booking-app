@@ -121,7 +121,11 @@ export default async function EventLayout({ children, params }: Props) {
               )}
               <p className="flex items-center gap-2">
                 <span>🎤</span>
-                <span>{event.spotsConfirmed} performer{event.spotsConfirmed !== 1 ? 's' : ''} signed up</span>
+                {event.eventType === 'booked_show' ? (
+                  <span>Special Acts</span>
+                ) : (
+                  <span>{event.spotsConfirmed} performer{event.spotsConfirmed !== 1 ? 's' : ''} signed up</span>
+                )}
               </p>
               <p className="flex items-center gap-2">
                 <span>{event.isFree ? '🆓' : '🎟️'}</span>
@@ -147,7 +151,7 @@ export default async function EventLayout({ children, params }: Props) {
             {event.performerLineup.filter((p) => p.status === 'confirmed').length > 0 && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 mb-3">
-                  Lineup ({event.performerLineup.filter((p) => p.status === 'confirmed').length})
+                  {event.eventType === 'booked_show' ? 'Special Acts' : `Lineup (${event.performerLineup.filter((p) => p.status === 'confirmed').length})`}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {event.performerLineup
@@ -193,6 +197,7 @@ export default async function EventLayout({ children, params }: Props) {
             <PublicEventCTA
               eventSlug={eventSlug}
               eventId={event.id}
+              eventType={event.eventType}
               isCancelled={event.isCancelled}
               isPast={isPast}
             />
