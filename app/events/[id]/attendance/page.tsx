@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { ChevronLeft, Clock, GripVertical, User, Copy, ChevronDown, MessageCircle, Users, Mail, Send, Eye, Star, MessageSquare } from 'lucide-react'
+import { ChevronLeft, Clock, GripVertical, User, Copy, ChevronDown, MessageCircle, Users, Mail, Send, Eye, Star, MessageSquare, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { userCanManageEventChatSettings } from '@/lib/eventChatPermissions'
 import { EventCommunitiesDialog } from '@/components/EventCommunitiesDialog'
@@ -191,6 +191,9 @@ export default function AttendancePage() {
   const [emailPreviewMode, setEmailPreviewMode] = useState<'edit' | 'preview'>('edit')
   const [sendingEmails, setSendingEmails] = useState(false)
   const [emailSendResult, setEmailSendResult] = useState<{ emailsSent: number; skipped: number } | null>(null)
+  const [cancelDialogBooking, setCancelDialogBooking] = useState<BookingWithProfile | null>(null)
+  const [cancelNote, setCancelNote] = useState('')
+  const [cancelling, setCancelling] = useState(false)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
@@ -1466,6 +1469,38 @@ export default function AttendancePage() {
     }
   }
 
+  async function handleHostCancel() {
+    if (!cancelDialogBooking) return
+    setCancelling(true)
+    try {
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      if (!token) throw new Error('Not authenticated')
+
+      const res = await fetch('/api/bookings/host-cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ bookingId: cancelDialogBooking.id, hostNote: cancelNote.trim() || null }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((json as { error?: string }).error ?? 'Failed to cancel booking')
+
+      const name = cancelDialogBooking.profiles.full_name || 'Performer'
+      toast.success(`${name}'s spot has been removed.`)
+
+      // Remove from local state without a full reload
+      setBookings((prev) => prev.filter((b) => b.id !== cancelDialogBooking.id))
+      setWaitlistBookings((prev) => prev.filter((b) => b.id !== cancelDialogBooking.id))
+
+      setCancelDialogBooking(null)
+      setCancelNote('')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel booking')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -1538,6 +1573,51 @@ export default function AttendancePage() {
       </div>
 
       <EventCommunitiesDialog eventId={resolvedId} open={communitiesDialogOpen} onOpenChange={setCommunitiesDialogOpen} />
+
+      {/* Remove performer spot dialog */}
+      <Dialog open={!!cancelDialogBooking} onOpenChange={(open) => { if (!open) { setCancelDialogBooking(null); setCancelNote('') } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <X className="h-5 w-5" />
+              Remove performer spot
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <p className="text-sm text-muted-foreground">
+              You are about to remove <strong className="text-foreground">{cancelDialogBooking?.profiles.full_name || 'this performer'}</strong> from{' '}
+              <strong className="text-foreground">{event?.title}</strong>.
+              {Number(cancelDialogBooking?.credits_used ?? 0) > 0 && (
+                <span> Their <strong>{cancelDialogBooking?.credits_used} credit{(cancelDialogBooking?.credits_used ?? 0) !== 1 ? 's' : ''}</strong> will be refunded.</span>
+              )}
+              {' '}They will receive an email notification.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="cancel-note">Note to performer (optional)</Label>
+              <Textarea
+                id="cancel-note"
+                placeholder="e.g. We had to reduce the lineup for this show. We hope to see you at a future event!"
+                value={cancelNote}
+                onChange={(e) => setCancelNote(e.target.value)}
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">This message will appear in their notification email.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCancelDialogBooking(null); setCancelNote('') }}>
+              Keep spot
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleHostCancel()}
+              disabled={cancelling}
+            >
+              {cancelling ? 'Removing…' : 'Remove spot'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Email Attendees Dialog */}
       <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
@@ -2124,6 +2204,18 @@ export default function AttendancePage() {
                                   onCheckedChange={(checked) => updateAttendance(booking.id, checked ? 'attended' : null)}
                                   aria-label="Mark attended"
                                 />
+                                <button
+                                  type="button"
+                                  title="Remove this performer's spot"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setCancelNote('')
+                                    setCancelDialogBooking(booking)
+                                  }}
+                                  className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-red-50 transition-colors"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
                               </div>
                             </div>
                           )
@@ -2170,8 +2262,20 @@ export default function AttendancePage() {
                                     {booking.profiles.full_name || 'No name'}
                                   </Link>
                                 </div>
-                                {isUpdating && (
+                                {isUpdating ? (
                                   <span className="text-xs text-muted-foreground">Updating...</span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    title="Remove from waitlist"
+                                    onClick={() => {
+                                      setCancelNote('')
+                                      setCancelDialogBooking(booking)
+                                    }}
+                                    className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-red-50 transition-colors"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
                                 )}
                               </div>
                             )
