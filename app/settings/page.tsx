@@ -62,6 +62,7 @@ export default function SettingsPage() {
   const [showInstallHelp, setShowInstallHelp] = useState(false)
   const [installActionLoading, setInstallActionLoading] = useState(false)
   const [isStandalone, setIsStandalone] = useState(false)
+  const [roleChanging, setRoleChanging] = useState(false)
   const [socapTestEventId, setSocapTestEventId] = useState('')
   const [socapScenario, setSocapScenario] = useState<ThursdaySocapScenario>('registration_open')
   const [socapTestLoading, setSocapTestLoading] = useState(false)
@@ -441,6 +442,24 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleRoleChange(newRole: 'performer' | 'audience') {
+    if (!profile || profile.role === newRole || roleChanging) return
+    setRoleChanging(true)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role: newRole, updated_at: new Date().toISOString() })
+        .eq('id', profile.id)
+      if (error) throw error
+      setProfile((prev) => prev ? { ...prev, role: newRole } : prev)
+      toast.success(`Role switched to ${newRole === 'performer' ? 'Performer' : 'Audience member'}.`)
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update role')
+    } finally {
+      setRoleChanging(false)
+    }
+  }
+
   if (!authResolved || loading) {
     return (
       <div className="min-h-screen bg-background pb-20">
@@ -463,6 +482,32 @@ export default function SettingsPage() {
           </div>
           <Card className="shadow-sm overflow-hidden">
             <CardContent className="p-0 divide-y divide-border">
+              {(profile?.role === 'performer' || profile?.role === 'audience') && (
+                <div className="px-4 py-3">
+                  <p className="text-sm font-medium mb-1">Your role</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Currently: <span className="font-semibold capitalize">{profile.role === 'performer' ? 'Performer' : 'Audience member'}</span>
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant={profile.role === 'performer' ? 'default' : 'outline'}
+                      disabled={roleChanging || profile.role === 'performer'}
+                      onClick={() => handleRoleChange('performer')}
+                    >
+                      Performer
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={profile.role === 'audience' ? 'default' : 'outline'}
+                      disabled={roleChanging || profile.role === 'audience'}
+                      onClick={() => handleRoleChange('audience')}
+                    >
+                      Audience
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="px-4 pt-2 pb-1">
                 <SettingsListRow href="/settings/appearance" icon={Moon} title="Appearance" description="Dark mode" />
               </div>
@@ -542,6 +587,58 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {(profile?.role === 'performer' || profile?.role === 'audience') && (
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-xl">Your Role</CardTitle>
+              <CardDescription>
+                Switch between Performer and Audience if you signed up with the wrong role or want to change how you use the app.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Current role:{' '}
+                <span className="font-semibold text-foreground">
+                  {profile.role === 'performer' ? 'Performer' : 'Audience member'}
+                </span>
+              </p>
+              <div className="flex gap-3">
+                <div
+                  onClick={() => !roleChanging && profile.role !== 'performer' && handleRoleChange('performer')}
+                  className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${
+                    profile.role === 'performer'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/50 hover:bg-muted/40'
+                  } ${roleChanging ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <p className="font-medium text-sm">Performer</p>
+                  <p className="text-xs text-muted-foreground mt-1">Sign up for open mics, manage your performance spots.</p>
+                  {profile.role === 'performer' && (
+                    <span className="mt-2 inline-block text-xs text-primary font-semibold">Current role</span>
+                  )}
+                </div>
+                <div
+                  onClick={() => !roleChanging && profile.role !== 'audience' && handleRoleChange('audience')}
+                  className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${
+                    profile.role === 'audience'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/50 hover:bg-muted/40'
+                  } ${roleChanging ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <p className="font-medium text-sm">Audience</p>
+                  <p className="text-xs text-muted-foreground mt-1">Attend shows and support performers as a guest.</p>
+                  {profile.role === 'audience' && (
+                    <span className="mt-2 inline-block text-xs text-primary font-semibold">Current role</span>
+                  )}
+                </div>
+              </div>
+              {roleChanging && (
+                <p className="text-xs text-muted-foreground">Updating role…</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="shadow-sm">
           <CardHeader>
