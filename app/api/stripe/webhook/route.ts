@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe } from '@/lib/stripe'
 import type Stripe from 'stripe'
-import { sendEmail, getCreditPurchaseEmail } from '@/lib/email'
+import { sendEmail, getCreditPurchaseEmail, getTicketPurchaseEmail } from '@/lib/email'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -31,6 +31,13 @@ export async function POST(request: Request) {
   }
 
   const session = event.data.object as Stripe.Checkout.Session
+
+  // ── Branch: event ticket purchase ────────────────────────────────────────────
+  if (session?.metadata?.ticketType === 'event_ticket') {
+    return handleTicketPurchase(session)
+  }
+
+  // ── Branch: credit purchase (existing flow) ──────────────────────────────────
   const userId = session?.metadata?.userId
   const creditsRaw = session?.metadata?.credits
   const credits = Number(creditsRaw || Math.round((session.amount_total || 0) / 100))
@@ -140,6 +147,114 @@ export async function POST(request: Request) {
       subject: 'Credits added to your account',
       html: emailHtml,
     })
+  }
+
+  return NextResponse.json({ received: true })
+}
+
+async function handleTicketPurchase(session: Stripe.Checkout.Session): Promise<NextResponse> {
+  const serviceClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  const { eventId, ticketId, quantity: qtyStr, unitPriceCents: unitStr } = session.metadata!
+  const quantity = Number(qtyStr || 1)
+  const unitPriceCents = Number(unitStr || 0)
+  const totalCents = session.amount_total || unitPriceCents * quantity
+  const stripeSessionId = session.id
+  const paymentIntentId = session.payment_intent as string | null
+
+  // Idempotency — skip if already processed
+  const { data: existing } = await serviceClient
+    .from('ticket_purchases')
+    .select('id')
+    .eq('stripe_session_id', stripeSessionId)
+    .maybeSingle()
+
+  if (existing) {
+    return NextResponse.json({ received: true })
+  }
+
+  // Buyer details from Stripe
+  const buyerEmail = session.customer_details?.email || null
+  const buyerName = session.customer_details?.name || null
+
+  // Look up user by email (optional link)
+  let userId: string | null = null
+  if (buyerEmail) {
+    const { data: profile } = await serviceClient
+      .from('profiles')
+      .select('id')
+      .eq('email', buyerEmail)
+      .maybeSingle()
+    userId = profile?.id || null
+  }
+
+  // Insert ticket_purchases record
+  await serviceClient.from('ticket_purchases').insert({
+    event_id: eventId,
+    stripe_session_id: stripeSessionId,
+    stripe_payment_intent: paymentIntentId,
+    user_id: userId,
+    buyer_name: buyerName,
+    buyer_email: buyerEmail,
+    quantity,
+    unit_price_cents: unitPriceCents,
+    total_cents: totalCents,
+    currency: session.currency || 'cad',
+    status: 'completed',
+  })
+
+  // Increment sold count on event_tickets
+  const { data: ticketRow } = await serviceClient
+    .from('event_tickets')
+    .select('sold')
+    .eq('id', ticketId)
+    .maybeSingle()
+
+  if (ticketRow) {
+    await serviceClient
+      .from('event_tickets')
+      .update({ sold: (ticketRow.sold as number) + quantity })
+      .eq('id', ticketId)
+  }
+
+  // Send confirmation email
+  if (buyerEmail) {
+    const { data: eventRow } = await serviceClient
+      .from('events')
+      .select('id, title, date, venue_id, venues(name)')
+      .eq('id', eventId)
+      .maybeSingle()
+
+    if (eventRow) {
+      const venueName = (eventRow.venues as any)?.name as string | null
+      const eventDate = eventRow.date
+        ? new Date(eventRow.date).toLocaleDateString('en-CA', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })
+        : 'TBA'
+      const origin = process.env.NEXT_PUBLIC_APP_URL || 'https://laalbutton.com'
+      const html = getTicketPurchaseEmail({
+        buyerName: buyerName || 'there',
+        eventTitle: eventRow.title as string,
+        eventDate,
+        venueName,
+        quantity,
+        unitPriceCents,
+        totalCents,
+        eventUrl: `${origin}/events/${eventId}`,
+      })
+      await sendEmail({
+        to: buyerEmail,
+        subject: `Your tickets for ${eventRow.title}`,
+        html,
+      })
+    }
   }
 
   return NextResponse.json({ received: true })

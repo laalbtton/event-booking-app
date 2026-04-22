@@ -127,6 +127,10 @@ export default function EventDetailsPage() {
   const [posterExpanded, setPosterExpanded] = useState(false)
   const [showChat, setShowChat] = useState(false)
   const [chatNotifEnabled, setChatNotifEnabled] = useState(true)
+  const [ticketInfo, setTicketInfo] = useState<{ name: string; price_cents: number; quantity: number; sold: number } | null>(null)
+  const [ticketQty, setTicketQty] = useState(1)
+  const [ticketLoading, setTicketLoading] = useState(false)
+  const [ticketSuccess, setTicketSuccess] = useState(false)
 
 
   function copyPublicLink() {
@@ -363,6 +367,17 @@ export default function EventDetailsPage() {
     setCopyInstagramHandlesEnabled(val === '1')
   }, [])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('ticket_checkout') === 'success') {
+      setTicketSuccess(true)
+      // Clean up URL without full reload
+      const clean = window.location.pathname
+      window.history.replaceState({}, '', clean)
+    }
+  }, [])
+
   async function loadEventDetails() {
     setLoading(true)
 
@@ -423,6 +438,7 @@ export default function EventDetailsPage() {
         waitlistResult,
         audienceCountResult,
         artTypesResult,
+        ticketResult,
       ] = await Promise.all([
         eventData.venue_id
           ? supabase
@@ -463,10 +479,18 @@ export default function EventDetailsPage() {
               .eq('event_id', resolvedEventId)
               .order('created_at', { ascending: true })
           : Promise.resolve({ data: null, error: null }),
+        eventData.event_type === 'booked_show' && eventData.tickets_enabled
+          ? supabase
+              .from('event_tickets')
+              .select('name, price_cents, quantity, sold')
+              .eq('event_id', resolvedEventId)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
       ])
 
       if (!venueResult.error && venueResult.data) setVenue(venueResult.data as VenueDetails)
       if (!hostResult.error && hostResult.data) setHostProfile(hostResult.data)
+      if (!ticketResult.error && ticketResult.data) setTicketInfo(ticketResult.data as any)
 
       if (confirmedResult.error) throw confirmedResult.error
       const confirmedData = confirmedResult.data || []
@@ -545,6 +569,24 @@ export default function EventDetailsPage() {
       toast.error('Error loading event details')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleBuyTickets() {
+    if (!event) return
+    setTicketLoading(true)
+    try {
+      const response = await fetch('/api/stripe/ticket-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: event.id, quantity: ticketQty }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to start checkout')
+      window.location.href = data.url
+    } catch (err: any) {
+      toast.error(err.message || 'Could not start checkout')
+      setTicketLoading(false)
     }
   }
 
@@ -999,7 +1041,9 @@ export default function EventDetailsPage() {
 
                 <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                   <span className="mr-2">💳</span>
-                  {event.event_type === 'booked_show' ? (
+                  {event.event_type === 'booked_show' && ticketInfo ? (
+                    <span><strong className="font-semibold">Tickets:</strong> ${(ticketInfo.price_cents / 100).toFixed(2)} CAD · {Math.max(0, ticketInfo.quantity - ticketInfo.sold)} remaining</span>
+                  ) : event.event_type === 'booked_show' ? (
                     <span><strong className="font-semibold">Type:</strong> Invite only</span>
                   ) : event.tickets_enabled ? (
                     <span><strong className="font-semibold">Tickets:</strong> {event.external_event ? 'External' : 'Available'}</span>
@@ -1097,15 +1141,49 @@ export default function EventDetailsPage() {
                   </Button>
                 )}
               </div>
-              {profile && (
-                event.status === 'cancelled' ? (
-                  <Badge variant="destructive">Cancelled</Badge>
-                ) : event.tickets_enabled && event.external_event && event.external_ticket_url ? (
+              {event.status === 'cancelled' ? (
+                <Badge variant="destructive">Cancelled</Badge>
+              ) : event.event_type === 'booked_show' && ticketInfo ? (
+                /* ── Ticket purchase UI (works for guests, no login required) ── */
+                <div className="flex flex-col items-end gap-2">
+                  {ticketSuccess && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800 font-medium">
+                      ✅ Payment confirmed! Check your email for your tickets.
+                    </div>
+                  )}
+                  {Math.max(0, ticketInfo.quantity - ticketInfo.sold) > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium text-muted-foreground">Qty:</label>
+                      <select
+                        className="h-9 w-16 rounded-md border border-input bg-background px-2 text-sm"
+                        value={ticketQty}
+                        onChange={(e) => setTicketQty(Number(e.target.value))}
+                        disabled={ticketLoading}
+                      >
+                        {Array.from({ length: Math.min(10, Math.max(0, ticketInfo.quantity - ticketInfo.sold)) }, (_, i) => i + 1).map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                      <Button
+                        onClick={handleBuyTickets}
+                        disabled={ticketLoading}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        {ticketLoading ? 'Opening...' : `Buy Tickets · $${((ticketInfo.price_cents * ticketQty) / 100).toFixed(2)}`}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Badge variant="destructive">Sold Out</Badge>
+                  )}
+                </div>
+              ) : event.event_type === 'booked_show' ? (
+                <Badge variant="outline">Invite only</Badge>
+              ) : (
+              profile && (
+                event.tickets_enabled && event.external_event && event.external_ticket_url ? (
                   <a href={event.external_ticket_url} target="_blank" rel="noreferrer">
                     <Button size="sm" variant="outline">Buy Tickets</Button>
                   </a>
-                ) : event.event_type === 'booked_show' ? (
-                  <Badge variant="outline">Invite only</Badge>
                 ) : !isRegistrationOpen ? (
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-orange-600 border-orange-600">
@@ -1137,7 +1215,7 @@ export default function EventDetailsPage() {
                     {bookingLoading ? 'Booking...' : bookingLabel}
                   </Button>
                 )
-              )}
+              ))}
             </div>
 
             {waitlistBookings.length > 0 && (
