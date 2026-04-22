@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { ChevronLeft, Clock, GripVertical, User, Copy, ChevronDown, MessageCircle, Users, Mail, Send, Eye, Star, MessageSquare, X } from 'lucide-react'
+import { ChevronLeft, Clock, User, Copy, ChevronDown, MessageCircle, Users, Mail, Send, Eye, Star, MessageSquare, X, MoreVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { userCanManageEventChatSettings } from '@/lib/eventChatPermissions'
 import { EventCommunitiesDialog } from '@/components/EventCommunitiesDialog'
@@ -2176,13 +2176,46 @@ export default function AttendancePage() {
                               onTouchEnd={() => handleTouchEnd(booking.id)}
                               style={{ transform: `translateX(${swipeOffset[booking.id] || 0}px)` }}
                               className={cn(
-                                "flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all cursor-move",
+                                "flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all",
                                 isDragged && "opacity-50",
                                 isDragOver && "border-blue-400 bg-blue-50",
                                 !isDragged && !isDragOver && "hover:bg-gray-50"
                               )}
                             >
-                              <GripVertical className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                              {/* 3-dot menu (replaces grip icon) */}
+                              <div
+                                className="relative flex-shrink-0"
+                                ref={openMenuId === booking.id ? menuRef : null}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setOpenMenuId(openMenuId === booking.id ? null : booking.id)
+                                  }}
+                                  className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                                  aria-label="Row actions"
+                                >
+                                  <MoreVertical className="w-4 h-4" />
+                                </button>
+                                {openMenuId === booking.id && (
+                                  <div className="absolute left-0 top-8 z-20 w-44 rounded-lg border border-border bg-white shadow-lg py-1">
+                                    <button
+                                      type="button"
+                                      className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setOpenMenuId(null)
+                                        setCancelNote('')
+                                        setCancelDialogBooking(booking)
+                                      }}
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                      Remove spot
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
 
                               <div className="flex-1 min-w-0">
                                 <Link
@@ -2204,18 +2237,6 @@ export default function AttendancePage() {
                                   onCheckedChange={(checked) => updateAttendance(booking.id, checked ? 'attended' : null)}
                                   aria-label="Mark attended"
                                 />
-                                <button
-                                  type="button"
-                                  title="Remove this performer's spot"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setCancelNote('')
-                                    setCancelDialogBooking(booking)
-                                  }}
-                                  className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-red-50 transition-colors"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
                               </div>
                             </div>
                           )
@@ -2244,6 +2265,7 @@ export default function AttendancePage() {
                           </p>
                           {artTypeBookings.map((booking) => {
                             const isUpdating = updating === booking.id
+                            const menuKey = `waitlist-${booking.id}`
                             return (
                               <div
                                 key={booking.id}
@@ -2251,7 +2273,42 @@ export default function AttendancePage() {
                                 onDragStart={(e) => handleDragStart(e, booking.id)}
                                 className="flex items-center gap-2 sm:gap-3 p-3 rounded-lg border transition-all hover:bg-gray-50"
                               >
-                                <span className="text-xs font-semibold text-muted-foreground w-6 text-center">
+                                {/* 3-dot menu */}
+                                <div
+                                  className="relative flex-shrink-0"
+                                  ref={openMenuId === menuKey ? menuRef : null}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setOpenMenuId(openMenuId === menuKey ? null : menuKey)
+                                    }}
+                                    className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                                    aria-label="Row actions"
+                                  >
+                                    <MoreVertical className="w-4 h-4" />
+                                  </button>
+                                  {openMenuId === menuKey && (
+                                    <div className="absolute left-0 top-8 z-20 w-44 rounded-lg border border-border bg-white shadow-lg py-1">
+                                      <button
+                                        type="button"
+                                        className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setOpenMenuId(null)
+                                          setCancelNote('')
+                                          setCancelDialogBooking(booking)
+                                        }}
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                        Remove from waitlist
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <span className="text-xs font-semibold text-muted-foreground w-5 text-center flex-shrink-0">
                                   {booking.waitlist_position ?? '-'}
                                 </span>
                                 <div className="flex-1 min-w-0">
@@ -2262,20 +2319,8 @@ export default function AttendancePage() {
                                     {booking.profiles.full_name || 'No name'}
                                   </Link>
                                 </div>
-                                {isUpdating ? (
+                                {isUpdating && (
                                   <span className="text-xs text-muted-foreground">Updating...</span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    title="Remove from waitlist"
-                                    onClick={() => {
-                                      setCancelNote('')
-                                      setCancelDialogBooking(booking)
-                                    }}
-                                    className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-red-50 transition-colors"
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </button>
                                 )}
                               </div>
                             )
