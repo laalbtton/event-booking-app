@@ -479,7 +479,7 @@ export default function EventDetailsPage() {
               .eq('event_id', resolvedEventId)
               .order('created_at', { ascending: true })
           : Promise.resolve({ data: null, error: null }),
-        eventData.event_type === 'booked_show' && eventData.tickets_enabled
+        eventData.event_type === 'booked_show'
           ? supabase
               .from('event_tickets')
               .select('name, price_cents, quantity, sold')

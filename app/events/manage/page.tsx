@@ -512,12 +512,15 @@ export default function EventManagementPage() {
 
       if (formData.tickets_enabled && !formData.external_event) {
         const priceValue = parseFloat(formData.ticket_price)
-        const quantityValue = parseInt(formData.ticket_quantity)
         const minAllowedPrice = formData.tickets_redeemable_credits_enabled ? 0 : 0.01
-        if (!Number.isFinite(priceValue) || priceValue < minAllowedPrice || !Number.isFinite(quantityValue) || quantityValue <= 0) {
-          toast.error('Please provide a valid ticket price and quantity')
+        if (!Number.isFinite(priceValue) || priceValue < minAllowedPrice) {
+          toast.error('Please provide a valid ticket price')
           setSubmitting(false)
           return
+        }
+        if (!parseInt(formData.ticket_quantity)) {
+          const fallback = parseInt(formData.audience_capacity || '50') || 50
+          formData = { ...formData, ticket_quantity: fallback.toString() }
         }
       }
 
@@ -611,7 +614,7 @@ export default function EventManagementPage() {
 
       if (formData.tickets_enabled && !formData.external_event) {
         const ticketPrice = Math.round(parseFloat(formData.ticket_price) * 100)
-        const ticketQuantity = parseInt(formData.ticket_quantity)
+        const ticketQuantity = parseInt(formData.ticket_quantity) || parseInt(formData.audience_capacity || '50') || 50
         await supabase.from('event_tickets').insert({
           event_id: data.id,
           name: 'General Admission',
@@ -889,12 +892,15 @@ export default function EventManagementPage() {
 
       if (formData.tickets_enabled && !formData.external_event) {
         const priceValue = parseFloat(formData.ticket_price)
-        const quantityValue = parseInt(formData.ticket_quantity)
         const minAllowedPrice = formData.tickets_redeemable_credits_enabled ? 0 : 0.01
-        if (!Number.isFinite(priceValue) || priceValue < minAllowedPrice || !Number.isFinite(quantityValue) || quantityValue <= 0) {
-          toast.error('Please provide a valid ticket price and quantity')
+        if (!Number.isFinite(priceValue) || priceValue < minAllowedPrice) {
+          toast.error('Please provide a valid ticket price')
           setSubmitting(false)
           return
+        }
+        if (!parseInt(formData.ticket_quantity)) {
+          const fallback = parseInt(formData.audience_capacity || '50') || 50
+          formData = { ...formData, ticket_quantity: fallback.toString() }
         }
       }
 
@@ -986,7 +992,7 @@ export default function EventManagementPage() {
 
       if (formData.tickets_enabled && !formData.external_event) {
         const ticketPrice = Math.round(parseFloat(formData.ticket_price) * 100)
-        const ticketQuantity = parseInt(formData.ticket_quantity)
+        const ticketQuantity = parseInt(formData.ticket_quantity) || parseInt(formData.audience_capacity || '50') || 50
         await supabase.from('event_tickets').upsert(
           {
             event_id: editingEvent.id,
@@ -2123,11 +2129,11 @@ export default function EventManagementPage() {
                               tickets_enabled: nextValue,
                               external_event: nextValue ? formData.external_event : false,
                               external_ticket_url: nextValue ? formData.external_ticket_url : '',
-                              ticket_price: nextValue && formData.event_type === 'open_mic' && !formData.ticket_price
-                                ? '5'
+                              ticket_price: nextValue && !formData.ticket_price
+                                ? (formData.event_type === 'open_mic' ? '5' : '')
                                 : formData.ticket_price,
-                              ticket_quantity: nextValue && formData.event_type === 'open_mic' && !formData.ticket_quantity
-                                ? (formData.audience_capacity || '15')
+                              ticket_quantity: nextValue && !formData.ticket_quantity
+                                ? (formData.audience_capacity || '50')
                                 : formData.ticket_quantity,
                             })
                           }}
@@ -2834,13 +2840,14 @@ export default function EventManagementPage() {
                               tickets_enabled: nextValue,
                               external_event: nextValue ? formData.external_event : false,
                               external_ticket_url: nextValue ? formData.external_ticket_url : '',
-                              ticket_price: nextValue && formData.event_type === 'open_mic' && !formData.ticket_price
-                                ? '5'
+                              ticket_price: nextValue && !formData.ticket_price
+                                ? (formData.event_type === 'open_mic' ? '5' : '')
                                 : formData.ticket_price,
-                              ticket_quantity: nextValue && formData.event_type === 'open_mic' && !formData.ticket_quantity
-                                ? (formData.audience_capacity || '15')
+                              ticket_quantity: nextValue && !formData.ticket_quantity
+                                ? (formData.audience_capacity || '50')
                                 : formData.ticket_quantity,
                             })
+                            if (nextValue) setEditTicketsOpen(true)
                             if (!nextValue) setEditTicketsOpen(false)
                           }}
                           className="h-4 w-4 text-blue-600 focus:ring-blue-500"
