@@ -520,7 +520,7 @@ export default function EventManagementPage() {
         }
         if (!parseInt(formData.ticket_quantity)) {
           const fallback = parseInt(formData.audience_capacity || '50') || 50
-          formData = { ...formData, ticket_quantity: fallback.toString() }
+          setFormData((prev) => ({ ...prev, ticket_quantity: fallback.toString() }))
         }
       }
 
@@ -900,7 +900,7 @@ export default function EventManagementPage() {
         }
         if (!parseInt(formData.ticket_quantity)) {
           const fallback = parseInt(formData.audience_capacity || '50') || 50
-          formData = { ...formData, ticket_quantity: fallback.toString() }
+          setFormData((prev) => ({ ...prev, ticket_quantity: fallback.toString() }))
         }
       }
 
