@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     // Verify user and venue exist
     const [{ data: targetUser }, { data: venue }] = await Promise.all([
-      supabase.from('profiles').select('id, display_name, email').eq('id', userId).maybeSingle(),
+      supabase.from('profiles').select('id, full_name, email').eq('id', userId).maybeSingle(),
       supabase.from('venues').select('id, name').eq('id', venueId).maybeSingle(),
     ])
     if (!targetUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
