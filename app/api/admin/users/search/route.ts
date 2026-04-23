@@ -44,14 +44,16 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, email')
-      .or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)
-      .order('display_name', { ascending: true })
+      .select('id, full_name, email')
+      .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
+      .order('full_name', { ascending: true })
       .limit(10)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    return NextResponse.json({ users: data ?? [] })
+    // Return as display_name so callers don't need to rename
+    const users = (data ?? []).map((u: any) => ({ id: u.id, display_name: u.full_name, email: u.email }))
+    return NextResponse.json({ users })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error'
     return NextResponse.json({ error: message }, { status: 500 })

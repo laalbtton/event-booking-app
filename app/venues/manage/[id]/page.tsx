@@ -292,7 +292,7 @@ export default function VenueManagePage() {
         notes: string | null
         issued_at: string
         expires_at: string | null
-        profiles: { display_name?: string | null; email?: string | null } | null
+        profiles: { full_name?: string | null; email?: string | null } | null
       }>
       setGrants(
         raw.map((g) => ({
@@ -303,7 +303,7 @@ export default function VenueManagePage() {
           notes: g.notes,
           issued_at: g.issued_at,
           expires_at: g.expires_at,
-          user_name: g.profiles?.display_name ?? 'Unknown',
+          user_name: g.profiles?.full_name ?? 'Unknown',
           user_email: g.profiles?.email ?? '',
         }))
       )

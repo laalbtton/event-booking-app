@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       .from('venue_credit_grants')
       .select(
         `id, user_id, venue_id, credits_total, credits_remaining, notes, issued_by, issued_at, expires_at,
-         profiles!venue_credit_grants_user_id_fkey(display_name, email, avatar_url),
+         profiles!venue_credit_grants_user_id_fkey(full_name, email, avatar_url),
          venues!venue_credit_grants_venue_id_fkey(name)`
       )
       .order('issued_at', { ascending: false })
