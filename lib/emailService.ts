@@ -6,7 +6,7 @@
  */
 
 import { supabase } from './supabase'
-import { formatDateTime } from './dateUtils'
+import { formatDateTimeEastern } from './dateUtils'
 import {
   getBookingConfirmationEmail,
   getWaitlistPromotionEmail,
@@ -57,7 +57,7 @@ export async function sendBookingConfirmationEmail(
     const html = getBookingConfirmationEmail({
       userName: profile.full_name || 'there',
       eventTitle: event.title,
-      eventDate: formatDateTime(event.date),
+      eventDate: formatDateTimeEastern(event.date),
       eventLocation: event.location || 'TBD',
       creditsUsed: booking.credits_used,
       bookingId,
@@ -112,7 +112,7 @@ export async function sendWaitlistPromotionEmail(
     const html = getWaitlistPromotionEmail({
       userName: profile.full_name || 'there',
       eventTitle: event.title,
-      eventDate: formatDateTime(event.date),
+      eventDate: formatDateTimeEastern(event.date),
       eventLocation: event.location || 'TBD',
       eventUrl,
     })
@@ -331,7 +331,7 @@ export async function sendEventReminderEmail(
     const html = getEventReminderEmail({
       userName: profile.full_name || 'there',
       eventTitle: event.title,
-      eventDate: formatDateTime(event.date),
+      eventDate: formatDateTimeEastern(event.date),
       eventLocation: event.location || 'TBD',
       timeUntilEvent,
       eventUrl,

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe } from '@/lib/stripe'
 import type Stripe from 'stripe'
 import { sendEmail, getCreditPurchaseEmail, getTicketPurchaseEmail } from '@/lib/email'
+import { formatDateTimeEastern } from '@/lib/dateUtils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -230,14 +231,7 @@ async function handleTicketPurchase(session: Stripe.Checkout.Session): Promise<N
 
     if (eventRow) {
       const venueName = (eventRow.venues as any)?.name as string | null
-      const eventDate = eventRow.date
-        ? new Date(eventRow.date).toLocaleDateString('en-CA', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })
-        : 'TBA'
+      const eventDate = eventRow.date ? formatDateTimeEastern(eventRow.date) : 'TBA'
       const origin = process.env.NEXT_PUBLIC_APP_URL || 'https://laalbutton.com'
       const html = getTicketPurchaseEmail({
         buyerName: buyerName || 'there',

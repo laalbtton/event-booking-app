@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { formatDateTime } from '@/lib/dateUtils'
+import { formatDateTimeEastern } from '@/lib/dateUtils'
 import { getEventCancelledEmail, sendEmail } from '@/lib/email'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
         const html = getEventCancelledEmail({
           userName: profileData.full_name || 'there',
           eventTitle: event.title,
-          eventDate: formatDateTime(event.date),
+          eventDate: formatDateTimeEastern(event.date),
           creditsRefunded: booking.credits_used,
           eventUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/events/${eventId}`,
         })

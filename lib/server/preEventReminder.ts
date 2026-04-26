@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 import { getPreEventReminderEmail } from '@/lib/email'
 import { getEmailTemplate, interpolate, TEMPLATE_KEYS } from '@/lib/server/emailTemplates'
-import { formatDateTime } from '@/lib/dateUtils'
+import { formatDateTimeEastern } from '@/lib/dateUtils'
 
 function getAdminSupabase() {
   return createClient(
@@ -76,7 +76,7 @@ export async function sendPreEventReminders(eventId: string): Promise<ReminderRe
   }
 
   const eventUrl = `${siteUrl}/events/${ev.slug ?? ev.id}`
-  const eventDate = formatDateTime(ev.date)
+  const eventDate = formatDateTimeEastern(ev.date)
 
   // ── 2. Find the primary community name (for branding in the email) ────────
   let communityName: string | null = null

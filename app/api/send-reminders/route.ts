@@ -11,7 +11,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/notifications'
 import { sendEventReminderEmail } from '@/lib/emailService'
-import { formatDateTime } from '@/lib/dateUtils'
 import { sendPushToUser } from '@/lib/server/push'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!

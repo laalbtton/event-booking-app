@@ -7,7 +7,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { getPostEventFeedbackEmail, sendEmail } from '@/lib/email'
-import { formatDateTime } from '@/lib/dateUtils'
+import { formatDateTimeEastern } from '@/lib/dateUtils'
 
 export const FEEDBACK_FORM_URL =
   'https://docs.google.com/forms/d/e/1FAIpQLSdoMsGHkla6nxE7ZRLKg71QtCGxaY70xRP00X6C6VrVPZ0xFg/viewform?usp=dialog'
@@ -126,7 +126,7 @@ export async function sendFeedbackEmailsForEvent(
     const html = getPostEventFeedbackEmail({
       userName: profile.full_name || 'there',
       eventTitle: ev.title,
-      eventDate: formatDateTime(ev.date),
+      eventDate: formatDateTimeEastern(ev.date),
       venueName,
       venueGoogleReviewUrl,
       feedbackFormUrl: FEEDBACK_FORM_URL,

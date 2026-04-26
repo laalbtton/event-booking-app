@@ -1,23 +1,17 @@
 /**
  * Weekly community digest sender.
  *
- * Every Sunday morning Inngest wakes up the weeklyDigest function which calls
- * sendWeeklyDigest() below.
- *
- * What it does:
- *   1. Finds all events in the next 14 days that belong to at least one
- *      approved community.
- *   2. Builds a map of user_id → community → events.
- *   3. For each user who has at least one relevant event, sends a single
- *      digest email with sections grouped by community.
- *   4. Skips users who already received this week's digest (deduplication).
+ * Inngest runs the digest on a weekly schedule (~Saturday 11:30 PM Eastern via cron).
+ * Recipients are sorted by user id so the same person lands in the same batch every week
+ * (stable send time week over week). Batches respect Resend daily limits: default 100 emails,
+ * then step.sleep(24h) for the next batch, up to 5 batches (500 users) per run.
  */
 
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 import { getWeeklyDigestEmail, type DigestCommunitySection } from '@/lib/email'
 import { getEmailTemplate, interpolate, TEMPLATE_KEYS } from '@/lib/server/emailTemplates'
-import { formatDateTime } from '@/lib/dateUtils'
+import { addCalendarDaysToYmd, getEasternCalendarDateString } from '@/lib/dateUtils'
 
 function getAdminSupabase() {
   return createClient(
@@ -30,25 +24,44 @@ function getSiteUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL || 'https://laalbutton.com'
 }
 
+/** Stable message fragment for deduplication queries */
+export function weeklyDigestMessageMarker(weekKey: string) {
+  return `· cycle ${weekKey}`
+}
+
 export type DigestResult = {
   emailsSent: number
   skipped: number
   errors: string[]
 }
 
-export async function sendWeeklyDigest(): Promise<DigestResult> {
+export type WeeklyDigestItem = {
+  userId: string
+  email: string
+  name: string
+  sections: DigestCommunitySection[]
+}
+
+export type WeeklyDigestPrepared = {
+  weekKey: string
+  siteUrl: string
+  tmpl: { subject: string; intro: string; footer: string }
+  items: WeeklyDigestItem[]
+  /** Users not included because of batch cap */
+  overflowCount: number
+}
+
+/**
+ * Build recipient list + template. Does not send email.
+ */
+export async function prepareWeeklyDigest(): Promise<WeeklyDigestPrepared | null> {
   const supabase = getAdminSupabase()
   const siteUrl = getSiteUrl()
-  const result: DigestResult = { emailsSent: 0, skipped: 0, errors: [] }
+  const weekKey = getEasternCalendarDateString(new Date())
 
-  // ── 1. Date window: today → +14 days ──────────────────────────────────────
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const cutoff = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000)
-  const todayStr = today.toISOString().split('T')[0]
-  const cutoffStr = cutoff.toISOString().split('T')[0]
+  const todayStr = getEasternCalendarDateString(new Date())
+  const cutoffStr = addCalendarDaysToYmd(todayStr, 14)
 
-  // ── 2. Fetch upcoming events (including poster_url for card images) ─────────
   const { data: events, error: evErr } = await supabase
     .from('events')
     .select('id, title, date, slug, location, venue_id, poster_url')
@@ -58,7 +71,7 @@ export async function sendWeeklyDigest(): Promise<DigestResult> {
     .order('date', { ascending: true })
 
   if (evErr || !events || events.length === 0) {
-    return result // nothing to send
+    return null
   }
 
   const eventIds = (events as { id: string }[]).map((e) => e.id)
@@ -68,41 +81,35 @@ export async function sendWeeklyDigest(): Promise<DigestResult> {
     ),
   ]
 
-  // ── 3. Fetch venue names ──────────────────────────────────────────────────
   const venueMap = new Map<string, string>()
   if (venueIds.length > 0) {
     const { data: venues } = await supabase
       .from('venues')
       .select('id, name')
       .in('id', venueIds)
-    ;(venues as { id: string; name: string }[] | null ?? []).forEach((v) =>
-      venueMap.set(v.id, v.name),
-    )
+    ;((venues ?? []) as { id: string; name: string }[]).forEach((v) => venueMap.set(v.id, v.name))
   }
 
-  // ── 4. Fetch approved event→community links (primary links first) ──────────
   const { data: links, error: linkErr } = await supabase
     .from('event_communities')
     .select('event_id, community_id, is_primary')
     .in('event_id', eventIds)
     .eq('status', 'approved')
-    .order('is_primary', { ascending: false }) // primary rows come first
+    .order('is_primary', { ascending: false })
 
   if (linkErr || !links || links.length === 0) {
-    return result
+    return null
   }
 
-  // Each event is assigned to exactly ONE community for the digest email.
-  // Priority: the row where is_primary = true; otherwise the first approved link.
-  const eventAssignedComm = new Map<string, string>() // event_id → community_id
-  ;(links as { event_id: string; community_id: string; is_primary: boolean }[])
-    .forEach(({ event_id, community_id, is_primary }) => {
+  const eventAssignedComm = new Map<string, string>()
+  ;(links as { event_id: string; community_id: string; is_primary: boolean }[]).forEach(
+    ({ event_id, community_id, is_primary }) => {
       if (!eventAssignedComm.has(event_id) || is_primary) {
         eventAssignedComm.set(event_id, community_id)
       }
-    })
+    },
+  )
 
-  // community_id → event IDs (deduplicated — each event in one community only)
   const commToEvents = new Map<string, string[]>()
   for (const [event_id, community_id] of eventAssignedComm) {
     const arr = commToEvents.get(community_id) ?? []
@@ -112,7 +119,6 @@ export async function sendWeeklyDigest(): Promise<DigestResult> {
 
   const communityIds = [...commToEvents.keys()]
 
-  // ── 5. Fetch community names ──────────────────────────────────────────────
   const { data: communities } = await supabase
     .from('communities')
     .select('id, name')
@@ -120,22 +126,19 @@ export async function sendWeeklyDigest(): Promise<DigestResult> {
     .eq('status', 'active')
 
   const communityMap = new Map<string, string>()
-  ;(communities as { id: string; name: string }[] | null ?? []).forEach((c) =>
+  ;((communities ?? []) as { id: string; name: string }[]).forEach((c) =>
     communityMap.set(c.id, c.name),
   )
 
-  // ── 6. Fetch all members of those communities ─────────────────────────────
   const { data: members, error: memberErr } = await supabase
     .from('community_members')
     .select('user_id, community_id')
     .in('community_id', communityIds)
 
   if (memberErr || !members || members.length === 0) {
-    return result
+    return null
   }
 
-  // ── 7. Build user → {community → events} map ─────────────────────────────
-  // user_id → Map<community_id, event_ids[]>
   const userCommMap = new Map<string, Map<string, string[]>>()
   ;(members as { user_id: string; community_id: string }[]).forEach(({ user_id, community_id }) => {
     const evIds = commToEvents.get(community_id)
@@ -145,62 +148,65 @@ export async function sendWeeklyDigest(): Promise<DigestResult> {
     userCommMap.set(user_id, commMap)
   })
 
-  if (userCommMap.size === 0) return result
+  if (userCommMap.size === 0) return null
 
-  const userIds = [...userCommMap.keys()]
+  const userIds = [...userCommMap.keys()].sort((a, b) => a.localeCompare(b))
 
-  // ── 8. Fetch user profiles (name + email) ────────────────────────────────
   const { data: profiles } = await supabase
     .from('profiles')
     .select('id, full_name, email')
     .in('id', userIds)
 
   const profileMap = new Map<string, { name: string; email: string }>()
-  ;(profiles as { id: string; full_name: string | null; email: string | null }[] | null ?? [])
+  ;((profiles ?? []) as { id: string; full_name: string | null; email: string | null }[])
     .filter((p) => p.email)
     .forEach((p) => profileMap.set(p.id, { name: p.full_name ?? 'there', email: p.email! }))
 
-  // ── 9. Deduplication: find users who already got a digest this week ───────
-  const weekStart = todayStr // use today's date as the week key
+  const marker = weeklyDigestMessageMarker(weekKey)
   const { data: alreadySent } = await supabase
     .from('notifications')
     .select('user_id')
     .eq('type', 'weekly_digest')
-    .gte('created_at', today.toISOString())
+    .like('message', `%${marker}%`)
 
-  const alreadySentSet = new Set(
-    (alreadySent as { user_id: string }[] | null ?? []).map((r) => r.user_id),
-  )
+  const alreadySentSet = new Set(((alreadySent ?? []) as { user_id: string }[]).map((r) => r.user_id))
 
-  // Build event lookup map
   const eventById = new Map<
     string,
     {
-      id: string; title: string; date: string; slug: string | null
-      location: string | null; venue_id: string | null; poster_url: string | null
+      id: string
+      title: string
+      date: string
+      slug: string | null
+      location: string | null
+      venue_id: string | null
+      poster_url: string | null
     }
   >()
   ;(
     events as {
-      id: string; title: string; date: string; slug: string | null
-      location: string | null; venue_id: string | null; poster_url: string | null
+      id: string
+      title: string
+      date: string
+      slug: string | null
+      location: string | null
+      venue_id: string | null
+      poster_url: string | null
     }[]
   ).forEach((e) => eventById.set(e.id, e))
 
-  // ── 10. Load template ─────────────────────────────────────────────────────
   const tmpl = await getEmailTemplate(TEMPLATE_KEYS.WEEKLY_DIGEST)
 
-  // ── 11. Send one email per user ───────────────────────────────────────────
-  for (const [userId, commMap] of userCommMap) {
+  const items: WeeklyDigestItem[] = []
+
+  for (const userId of userIds) {
     const profile = profileMap.get(userId)
-    if (!profile) { result.skipped++; continue }
+    if (!profile) continue
+    if (alreadySentSet.has(userId)) continue
 
-    if (alreadySentSet.has(userId)) { result.skipped++; continue }
-
-    const vars = { user_name: profile.name }
-
-    // Build sections for this user
+    const commMap = userCommMap.get(userId)!
     const sections: DigestCommunitySection[] = []
+
     for (const [communityId, evIds] of commMap) {
       const communityName = communityMap.get(communityId)
       if (!communityName) continue
@@ -222,36 +228,98 @@ export async function sendWeeklyDigest(): Promise<DigestResult> {
       sections.push({ communityName, communityId, events: eventsForSection })
     }
 
-    if (sections.length === 0) { result.skipped++; continue }
-
-    // Sort sections alphabetically
+    if (sections.length === 0) continue
     sections.sort((a, b) => a.communityName.localeCompare(b.communityName))
 
-    const html = getWeeklyDigestEmail({
-      userName: profile.name,
+    items.push({
+      userId,
+      email: profile.email,
+      name: profile.name,
       sections,
-      intro: interpolate(tmpl.intro, vars),
-      footer: interpolate(tmpl.footer, vars),
-      siteUrl,
     })
+  }
 
-    const subject = interpolate(tmpl.subject, vars)
+  if (items.length === 0) return null
 
-    const sent = await sendEmail({ to: profile.email, subject, html })
+  const batchSize = Number(process.env.WEEKLY_DIGEST_BATCH_SIZE || 100)
+  const maxBatches = Number(process.env.WEEKLY_DIGEST_MAX_BATCHES || 5)
+  const maxRecipients = batchSize * maxBatches
+  const overflowCount = Math.max(0, items.length - maxRecipients)
+  const cappedItems = overflowCount > 0 ? items.slice(0, maxRecipients) : items
+
+  return {
+    weekKey,
+    siteUrl,
+    tmpl: { subject: tmpl.subject, intro: tmpl.intro, footer: tmpl.footer },
+    items: cappedItems,
+    overflowCount,
+  }
+}
+
+/**
+ * Send one batch of digest emails (same weekKey / template).
+ */
+export async function deliverWeeklyDigestBatch(
+  prepared: WeeklyDigestPrepared,
+  start: number,
+  end: number,
+): Promise<DigestResult> {
+  const supabase = getAdminSupabase()
+  const result: DigestResult = { emailsSent: 0, skipped: 0, errors: [] }
+  const marker = weeklyDigestMessageMarker(prepared.weekKey)
+  const slice = prepared.items.slice(start, end)
+
+  for (const item of slice) {
+    const vars = { user_name: item.name }
+    const html = getWeeklyDigestEmail({
+      userName: item.name,
+      sections: item.sections,
+      intro: interpolate(prepared.tmpl.intro, vars),
+      footer: interpolate(prepared.tmpl.footer, vars),
+      siteUrl: prepared.siteUrl,
+    })
+    const subject = interpolate(prepared.tmpl.subject, vars)
+
+    const sent = await sendEmail({ to: item.email, subject, html })
 
     if (sent) {
-      // Record in notifications for deduplication + audit
       await supabase.from('notifications').insert({
-        user_id: userId,
+        user_id: item.userId,
         type: 'weekly_digest',
         title: subject,
-        message: `Weekly digest sent for week starting ${weekStart}`,
+        message: `Weekly digest sent ${marker}`,
       })
       result.emailsSent++
     } else {
-      result.errors.push(`Failed to send to ${profile.email}`)
+      result.errors.push(`Failed to send to ${item.email}`)
     }
   }
 
   return result
+}
+
+/** Full send in one process (no inter-batch delay) — useful for tests or manual runs. */
+export async function sendWeeklyDigest(): Promise<DigestResult & { overflowCount?: number }> {
+  const prepared = await prepareWeeklyDigest()
+  if (!prepared) {
+    return { emailsSent: 0, skipped: 0, errors: [] }
+  }
+
+  const batchSize = Number(process.env.WEEKLY_DIGEST_BATCH_SIZE || 100)
+  let emailsSent = 0
+  const errors: string[] = []
+
+  for (let start = 0; start < prepared.items.length; start += batchSize) {
+    const end = Math.min(start + batchSize, prepared.items.length)
+    const r = await deliverWeeklyDigestBatch(prepared, start, end)
+    emailsSent += r.emailsSent
+    errors.push(...r.errors)
+  }
+
+  return {
+    emailsSent,
+    skipped: prepared.overflowCount,
+    errors,
+    overflowCount: prepared.overflowCount,
+  }
 }

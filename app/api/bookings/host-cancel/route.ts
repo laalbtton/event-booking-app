@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, getHostCancellationEmail } from '@/lib/email'
+import { formatDateTimeEastern } from '@/lib/dateUtils'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -216,9 +217,7 @@ export async function POST(request: NextRequest) {
     const performerEmail = (performerProfile as any).email
     const eventSlug = (event as any).slug || event.id
     const eventUrl = `${getSiteUrl()}/events/${eventSlug}`
-    const eventDate = new Date(event.date).toLocaleDateString('en-US', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    })
+    const eventDate = formatDateTimeEastern(event.date)
 
     if (performerEmail) {
       const html = getHostCancellationEmail({

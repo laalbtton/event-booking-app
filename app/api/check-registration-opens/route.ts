@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { createNotification } from '@/lib/notifications'
 import { getRegistrationOpeningEmail, sendEmail } from '@/lib/email'
-import { formatDateTime } from '@/lib/dateUtils'
+import { formatDateTimeEastern } from '@/lib/dateUtils'
 import { sendPushToAllUsers, sendPushToUser } from '@/lib/server/push'
 import { getAdminClient } from '@/lib/server/supabaseAdmin'
 
@@ -97,7 +97,7 @@ export async function GET() {
           const html = getRegistrationOpeningEmail({
             userName: profile.full_name || 'there',
             eventTitle: event.title,
-            eventDate: formatDateTime(event.date),
+            eventDate: formatDateTimeEastern(event.date),
             eventLocation: event.location || 'TBD',
             eventUrl,
           })

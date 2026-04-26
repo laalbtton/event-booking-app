@@ -10,6 +10,8 @@
  * - Event reminders
  */
 
+import { formatDigestEventDatePartsEastern } from '@/lib/dateUtils'
+
 type EmailAttachment = {
   filename: string
   content: string
@@ -723,12 +725,7 @@ export function getWeeklyDigestEmail(data: {
   /** Build one dark event card (table-based for email-client compatibility) */
   function eventCard(ev: DigestCommunitySection['events'][number], siteUrl: string): string {
     const eventUrl = `${siteUrl}/events/${ev.slug ?? ev.id}`
-    const date = new Date(ev.date).toLocaleDateString('en-CA', {
-      weekday: 'long', month: 'long', day: 'numeric',
-    })
-    const time = new Date(ev.date).toLocaleTimeString('en-CA', {
-      hour: 'numeric', minute: '2-digit',
-    })
+    const { dateLine: date, timeLine: time } = formatDigestEventDatePartsEastern(ev.date)
     const venue = ev.venueName ?? ev.location ?? 'Venue TBA'
 
     const imageBlock = ev.posterUrl
@@ -753,7 +750,7 @@ export function getWeeklyDigestEmail(data: {
           <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">
             <tr>
               <td style="font-size:13px; color:#a8a29e; padding:3px 0; vertical-align:top; width:18px;">📅</td>
-              <td style="font-size:13px; color:#a8a29e; padding:3px 0;">${date} &nbsp;·&nbsp; ${time}</td>
+              <td style="font-size:13px; color:#a8a29e; padding:3px 0;">${date} &nbsp;·&nbsp; ${time} ET</td>
             </tr>
             <tr>
               <td style="font-size:13px; color:#a8a29e; padding:3px 0; vertical-align:top;">📍</td>
@@ -805,6 +802,9 @@ export function getWeeklyDigestEmail(data: {
               </h1>
               <p style="margin:10px 0 0 0; font-size:14px; color:#a8a29e;">
                 ${totalEvents} upcoming show${totalEvents !== 1 ? 's' : ''} across your communities
+              </p>
+              <p style="margin:8px 0 0 0; font-size:12px; color:#78716c;">
+                Event times are in Eastern Time (US and Canada).
               </p>
             </td>
           </tr>
