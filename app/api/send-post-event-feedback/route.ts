@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendFeedbackEmailsForEvent } from '@/lib/server/postEventFeedback'
+import { sendPostEventReviewPushesForEvent } from '@/lib/server/postEventReviewPush'
 
 function getAdminSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -76,11 +77,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const result = await sendFeedbackEmailsForEvent(body.eventId, {
-      subject: body.subject,
-      customNote: body.customNote,
-    })
-    return NextResponse.json({ success: true, eventId: body.eventId, ...result })
+    const [result, pushResult] = await Promise.all([
+      sendFeedbackEmailsForEvent(body.eventId, {
+        subject: body.subject,
+        customNote: body.customNote,
+      }),
+      sendPostEventReviewPushesForEvent(body.eventId),
+    ])
+    return NextResponse.json({ success: true, eventId: body.eventId, ...result, push: pushResult })
   } catch (err: unknown) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal server error' },

@@ -1,4 +1,5 @@
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
+import type { ProfileRatingAggregates, ProfileReviewSnippet } from '@/lib/supabase'
 
 type EventRow = {
   id: string
@@ -128,6 +129,44 @@ export type PublicPerformerProfile = {
   }>
   upcomingCount: number
   attendedCount: number
+  /** From RPC get_profile_rating_aggregates (public). */
+  ratingAggregates: ProfileRatingAggregates | null
+  /** From RPC get_profile_recent_review_snippets (public). */
+  recentReviewSnippets: ProfileReviewSnippet[]
+}
+
+function parseProfileRatingAggregates(raw: unknown): ProfileRatingAggregates | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const dim = (k: 'performance' | 'hosting' | 'event_creator') => {
+    const d = o[k] as Record<string, unknown> | undefined
+    if (!d || typeof d !== 'object') return { avg: null as number | null, count: 0 }
+    const avg = d.avg
+    const count = d.count
+    const n =
+      typeof avg === 'number' ? avg : avg != null && !Number.isNaN(Number(avg)) ? Number(avg) : null
+    return {
+      avg: n,
+      count: typeof count === 'number' ? count : Number(count) || 0,
+    }
+  }
+  return {
+    performance: dim('performance'),
+    hosting: dim('hosting'),
+    event_creator: dim('event_creator'),
+  }
+}
+
+function parseProfileReviewSnippets(raw: unknown): ProfileReviewSnippet[] {
+  if (!Array.isArray(raw)) return []
+  const out: ProfileReviewSnippet[] = []
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue
+    const x = r as Record<string, unknown>
+    if (typeof x.comment !== 'string' || typeof x.eventTitle !== 'string' || x.createdAt == null) continue
+    out.push({ comment: x.comment, eventTitle: x.eventTitle, createdAt: String(x.createdAt) })
+  }
+  return out
 }
 
 function inferCityRegionFromLocation(location: string | null): { city: string; region: string } {
@@ -561,7 +600,7 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
   if (!profileData) return null
 
   const now = new Date().toISOString()
-  const [bookingsRes, attendedRes] = await Promise.all([
+  const [bookingsRes, attendedRes, aggRes, snipRes] = await Promise.all([
     supabase
       .from('bookings')
       .select(
@@ -586,6 +625,8 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
       .select('id', { count: 'exact', head: true })
       .eq('user_id', profileId)
       .eq('attendance_status', 'attended'),
+    supabase.rpc('get_profile_rating_aggregates', { p_profile_id: profileId }),
+    supabase.rpc('get_profile_recent_review_snippets', { p_profile_id: profileId, p_limit: 5 }),
   ])
 
   const upcomingEvents = ((bookingsRes.data as any[]) || [])
@@ -601,6 +642,11 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
       waitlistPosition: row.waitlist_position ?? null,
     }))
 
+  const ratingAggregates =
+    aggRes.error || aggRes.data == null ? null : parseProfileRatingAggregates(aggRes.data)
+  const recentReviewSnippets =
+    snipRes.error || snipRes.data == null ? [] : parseProfileReviewSnippets(snipRes.data)
+
   return {
     id: String(profileData.id),
     fullName: profileData.full_name || 'Performer',
@@ -613,5 +659,7 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
     upcomingEvents,
     upcomingCount: upcomingEvents.length,
     attendedCount: attendedRes.count || 0,
+    ratingAggregates,
+    recentReviewSnippets,
   }
 }

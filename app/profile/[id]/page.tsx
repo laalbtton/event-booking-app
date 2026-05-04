@@ -85,6 +85,12 @@ export default async function PublicProfilePage({ params }: Props) {
 
   const hasLinks = profile.websiteLink || profile.instagramLink || profile.youtubeLink || profile.twitterLink
 
+  const ra = profile.ratingAggregates
+  const hasPublicRatings =
+    (ra &&
+      (ra.performance.count > 0 || ra.hosting.count > 0 || ra.event_creator.count > 0)) ||
+    profile.recentReviewSnippets.length > 0
+
   return (
     <div className="min-h-screen bg-zinc-950">
       <PublicHeader />
@@ -180,6 +186,63 @@ export default async function PublicProfilePage({ params }: Props) {
             <p className="text-xs text-stone-400 mt-1">Events attended</p>
           </div>
         </div>
+
+        {/* ── Community ratings (from post-event reviews) ─────────────── */}
+        {hasPublicRatings && (
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold text-stone-200">Ratings</h2>
+            {ra && (
+              <>
+                <p className="text-sm text-stone-500">
+                  Averages from people who attended events with this profile as performer, host, or creator.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {(
+                    [
+                      { label: 'Performance', s: ra.performance },
+                      { label: 'Hosting', s: ra.hosting },
+                      { label: 'Event creator', s: ra.event_creator },
+                    ] as const
+                  ).map(({ label, s }) => (
+                    <div
+                      key={label}
+                      className="rounded-xl border border-zinc-700 bg-zinc-900 p-4 text-center"
+                    >
+                      <p className="text-2xl font-bold text-yellow-400">
+                        {s.count > 0 && s.avg != null ? Number(s.avg).toFixed(1) : '—'}
+                        {s.count > 0 && <span className="text-sm font-normal text-stone-500"> /5</span>}
+                      </p>
+                      <p className="text-xs text-stone-400 mt-1">
+                        {label}
+                        {s.count > 0 && (
+                          <span className="text-stone-600"> · {s.count} review{s.count === 1 ? '' : 's'}</span>
+                        )}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {profile.recentReviewSnippets.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <h3 className="text-sm font-medium text-stone-300">Recent comments</h3>
+                <ul className="space-y-2">
+                  {profile.recentReviewSnippets.map((snip, i) => (
+                    <li
+                      key={`${snip.createdAt}-${i}`}
+                      className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-left"
+                    >
+                      <p className="text-sm text-stone-200 leading-relaxed whitespace-pre-wrap">{snip.comment}</p>
+                      <p className="text-xs text-stone-500 mt-1">
+                        {snip.eventTitle} · {new Date(snip.createdAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* ── Upcoming performances ─────────────────────────────────── */}
         <section>

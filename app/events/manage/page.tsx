@@ -954,6 +954,7 @@ export default function EventManagementPage() {
           : null,
         date: new Date(formData.date).toISOString(),
         end_time: endTimeIso,
+        venue_id: formData.venue_id || null,
         location: locationValue,
         credits_required: isBookedShow ? 0 : parseInt(formData.credits_required),
         audience_capacity: isTicketed ? parseInt(formData.audience_capacity || '15') : 0,

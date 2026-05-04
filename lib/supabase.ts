@@ -96,6 +96,34 @@ export type Event = {
   chat_mode?: 'open' | 'host_only'
 }
 
+export type EventReview = {
+  id: string
+  event_id: string
+  reviewer_id: string
+  comment: string | null
+  host_rating: number | null
+  creator_rating: number | null
+  performance_rating: number | null
+  performance_rated_user_id: string | null
+  snapshot_host_user_id: string | null
+  snapshot_created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ProfileRatingDimensionStats = { avg: number | null; count: number }
+export type ProfileRatingAggregates = {
+  performance: ProfileRatingDimensionStats
+  hosting: ProfileRatingDimensionStats
+  event_creator: ProfileRatingDimensionStats
+}
+
+export type ProfileReviewSnippet = {
+  comment: string
+  eventTitle: string
+  createdAt: string
+}
+
 export type Booking = {
   id: string
   user_id: string

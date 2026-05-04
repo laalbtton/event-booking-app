@@ -10,7 +10,7 @@ type PushPayload = {
   }
 }
 
-type PushCategory = 'booking_updates' | 'event_reminders' | 'new_events'
+type PushCategory = 'booking_updates' | 'event_reminders' | 'new_events' | 'post_event_reviews'
 
 export type SendPushOptions = {
   /** When true, sends to all active subscriptions regardless of user category toggles (for super-admin broadcasts). */
@@ -64,7 +64,9 @@ export async function sendPushToUser(
   if (!bypass) {
     const { data: prefs } = await supabase
       .from('push_notification_prefs')
-      .select('booking_updates_enabled, event_reminders_enabled, new_events_enabled')
+      .select(
+        'booking_updates_enabled, event_reminders_enabled, new_events_enabled, post_event_reviews_enabled',
+      )
       .eq('user_id', userId)
       .maybeSingle()
 
@@ -72,6 +74,7 @@ export async function sendPushToUser(
       booking_updates: prefs?.booking_updates_enabled !== false,
       event_reminders: prefs?.event_reminders_enabled !== false,
       new_events: prefs?.new_events_enabled !== false,
+      post_event_reviews: prefs?.post_event_reviews_enabled !== false,
     }
 
     if (!categoryEnabledMap[category]) {

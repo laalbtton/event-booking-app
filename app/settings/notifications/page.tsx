@@ -21,6 +21,7 @@ type PushNotificationPrefs = {
   booking_updates_enabled?: boolean
   event_reminders_enabled?: boolean
   new_events_enabled?: boolean
+  post_event_reviews_enabled?: boolean
 }
 
 type ThursdaySocapScenario = 'registration_open' | 'seventy_five_full'
@@ -60,7 +61,7 @@ export default function SettingsNotificationsPage() {
 
       const { data: pushPrefsData } = await supabase
         .from('push_notification_prefs')
-        .select('user_id, preprompt_dismissed_at, preprompt_dismissed_until, native_permission_denied_at, subscribed_at, booking_updates_enabled, event_reminders_enabled, new_events_enabled')
+        .select('user_id, preprompt_dismissed_at, preprompt_dismissed_until, native_permission_denied_at, subscribed_at, booking_updates_enabled, event_reminders_enabled, new_events_enabled, post_event_reviews_enabled')
         .eq('user_id', userId)
         .maybeSingle()
       setPushPrefs((pushPrefsData || null) as PushNotificationPrefs | null)
@@ -92,6 +93,7 @@ export default function SettingsNotificationsPage() {
             booking_updates_enabled: pushPrefs?.booking_updates_enabled ?? true,
             event_reminders_enabled: pushPrefs?.event_reminders_enabled ?? true,
             new_events_enabled: pushPrefs?.new_events_enabled ?? true,
+            post_event_reviews_enabled: pushPrefs?.post_event_reviews_enabled ?? true,
           },
           { onConflict: 'user_id' }
         )
@@ -104,6 +106,7 @@ export default function SettingsNotificationsPage() {
           booking_updates_enabled: prev?.booking_updates_enabled ?? true,
           event_reminders_enabled: prev?.event_reminders_enabled ?? true,
           new_events_enabled: prev?.new_events_enabled ?? true,
+          post_event_reviews_enabled: prev?.post_event_reviews_enabled ?? true,
         }))
         toast.info('Notifications are blocked in browser settings for this app.')
         return
@@ -120,6 +123,7 @@ export default function SettingsNotificationsPage() {
             booking_updates_enabled: pushPrefs?.booking_updates_enabled ?? true,
             event_reminders_enabled: pushPrefs?.event_reminders_enabled ?? true,
             new_events_enabled: pushPrefs?.new_events_enabled ?? true,
+            post_event_reviews_enabled: pushPrefs?.post_event_reviews_enabled ?? true,
             updated_at: nowIso,
           },
           { onConflict: 'user_id' }
@@ -133,6 +137,7 @@ export default function SettingsNotificationsPage() {
           booking_updates_enabled: pushPrefs?.booking_updates_enabled ?? true,
           event_reminders_enabled: pushPrefs?.event_reminders_enabled ?? true,
           new_events_enabled: pushPrefs?.new_events_enabled ?? true,
+          post_event_reviews_enabled: pushPrefs?.post_event_reviews_enabled ?? true,
         })
         toast.success('Push notifications enabled')
       }
@@ -160,6 +165,7 @@ export default function SettingsNotificationsPage() {
           booking_updates_enabled: pushPrefs?.booking_updates_enabled ?? true,
           event_reminders_enabled: pushPrefs?.event_reminders_enabled ?? true,
           new_events_enabled: pushPrefs?.new_events_enabled ?? true,
+          post_event_reviews_enabled: pushPrefs?.post_event_reviews_enabled ?? true,
           updated_at: nowIso,
         },
         { onConflict: 'user_id' }
@@ -174,6 +180,7 @@ export default function SettingsNotificationsPage() {
         booking_updates_enabled: prev?.booking_updates_enabled ?? true,
         event_reminders_enabled: prev?.event_reminders_enabled ?? true,
         new_events_enabled: prev?.new_events_enabled ?? true,
+        post_event_reviews_enabled: prev?.post_event_reviews_enabled ?? true,
       }))
       toast.success('Push notifications disabled')
     } catch (error: unknown) {
@@ -184,7 +191,11 @@ export default function SettingsNotificationsPage() {
   }
 
   async function updatePushCategory(
-    category: 'booking_updates_enabled' | 'event_reminders_enabled' | 'new_events_enabled',
+    category:
+      | 'booking_updates_enabled'
+      | 'event_reminders_enabled'
+      | 'new_events_enabled'
+      | 'post_event_reviews_enabled',
     enabled: boolean
   ) {
     if (!profile) return
@@ -195,6 +206,7 @@ export default function SettingsNotificationsPage() {
         booking_updates_enabled: pushPrefs?.booking_updates_enabled ?? true,
         event_reminders_enabled: pushPrefs?.event_reminders_enabled ?? true,
         new_events_enabled: pushPrefs?.new_events_enabled ?? true,
+        post_event_reviews_enabled: pushPrefs?.post_event_reviews_enabled ?? true,
         [category]: enabled,
         updated_at: new Date().toISOString(),
       }
@@ -213,6 +225,7 @@ export default function SettingsNotificationsPage() {
         booking_updates_enabled: category === 'booking_updates_enabled' ? enabled : (prev?.booking_updates_enabled ?? true),
         event_reminders_enabled: category === 'event_reminders_enabled' ? enabled : (prev?.event_reminders_enabled ?? true),
         new_events_enabled: category === 'new_events_enabled' ? enabled : (prev?.new_events_enabled ?? true),
+        post_event_reviews_enabled: category === 'post_event_reviews_enabled' ? enabled : (prev?.post_event_reviews_enabled ?? true),
       }))
       toast.success('Notification category updated')
     } catch (error: unknown) {
@@ -354,6 +367,16 @@ export default function SettingsNotificationsPage() {
                   className="h-4 w-4"
                   checked={pushPrefs?.new_events_enabled !== false}
                   onChange={(e) => updatePushCategory('new_events_enabled', e.target.checked)}
+                  disabled={pushActionLoading}
+                />
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span>Post-event ratings prompt</span>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={pushPrefs?.post_event_reviews_enabled !== false}
+                  onChange={(e) => updatePushCategory('post_event_reviews_enabled', e.target.checked)}
                   disabled={pushActionLoading}
                 />
               </div>
