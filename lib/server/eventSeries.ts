@@ -8,6 +8,7 @@
 
 import { getAdminClient } from '@/lib/server/supabaseAdmin'
 import { EASTERN_TZ } from '@/lib/dateUtils'
+import { ensureApprovedCommunityLinksForEvent } from '@/lib/server/ensureEventCommunityLinks'
 export { describeRecurrence } from '@/lib/eventSeriesUtils'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -283,7 +284,21 @@ export async function generateOccurrences(
 
   if (insertErr) throw new Error(`Failed to insert occurrences: ${insertErr.message}`)
 
-  return (inserted ?? []).map((r: { id: string }) => r.id)
+  const ids = (inserted ?? []).map((r: { id: string }) => r.id)
+
+  // Link each new occurrence to the creator's communities (same as the regular event create flow)
+  if (series.created_by && ids.length > 0) {
+    for (const id of ids) {
+      try {
+        await ensureApprovedCommunityLinksForEvent(db, id, series.created_by)
+      } catch (err) {
+        // Non-fatal — community linking failure should not block occurrence creation
+        console.warn(`generateOccurrences: community link failed for event ${id}:`, err)
+      }
+    }
+  }
+
+  return ids
 }
 
 // ─── Core: extend all active series ──────────────────────────────────────────
@@ -371,6 +386,28 @@ export async function extendAllActiveSeries(): Promise<
 
 export type UpdateScope = 'this' | 'this_and_following' | 'all'
 
+// Fields that are unique to each occurrence and must never be bulk-applied.
+// Applying e.g. the same `slug` to multiple rows would hit a unique constraint.
+const PER_OCCURRENCE_FIELDS = new Set([
+  'slug',
+  'date',
+  'end_time',
+  'registration_opens_at',
+  'series_id',
+  'series_occurrence_number',
+  'series_overridden',
+  'created_at',
+  'created_by',
+  'host_user_id',
+])
+
+// Fields that belong on the event_series template rather than individual events.
+const SERIES_TEMPLATE_FIELDS = new Set([
+  'title', 'description', 'venue_id', 'location',
+  'credits_required', 'max_attendees', 'cancellation_hours',
+  'rating', 'theme', 'duration_minutes', 'start_time_local',
+])
+
 /**
  * Apply a patch to occurrences of a series based on the chosen scope.
  *
@@ -388,39 +425,43 @@ export async function applySeriesUpdate(
   const db = getAdminClient()
   if (!db) throw new Error('Missing Supabase admin credentials')
 
-  // Fields that belong on event_series template (not on individual events)
-  const seriesFields = [
-    'title', 'description', 'venue_id', 'location',
-    'credits_required', 'max_attendees', 'cancellation_hours',
-    'rating', 'theme', 'duration_minutes', 'start_time_local',
-  ]
-
   if (scope === 'this') {
+    // For a single-event update, apply the full patch (slug etc. are fine for one event)
     await db
       .from('events')
-      .update({ ...patch, series_overridden: true })
+      .update({ ...patch, series_overridden: true, updated_at: new Date().toISOString() })
       .eq('id', eventId)
     return
   }
 
-  // Build series template patch
+  // Build the series template patch (template fields only)
   const seriesPatch: Record<string, unknown> = {}
-  for (const key of seriesFields) {
-    if (key in patch) seriesPatch[key] = patch[key]
+  for (const key of Object.keys(patch)) {
+    if (SERIES_TEMPLATE_FIELDS.has(key)) seriesPatch[key] = patch[key]
   }
+
+  // Build the bulk event patch — strip per-occurrence fields and series-only fields
+  const bulkEventPatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  for (const key of Object.keys(patch)) {
+    if (!PER_OCCURRENCE_FIELDS.has(key) && !SERIES_TEMPLATE_FIELDS.has(key)) {
+      bulkEventPatch[key] = patch[key]
+    } else if (SERIES_TEMPLATE_FIELDS.has(key) && !PER_OCCURRENCE_FIELDS.has(key)) {
+      // Template fields are safe to copy to individual event rows too (title, description, etc.)
+      bulkEventPatch[key] = patch[key]
+    }
+  }
+  // Remove the series-specific keys that don't exist on events rows
+  delete bulkEventPatch.duration_minutes
+  delete bulkEventPatch.start_time_local
 
   if (scope === 'all') {
     if (Object.keys(seriesPatch).length > 0) {
-      await db.from('event_series').update(seriesPatch).eq('id', seriesId)
+      await db.from('event_series').update({ ...seriesPatch, updated_at: new Date().toISOString() }).eq('id', seriesId)
     }
-    // Update all non-overridden occurrences
-    const eventPatch = { ...patch }
-    delete eventPatch.start_time_local
-    delete eventPatch.duration_minutes
-    if (Object.keys(eventPatch).length > 0) {
+    if (Object.keys(bulkEventPatch).length > 1) { // > 1 because updated_at is always present
       await db
         .from('events')
-        .update(eventPatch)
+        .update(bulkEventPatch)
         .eq('series_id', seriesId)
         .eq('series_overridden', false)
     }
@@ -429,15 +470,12 @@ export async function applySeriesUpdate(
 
   // 'this_and_following'
   if (Object.keys(seriesPatch).length > 0) {
-    await db.from('event_series').update(seriesPatch).eq('id', seriesId)
+    await db.from('event_series').update({ ...seriesPatch, updated_at: new Date().toISOString() }).eq('id', seriesId)
   }
-  const eventPatch = { ...patch }
-  delete eventPatch.start_time_local
-  delete eventPatch.duration_minutes
-  if (Object.keys(eventPatch).length > 0) {
+  if (Object.keys(bulkEventPatch).length > 1) {
     await db
       .from('events')
-      .update(eventPatch)
+      .update(bulkEventPatch)
       .eq('series_id', seriesId)
       .eq('series_overridden', false)
       .gte('series_occurrence_number', occurrenceNumber)
