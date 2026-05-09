@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { appendSlugSuffix, buildEventSlugBase } from '@/lib/seo/slug'
 import { MAX_CAPTION_CHARS } from '@/lib/posterCaption'
 import { toast } from 'sonner'
+import RecurrencePicker, { type RecurrenceConfig } from '@/components/RecurrencePicker'
 
 type Venue = {
   id: string
@@ -71,7 +72,18 @@ export default function EventManagementPage() {
   const [venueRequestAddress, setVenueRequestAddress] = useState('')
   const [venueRequestSubmitting, setVenueRequestSubmitting] = useState(false)
   const [communitySubmissionEnabled, setCommunitySubmissionEnabled] = useState(false)
-  
+
+  // Recurring series state
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [seriesEditScope, setSeriesEditScope] = useState<'this' | 'this_and_following' | 'all'>('this')
+  const [recurrenceConfig, setRecurrenceConfig] = useState<RecurrenceConfig>({
+    recurrence_type: 'weekly',
+    day_of_week: 4, // Thursday default
+    week_of_month: 1,
+    start_time_local: '20:00',
+    horizon_weeks: 12,
+  })
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -545,6 +557,54 @@ export default function EventManagementPage() {
       const endTimeValue = formData.end_time || computeEndTime(formData.date, durationMinutes)
       const endTimeIso = endTimeValue ? new Date(endTimeValue).toISOString() : null
 
+      // ── Recurring series path ───────────────────────────────────────────────
+      if (isRecurring) {
+        if (!recurrenceConfig.start_time_local) {
+          toast.error('Please set a start time for the recurring series')
+          setSubmitting(false)
+          return
+        }
+        const { data: sessionData } = await supabase.auth.getSession()
+        const accessToken = sessionData.session?.access_token
+        if (!accessToken) throw new Error('Not authenticated')
+
+        const res = await fetch('/api/event-series', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            ...recurrenceConfig,
+            title: formData.title,
+            description: formData.description || null,
+            venue_id: formData.venue_id || null,
+            location,
+            credits_required: parseInt(formData.credits_required) || 0,
+            max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
+            cancellation_hours: parseInt(formData.cancellation_hours) || 24,
+            event_type: formData.event_type || 'open_mic',
+            open_mic_type: formData.event_type === 'open_mic' ? (formData.open_mic_type || 'comedy_open_mic') : null,
+            rating: formData.rating || '18+',
+            theme: formData.theme || null,
+            duration_minutes: durationMinutes,
+            start_from: new Date(formData.date).toISOString(),
+          }),
+        })
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}))
+          throw new Error(errBody.error || 'Failed to create recurring series')
+        }
+
+        const { seriesId, eventIds } = await res.json()
+        toast.success(`Recurring series created with ${eventIds?.length ?? 0} upcoming occurrences!`)
+        setShowCreateForm(false)
+        setCreateStep('details')
+        setIsRecurring(false)
+        resetFormData()
+        loadEvents()
+        return
+      }
+      // ── End recurring series path ───────────────────────────────────────────
+
       const isBookedShow = formData.event_type === 'booked_show'
       const isTicketed = formData.tickets_enabled
       const normalizedLanguages = normalizeLanguages()
@@ -973,6 +1033,42 @@ export default function EventManagementPage() {
             ? new Date(formData.registration_opens_at).toISOString() 
             : null,
         updated_at: new Date().toISOString()
+      }
+
+      // If this event belongs to a series, use the scoped API
+      const seriesId = (editingEvent as any).series_id as string | null
+      const occNum = (editingEvent as any).series_occurrence_number as number | null
+
+      if (seriesId && occNum != null) {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const accessToken = sessionData.session?.access_token
+        if (!accessToken) throw new Error('Not authenticated')
+
+        const res = await fetch(`/api/event-series/${seriesId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            eventId: editingEvent.id,
+            occurrenceNumber: occNum,
+            scope: seriesEditScope,
+            patch: eventData,
+          }),
+        })
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}))
+          throw new Error(errBody.error || 'Failed to update series')
+        }
+
+        toast.success(
+          seriesEditScope === 'this'
+            ? 'This occurrence updated.'
+            : seriesEditScope === 'this_and_following'
+            ? 'This and all following occurrences updated.'
+            : 'All occurrences updated.'
+        )
+        setShowEditForm(false)
+        loadEvents()
+        return
       }
 
       const { error } = await supabase
@@ -1817,6 +1913,35 @@ export default function EventManagementPage() {
                   </div>
                 </div>
 
+                {/* Recurring toggle */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="create-recurring"
+                    checked={isRecurring}
+                    onChange={(e) => {
+                      setIsRecurring(e.target.checked)
+                      // Pre-fill day-of-week from the chosen date
+                      if (e.target.checked && formData.date) {
+                        const d = new Date(formData.date)
+                        setRecurrenceConfig((prev) => ({ ...prev, day_of_week: d.getDay() }))
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <label htmlFor="create-recurring" className="text-sm font-medium text-gray-700 cursor-pointer">
+                    Make this a recurring event
+                  </label>
+                </div>
+
+                {isRecurring && (
+                  <RecurrencePicker
+                    value={recurrenceConfig}
+                    onChange={setRecurrenceConfig}
+                    prefillDayOfWeek={formData.date ? new Date(formData.date).getDay() : undefined}
+                  />
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="create-venue">Venue *</Label>
                   <select
@@ -2359,6 +2484,30 @@ export default function EventManagementPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center p-4 z-50 overflow-y-auto">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 my-4 sm:my-8 mt-4 sm:mt-8">
               <h3 className="text-xl font-bold mb-4 text-gray-900">Edit Event</h3>
+
+              {/* Series edit scope selector */}
+              {(editingEvent as any).series_id && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 mb-4 space-y-2">
+                  <p className="text-sm font-medium text-amber-900">This is a recurring event. Apply changes to:</p>
+                  <div className="flex flex-col gap-1.5">
+                    {(['this', 'this_and_following', 'all'] as const).map((scope) => (
+                      <label key={scope} className="flex items-center gap-2 text-sm text-amber-800 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="series-edit-scope"
+                          value={scope}
+                          checked={seriesEditScope === scope}
+                          onChange={() => setSeriesEditScope(scope)}
+                          className="h-4 w-4"
+                        />
+                        {scope === 'this' && 'This occurrence only'}
+                        {scope === 'this_and_following' && 'This and all following occurrences'}
+                        {scope === 'all' && 'All occurrences in the series'}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleUpdateEvent} className="space-y-4">
                 <div>

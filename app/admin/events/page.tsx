@@ -18,6 +18,7 @@ import { QrCode, Link as LinkIcon, Edit, Users, Image as ImageIcon, Trash2 } fro
 import { cn } from '@/lib/utils'
 import { MAX_CAPTION_CHARS } from '@/lib/posterCaption'
 import { toast } from 'sonner'
+import RecurrencePicker, { type RecurrenceConfig } from '@/components/RecurrencePicker'
 
 type Venue = {
   id: string
@@ -51,7 +52,17 @@ export default function AdminEventsPage() {
   const posterInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const [posterJobSummary, setPosterJobSummary] = useState<Record<string, { posted: number; failed: number; pending: number; skipped: number }>>({})
   const [posterPublishMeta, setPosterPublishMeta] = useState<Record<string, { count: number; lastPublishedAt: string | null }>>({})
-  
+
+  // Recurring series state
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [recurrenceConfig, setRecurrenceConfig] = useState<RecurrenceConfig>({
+    recurrence_type: 'weekly',
+    day_of_week: 4,
+    week_of_month: 1,
+    start_time_local: '20:00',
+    horizon_weeks: 12,
+  })
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -362,6 +373,54 @@ export default function AdminEventsPage() {
         data: { session: createSession },
       } = await supabase.auth.getSession()
       const creatorId = createSession?.user?.id ?? null
+
+      // ── Recurring series path ────────────────────────────────────────────────
+      if (isRecurring) {
+        if (!recurrenceConfig.start_time_local) {
+          toast.error('Please set a start time for the recurring series')
+          setSubmitting(false)
+          return
+        }
+        const accessToken = createSession?.access_token
+        if (!accessToken) throw new Error('Not authenticated')
+
+        const res = await fetch('/api/event-series', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            ...recurrenceConfig,
+            title: formData.title,
+            description: formData.description || null,
+            venue_id: formData.venue_id || null,
+            location: formData.venue_id
+              ? (() => { const v = venues.find(x => x.id === formData.venue_id); return v ? `${v.name}, ${v.address}` : '' })()
+              : '',
+            credits_required: parseInt(formData.credits_required) || 0,
+            max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
+            cancellation_hours: parseInt(formData.cancellation_hours) || 24,
+            event_type: formData.event_type || 'open_mic',
+            open_mic_type: formData.event_type === 'open_mic' ? (formData.open_mic_type || 'comedy_open_mic') : null,
+            rating: formData.rating || '18+',
+            theme: formData.theme || null,
+            duration_minutes: durationMinutes,
+            start_from: new Date(formData.date).toISOString(),
+          }),
+        })
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}))
+          throw new Error(errBody.error || 'Failed to create recurring series')
+        }
+
+        const { eventIds } = await res.json()
+        toast.success(`Recurring series created with ${eventIds?.length ?? 0} upcoming occurrences!`)
+        setShowCreateForm(false)
+        setCreateStep('details')
+        setIsRecurring(false)
+        loadEvents()
+        return
+      }
+      // ── End recurring series path ─────────────────────────────────────────────
 
       const isBookedShow = formData.event_type === 'booked_show'
       const isTicketed = formData.tickets_enabled
@@ -1921,6 +1980,34 @@ export default function AdminEventsPage() {
                 />
               </div>
             </div>
+
+            {/* Recurring toggle */}
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="admin-create-recurring"
+                checked={isRecurring}
+                onChange={(e) => {
+                  setIsRecurring(e.target.checked)
+                  if (e.target.checked && formData.date) {
+                    const d = new Date(formData.date)
+                    setRecurrenceConfig((prev) => ({ ...prev, day_of_week: d.getDay() }))
+                  }
+                }}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <label htmlFor="admin-create-recurring" className="text-sm font-medium cursor-pointer">
+                Make this a recurring event
+              </label>
+            </div>
+
+            {isRecurring && (
+              <RecurrencePicker
+                value={recurrenceConfig}
+                onChange={setRecurrenceConfig}
+                prefillDayOfWeek={formData.date ? new Date(formData.date).getDay() : undefined}
+              />
+            )}
 
             <div>
               <Label htmlFor="create-venue">Venue *</Label>

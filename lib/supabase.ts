@@ -94,6 +94,38 @@ export type Event = {
   updated_at: string
   chat_enabled?: boolean
   chat_mode?: 'open' | 'host_only'
+  // Recurring series fields
+  series_id?: string | null
+  series_occurrence_number?: number | null
+  series_overridden?: boolean
+}
+
+export type RecurrenceType = 'weekly' | 'biweekly' | 'monthly_weekday'
+
+export type EventSeries = {
+  id: string
+  recurrence_type: RecurrenceType
+  day_of_week: number | null       // 0 (Sun) – 6 (Sat)
+  week_of_month: number | null     // 1-4, or -1 for last; only for monthly_weekday
+  start_time_local: string         // 'HH:MM' Eastern wall-clock time
+  duration_minutes: number | null
+  horizon_weeks: number
+  status: 'active' | 'paused' | 'ended'
+  title: string
+  description: string | null
+  venue_id: string | null
+  location: string | null
+  credits_required: number
+  max_attendees: number | null
+  cancellation_hours: number
+  host_user_id: string | null
+  created_by: string | null
+  event_type: string
+  open_mic_type: string | null
+  rating: string | null
+  theme: string | null
+  created_at: string
+  updated_at: string
 }
 
 export type EventReview = {

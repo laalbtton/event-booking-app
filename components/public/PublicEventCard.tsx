@@ -107,6 +107,11 @@ export function PublicEventCard({ event, cityFilter }: Props) {
               Sold Out
             </span>
           )}
+          {event.seriesId && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-400">
+              Recurring
+            </span>
+          )}
         </div>
 
         {/* Title */}

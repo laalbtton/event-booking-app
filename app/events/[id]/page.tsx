@@ -131,6 +131,7 @@ export default function EventDetailsPage() {
   const [ticketQty, setTicketQty] = useState(1)
   const [ticketLoading, setTicketLoading] = useState(false)
   const [ticketSuccess, setTicketSuccess] = useState(false)
+  const [recurrenceDescription, setRecurrenceDescription] = useState<string | null>(null)
 
 
   function copyPublicLink() {
@@ -420,6 +421,20 @@ export default function EventDetailsPage() {
       const resolvedEventId = eventData.id as string
       if ((eventData as any).slug && eventId !== (eventData as any).slug) {
         router.replace(`/events/${(eventData as any).slug}`)
+      }
+
+      // Load recurrence description if this is part of a series
+      const seriesId = (eventData as any).series_id as string | null
+      if (seriesId) {
+        const { data: seriesData } = await supabase
+          .from('event_series')
+          .select('recurrence_type, day_of_week, week_of_month, start_time_local')
+          .eq('id', seriesId)
+          .maybeSingle()
+        if (seriesData) {
+          const { describeRecurrence } = await import('@/lib/eventSeriesUtils')
+          setRecurrenceDescription(describeRecurrence(seriesData as any))
+        }
       }
 
       // Check if current user is the host / creator
@@ -1023,6 +1038,13 @@ export default function EventDetailsPage() {
                   <span className="mr-2">📅</span>
                   <span>{formatDateTime(event.date)}</span>
                 </div>
+
+                {recurrenceDescription && (
+                  <div className="flex items-center text-sm md:text-base text-blue-700 dark:text-blue-400">
+                    <span className="mr-2">🔁</span>
+                    <span>{recurrenceDescription}</span>
+                  </div>
+                )}
 
                 <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                   <span className="mr-2">📍</span>

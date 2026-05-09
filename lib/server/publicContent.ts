@@ -1,5 +1,6 @@
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
 import type { ProfileRatingAggregates, ProfileReviewSnippet } from '@/lib/supabase'
+import { describeRecurrence } from '@/lib/eventSeriesUtils'
 
 type EventRow = {
   id: string
@@ -21,6 +22,7 @@ type EventRow = {
   poster_url: string | null
   event_type: string | null
   open_mic_type: string | null
+  series_id?: string | null
 }
 
 type VenueRow = {
@@ -107,6 +109,8 @@ export type PublicEventDetails = {
   communityName: string | null
   communityId: string | null
   communitySlug: string | null
+  seriesId: string | null
+  recurrenceDescription: string | null
 }
 
 export type PublicPerformerProfile = {
@@ -179,7 +183,7 @@ function inferCityRegionFromLocation(location: string | null): { city: string; r
 }
 
 const EVENT_SELECT =
-  'id, slug, title, description, date, end_time, status, tickets_enabled, external_event, external_ticket_url, credits_required, location, venue_id, host_user_id, created_at, updated_at, poster_url, event_type, open_mic_type'
+  'id, slug, title, description, date, end_time, status, tickets_enabled, external_event, external_ticket_url, credits_required, location, venue_id, host_user_id, created_at, updated_at, poster_url, event_type, open_mic_type, series_id'
 
 export async function getPublicEventByIdentifier(identifier: string): Promise<PublicEventDetails | null> {
   const supabase = getPublicServerClient()
@@ -198,6 +202,7 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
     ticketRes,
     artTypesRes,
     primaryCommunityRes,
+    seriesRes,
   ] = await Promise.all([
     eventData.venue_id
       ? supabase
@@ -250,6 +255,13 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
       .eq('status', 'approved')
       .limit(1)
       .maybeSingle(),
+    eventData.series_id
+      ? supabase
+          .from('event_series')
+          .select('recurrence_type, day_of_week, week_of_month, start_time_local')
+          .eq('id', eventData.series_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ])
 
   const inferred = inferCityRegionFromLocation(eventData.location)
@@ -321,6 +333,10 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
     communityName: communityRow?.name || null,
     communityId: communityRow?.id || null,
     communitySlug: communityRow?.slug || null,
+    seriesId: eventData.series_id || null,
+    recurrenceDescription: seriesRes?.data
+      ? describeRecurrence(seriesRes.data as any)
+      : null,
   }
 }
 
@@ -464,6 +480,8 @@ export async function listPublicEvents(limit = 100): Promise<PublicEventDetails[
       communityName: communityRow?.name || null,
       communityId: communityRow?.id || null,
       communitySlug: communityRow?.slug || null,
+      seriesId: (eventData.series_id as string | null) || null,
+      recurrenceDescription: null, // loaded on detail page only
     } satisfies PublicEventDetails
   })
 }
@@ -569,6 +587,8 @@ export async function fetchEventsByIds(eventIds: string[]): Promise<PublicEventD
       openMicType: (eventData.open_mic_type as string | null) || null,
       communityName: communityRow?.name || null, communityId: communityRow?.id || null,
       communitySlug: communityRow?.slug || null,
+      seriesId: (eventData.series_id as string | null) || null,
+      recurrenceDescription: null,
     } satisfies PublicEventDetails
   })
 }

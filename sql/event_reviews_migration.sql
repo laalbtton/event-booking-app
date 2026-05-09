@@ -1,5 +1,10 @@
 -- Post-event reviews: one row per (event, reviewer) with three rating dimensions
 -- and optional text. Snapshots of host / creator on submit for correct rollups.
+--
+-- IMPORTANT: Run this entire file in one execution (full script paste, Run).
+-- If your client runs one statement at a time (splitting on `;`), PL/pgSQL
+-- blocks can break. This trigger avoids `SELECT ... INTO` so stray fragments
+-- are less likely to be misparsed as plain SQL.
 
 -- Push prefs: opt-out for post-event review prompts
 ALTER TABLE public.push_notification_prefs
@@ -54,24 +59,35 @@ LANGUAGE plpgsql
 SET search_path = public
 AS $$
 DECLARE
-  ev_end timestamptz;
+  v_event_ends_at timestamptz;
   v_host uuid;
   v_created uuid;
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    SELECT
-      coalesce(e.end_time, e.date::timestamptz),
-      e.host_user_id,
-      e.created_by
-    INTO ev_end, v_host, v_created
-    FROM public.events e
-    WHERE e.id = NEW.event_id;
+    v_event_ends_at := (
+      SELECT coalesce(e.end_time, e.date::timestamptz)
+      FROM public.events e
+      WHERE e.id = NEW.event_id
+      LIMIT 1
+    );
+    v_host := (
+      SELECT e.host_user_id
+      FROM public.events e
+      WHERE e.id = NEW.event_id
+      LIMIT 1
+    );
+    v_created := (
+      SELECT e.created_by
+      FROM public.events e
+      WHERE e.id = NEW.event_id
+      LIMIT 1
+    );
 
-    IF ev_end IS NULL THEN
+    IF v_event_ends_at IS NULL THEN
       RAISE EXCEPTION 'Event not found';
     END IF;
 
-    IF ev_end >= now() THEN
+    IF v_event_ends_at >= now() THEN
       RAISE EXCEPTION 'Event has not ended yet';
     END IF;
 
@@ -84,14 +100,19 @@ BEGIN
     IF NEW.event_id IS DISTINCT FROM OLD.event_id THEN
       RAISE EXCEPTION 'Cannot change event on a review';
     END IF;
+    v_host := (
+      SELECT e.host_user_id
+      FROM public.events e
+      WHERE e.id = NEW.event_id
+      LIMIT 1
+    );
+    v_created := (
+      SELECT e.created_by
+      FROM public.events e
+      WHERE e.id = NEW.event_id
+      LIMIT 1
+    );
   END IF;
-
-  SELECT
-    e.host_user_id,
-    e.created_by
-  INTO v_host, v_created
-  FROM public.events e
-  WHERE e.id = NEW.event_id;
 
   IF v_host IS NULL AND NEW.host_rating IS NOT NULL THEN
     RAISE EXCEPTION 'No host to rate for this event';
@@ -159,7 +180,7 @@ CREATE POLICY "event_reviews_insert_participant"
     AND EXISTS (
       SELECT 1
       FROM public.bookings b
-      WHERE b.event_id = event_reviews.event_id
+      WHERE b.event_id = event_id
         AND b.user_id = auth.uid()
         AND b.status = 'confirmed'
     )
@@ -247,7 +268,7 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  WITH rows AS (
+  WITH snippet_rows AS (
     SELECT
       er.comment,
       e.title AS event_title,
@@ -272,7 +293,7 @@ AS $$
           'createdAt', r.created_at
         ) ORDER BY r.created_at DESC
      )
-     FROM rows r
+     FROM snippet_rows r
     ),
     '[]'::jsonb
   );

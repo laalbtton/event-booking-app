@@ -3,6 +3,7 @@ import { inngest } from '@/lib/inngest'
 import { postEventFeedbackFunction } from '@/inngest/functions/postEventFeedback'
 import { weeklyDigestFunction } from '@/inngest/functions/weeklyDigest'
 import { preEventReminderFunction } from '@/inngest/functions/preEventReminder'
+import { extendEventSeriesFunction } from '@/inngest/functions/extendEventSeries'
 
 /**
  * Inngest serve endpoint.
@@ -10,7 +11,7 @@ import { preEventReminderFunction } from '@/inngest/functions/preEventReminder'
  * URL: https://laalbutton.com/api/inngest
  *
  * After deploying, go to Inngest dashboard → Apps and sync this URL so
- * Inngest picks up the new functions (weeklyDigest, preEventReminder).
+ * Inngest picks up the new functions.
  */
 export const { GET, POST, PUT } = serve({
   client: inngest,
@@ -18,5 +19,6 @@ export const { GET, POST, PUT } = serve({
     postEventFeedbackFunction,
     weeklyDigestFunction,
     preEventReminderFunction,
+    extendEventSeriesFunction,
   ],
 })
