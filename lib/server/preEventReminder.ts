@@ -20,7 +20,7 @@ function getAdminSupabase() {
 }
 
 function getSiteUrl() {
-  return process.env.NEXT_PUBLIC_SITE_URL || 'https://laalbutton.com'
+  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.laalbutton.com').replace(/\/$/, '')
 }
 
 export type ReminderResult = {

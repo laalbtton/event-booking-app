@@ -21,7 +21,9 @@ function getAdminSupabase() {
 }
 
 function getSiteUrl() {
-  return process.env.NEXT_PUBLIC_SITE_URL || 'https://laalbutton.com'
+  // Strip trailing slash so paths like /events/abc are never doubled to //events/abc.
+  // Use www to avoid non-www → www redirect that may drop the path.
+  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.laalbutton.com').replace(/\/$/, '')
 }
 
 /** Stable message fragment for deduplication queries */

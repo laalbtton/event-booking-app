@@ -81,7 +81,7 @@ export async function GET() {
             continue
           }
 
-          const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/events/${event.id}`
+          const eventUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.laalbutton.com').replace(/\/$/, '')}/events/${event.id}`
 
           // Create in-app notification
           await createNotification(

@@ -232,7 +232,7 @@ async function handleTicketPurchase(session: Stripe.Checkout.Session): Promise<N
     if (eventRow) {
       const venueName = (eventRow.venues as any)?.name as string | null
       const eventDate = eventRow.date ? formatDateTimeEastern(eventRow.date) : 'TBA'
-      const origin = process.env.NEXT_PUBLIC_APP_URL || 'https://laalbutton.com'
+      const origin = (process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.laalbutton.com').replace(/\/$/, '')
       const html = getTicketPurchaseEmail({
         buyerName: buyerName || 'there',
         eventTitle: eventRow.title as string,

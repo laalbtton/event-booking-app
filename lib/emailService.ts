@@ -52,7 +52,7 @@ export async function sendBookingConfirmationEmail(
     }
 
     const event = booking.events as any
-    const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/events/${eventId}`
+    const eventUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.laalbutton.com').replace(/\/$/, '')}/events/${eventId}`
 
     const html = getBookingConfirmationEmail({
       userName: profile.full_name || 'there',
@@ -107,7 +107,7 @@ export async function sendWaitlistPromotionEmail(
       return false
     }
 
-    const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/events/${eventId}`
+    const eventUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.laalbutton.com').replace(/\/$/, '')}/events/${eventId}`
 
     const html = getWaitlistPromotionEmail({
       userName: profile.full_name || 'there',
@@ -205,7 +205,7 @@ export async function sendEventCancelledEmail(
       return false
     }
 
-    const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/events/${eventId}`
+    const eventUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.laalbutton.com').replace(/\/$/, '')}/events/${eventId}`
 
     const html = getEventCancelledEmail({
       userName: profile.full_name || 'there',
@@ -259,7 +259,7 @@ export async function sendWaitlistPositionEmail(
       return false
     }
 
-    const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/events/${eventId}`
+    const eventUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.laalbutton.com').replace(/\/$/, '')}/events/${eventId}`
 
     const html = getWaitlistPositionEmail({
       userName: profile.full_name || 'there',
@@ -326,7 +326,7 @@ export async function sendEventReminderEmail(
     }
 
     const event = booking.events as any
-    const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.laalbutton.com'}/events/${eventId}`
+    const eventUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.laalbutton.com').replace(/\/$/, '')}/events/${eventId}`
 
     const html = getEventReminderEmail({
       userName: profile.full_name || 'there',
