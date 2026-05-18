@@ -1147,17 +1147,31 @@ export default function AttendancePage() {
   }
 
   async function setHost(userId: string | null) {
+    if (!userId) return
     setUpdating('host')
     try {
       const previousHostId = event?.host_user_id ?? null
-      const { error } = await supabase
-        .from('events')
-        .update({ host_user_id: userId })
-        .eq('id', resolvedId)
 
-      if (error) throw error
+      // Use the API route (service-role key) so co-admins can change the host
+      // without being blocked by the events table RLS UPDATE policy.
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error('Not authenticated')
 
-      if (userId && userId !== previousHostId) {
+      const res = await fetch(`/api/events/${resolvedId}/change-host`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ newHostUserId: userId }),
+      })
+
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((result as { error?: string }).error || 'Failed to change host')
+
+      // Send in-app notifications only after the DB change has been confirmed.
+      if (userId !== previousHostId) {
         await createNotification(
           userId,
           'general',
@@ -1182,7 +1196,7 @@ export default function AttendancePage() {
       await loadData((await supabase.auth.getUser()).data.user!.id)
     } catch (error: any) {
       console.error('Error setting host:', error)
-      alert('Error setting host: ' + error.message)
+      toast.error(error.message || 'Error setting host')
     } finally {
       setUpdating(null)
     }

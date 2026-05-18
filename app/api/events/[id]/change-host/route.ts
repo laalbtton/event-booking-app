@@ -79,6 +79,22 @@ export async function PATCH(
       return NextResponse.json({ error: 'New host user not found' }, { status: 404 })
     }
 
+    // Record whether the old host already had a confirmed booking BEFORE the
+    // host change.  We use this below to guard against any DB-level trigger
+    // that might auto-insert a booking for the previous host when
+    // host_user_id changes.
+    const previousHostId = event.host_user_id
+    let oldHostHadBookingBefore = false
+    if (previousHostId && previousHostId !== newHostUserId) {
+      const { count } = await supabase
+        .from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', eventId)
+        .eq('user_id', previousHostId)
+        .in('status', ['confirmed', 'waitlist'])
+      oldHostHadBookingBefore = (count ?? 0) > 0
+    }
+
     const { error: updateError } = await supabase
       .from('events')
       .update({
@@ -89,6 +105,25 @@ export async function PATCH(
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    // If the old host had no booking before the change, remove any booking
+    // that might have been auto-created for them by a DB trigger so they
+    // don't incorrectly appear in the attendees list.
+    if (previousHostId && previousHostId !== newHostUserId && !oldHostHadBookingBefore) {
+      const { data: phantomBookings } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('user_id', previousHostId)
+        .in('status', ['confirmed', 'waitlist'])
+
+      if (phantomBookings && phantomBookings.length > 0) {
+        await supabase
+          .from('bookings')
+          .delete()
+          .in('id', phantomBookings.map((b: { id: string }) => b.id))
+      }
     }
 
     return NextResponse.json({
