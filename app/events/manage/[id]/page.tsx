@@ -31,6 +31,7 @@ import {
   X,
   Users,
   ChevronLeft,
+  UserRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MAX_CAPTION_CHARS } from '@/lib/posterCaption'
@@ -74,6 +75,17 @@ export default function EventManageDetailPage() {
   const [posterUploadingId, setPosterUploadingId] = useState<string | null>(null)
   const [posterCaptionLoadingId, setPosterCaptionLoadingId] = useState<string | null>(null)
   const [descriptionExpanded, setDescriptionExpanded] = useState(false)
+
+  // Permissions and host-change state
+  const [canManage, setCanManage] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [hostName, setHostName] = useState<string | null>(null)
+  const [communityMembersForPicker, setCommunityMembersForPicker] = useState<
+    { id: string; full_name: string | null }[]
+  >([])
+  const [showChangeHostModal, setShowChangeHostModal] = useState(false)
+  const [selectedNewHostId, setSelectedNewHostId] = useState('')
+  const [changingHost, setChangingHost] = useState(false)
 
   const [posterCaptionDraft, setPosterCaptionDraft] = useState<{
     eventId: string
@@ -126,13 +138,32 @@ export default function EventManageDetailPage() {
         return
       }
 
-      if (profile.role === 'event_creator' && ev.created_by !== user.id) {
-        toast.error('You can only view your own events')
+      // Ask the server (service-role key, no RLS blind-spots) whether this
+      // user may manage the event and get the pre-loaded data we need.
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+
+      if (!accessToken) {
+        router.push('/login')
+        return
+      }
+
+      const permRes = await fetch(`/api/events/${id}/manage-permission`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      const permData = await permRes.json().catch(() => ({}))
+
+      if (!permData.canManage) {
+        toast.error('You do not have permission to manage this event')
         router.push('/events/manage')
         return
       }
 
+      setCurrentUserId(user.id)
+      setCanManage(true)
       setEvent(ev as Event)
+      setHostName(permData.hostName ?? null)
+      setCommunityMembersForPicker(permData.communityMembers ?? [])
 
       const { data: jobs } = await supabase
         .from('social_post_jobs')
@@ -163,6 +194,36 @@ export default function EventManageDetailPage() {
   }
 
   const isUpcoming = event ? new Date(event.date) >= new Date() : false
+
+  async function handleChangeHost() {
+    if (!event || !selectedNewHostId) return
+    setChangingHost(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const res = await fetch(`/api/events/${event.id}/change-host`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ newHostUserId: selectedNewHostId }),
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(result.error || 'Failed to change host')
+
+      setHostName(result.newHostName ?? null)
+      setEvent((prev) => prev ? { ...prev, host_user_id: selectedNewHostId } as Event : prev)
+      setShowChangeHostModal(false)
+      setSelectedNewHostId('')
+      toast.success('Host updated successfully')
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to change host')
+    } finally {
+      setChangingHost(false)
+    }
+  }
 
   function closePosterCaptionModal() {
     setPosterCaptionDraft((prev) => {
@@ -407,6 +468,10 @@ export default function EventManageDetailPage() {
             </div>
             <div className="space-y-1.5 border-t pt-3">
               <p>
+                <span className="font-medium text-foreground">Host:</span>{' '}
+                {hostName ?? '—'}
+              </p>
+              <p>
                 <span className="font-medium text-foreground">When:</span> {formatDateTime(event.date)}
               </p>
               <p>
@@ -562,6 +627,20 @@ export default function EventManageDetailPage() {
               <Copy className="h-4 w-4" />
               Duplicate event
             </Button>
+            {canManage && (
+              <Button
+                className="justify-start gap-2"
+                variant="outline"
+                type="button"
+                onClick={() => {
+                  setSelectedNewHostId((event as any).host_user_id ?? '')
+                  setShowChangeHostModal(true)
+                }}
+              >
+                <UserRound className="h-4 w-4" />
+                Change host
+              </Button>
+            )}
             {isUpcoming && event.status !== 'cancelled' && (
               <Button
                 className="justify-start gap-2 text-destructive"
@@ -576,6 +655,67 @@ export default function EventManageDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Change Host Dialog ─────────────────────────────────────────────── */}
+      <Dialog open={showChangeHostModal} onOpenChange={setShowChangeHostModal}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Change host</DialogTitle>
+            <DialogDescription>
+              Select a new host for this event. The host is shown on the public event page.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Current host: <span className="font-medium text-foreground">{hostName ?? '—'}</span>
+            </p>
+            {communityMembersForPicker.length > 0 ? (
+              <div className="space-y-1">
+                <Label htmlFor="new-host-select">New host</Label>
+                <select
+                  id="new-host-select"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={selectedNewHostId}
+                  onChange={(e) => setSelectedNewHostId(e.target.value)}
+                >
+                  <option value="">— Select a member —</option>
+                  {communityMembersForPicker.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.full_name ?? m.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <Label htmlFor="new-host-id">New host user ID</Label>
+                <input
+                  id="new-host-id"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  placeholder="Paste the user's ID"
+                  value={selectedNewHostId}
+                  onChange={(e) => setSelectedNewHostId(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowChangeHostModal(false)}
+              disabled={changingHost}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleChangeHost()}
+              disabled={changingHost || !selectedNewHostId}
+            >
+              {changingHost ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!posterCaptionDraft}

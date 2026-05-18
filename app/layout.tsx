@@ -8,6 +8,7 @@ import { GlobalAlertsProvider } from '@/components/providers/global-alerts-provi
 import { AuthBootstrapProvider } from '@/components/providers/auth-bootstrap-provider'
 import { InstagramUsernamePromptProvider } from '@/components/providers/instagram-username-prompt-provider'
 import { PushServiceWorkerProvider } from '@/components/providers/push-service-worker-provider'
+import { CapacitorProvider } from '@/components/providers/capacitor-provider'
 import { InstallBonusProvider } from '@/components/providers/install-bonus-provider'
 import { ThemeProvider } from '@/components/providers/theme-provider'
 import AppNavigationShell from '@/components/AppNavigationShell'
@@ -73,6 +74,7 @@ export default function RootLayout({
           <AuthBootstrapProvider>
             <InstagramUsernamePromptProvider>
             <PushServiceWorkerProvider />
+            <CapacitorProvider />
             <InstallBonusProvider />
             <GlobalAlertsProvider />
             {/* Main content area */}

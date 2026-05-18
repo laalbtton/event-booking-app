@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       .upsert(
         {
           user_id: user.id,
+          platform: 'web',
           endpoint,
           p256dh,
           auth,

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "499962783549",
+    "project_id": "onemicstand-1829b",
+    "storage_bucket": "onemicstand-1829b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:499962783549:android:fdf82b47d9bdf4fa77c754",
+        "android_client_info": {
+          "package_name": "com.laalbutton.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfIkvRawdlbBh86VM2g-HJocUF99cKh6o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

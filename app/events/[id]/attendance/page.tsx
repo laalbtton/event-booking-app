@@ -502,8 +502,8 @@ export default function AttendancePage() {
         return
       }
 
-      // Only event creators and admins can manage host assignments
-      setCanManageHost(isEventCreator || isAdmin)
+      // Creators, admins, current host, and community co-admins can manage host assignments
+      setCanManageHost(isEventCreator || isAdmin || isHost || canAccessViaCommunity)
 
       setEvent(eventData)
       setChatEnabled(eventData.chat_enabled ?? false)

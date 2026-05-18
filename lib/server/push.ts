@@ -1,11 +1,13 @@
 import webpush, { type PushSubscription } from 'web-push'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { sendFcmToSubscription } from './fcmPush'
 
 type PushPayload = {
   title: string
   body: string
   data?: {
     url?: string
+    route?: string
     [key: string]: unknown
   }
 }
@@ -17,10 +19,10 @@ export type SendPushOptions = {
   bypassCategoryPrefs?: boolean
 }
 
-let configured = false
+let vapidConfigured = false
 
 function ensureWebPushConfigured() {
-  if (configured) return
+  if (vapidConfigured) return
 
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
   const privateKey = process.env.VAPID_PRIVATE_KEY
@@ -36,10 +38,10 @@ function ensureWebPushConfigured() {
   }
 
   webpush.setVapidDetails(subject, publicKey, privateKey)
-  configured = true
+  vapidConfigured = true
 }
 
-function getSubscriptionFromRow(row: { endpoint: string; p256dh: string; auth: string }): PushSubscription {
+function getWebPushSubscription(row: { endpoint: string; p256dh: string; auth: string }): PushSubscription {
   return {
     endpoint: row.endpoint,
     expirationTime: null,
@@ -50,6 +52,14 @@ function getSubscriptionFromRow(row: { endpoint: string; p256dh: string; auth: s
   }
 }
 
+/** Build the FCM data payload from the push payload. Values must be strings. */
+function buildFcmData(payload: PushPayload): Record<string, string> {
+  const data: Record<string, string> = {}
+  if (payload.data?.url) data.url = payload.data.url
+  if (payload.data?.route) data.route = payload.data.route
+  return data
+}
+
 export async function sendPushToUser(
   supabase: SupabaseClient,
   userId: string,
@@ -57,8 +67,6 @@ export async function sendPushToUser(
   category: PushCategory = 'booking_updates',
   options?: SendPushOptions
 ) {
-  ensureWebPushConfigured()
-
   const bypass = options?.bypassCategoryPrefs === true
 
   if (!bypass) {
@@ -84,7 +92,7 @@ export async function sendPushToUser(
 
   const { data: subscriptions, error } = await supabase
     .from('push_subscriptions')
-    .select('id, endpoint, p256dh, auth')
+    .select('id, endpoint, p256dh, auth, platform, fcm_token')
     .eq('user_id', userId)
     .eq('is_active', true)
 
@@ -97,23 +105,43 @@ export async function sendPushToUser(
   let failed = 0
 
   for (const row of subscriptions) {
-    try {
-      await webpush.sendNotification(getSubscriptionFromRow(row), JSON.stringify(payload))
-      sent += 1
-    } catch (error: unknown) {
-      failed += 1
-      const statusCode =
-        typeof error === 'object' &&
-        error !== null &&
-        'statusCode' in error &&
-        typeof (error as { statusCode?: unknown }).statusCode === 'number'
-          ? (error as { statusCode: number }).statusCode
-          : 0
-      if (statusCode === 404 || statusCode === 410) {
-        await supabase
-          .from('push_subscriptions')
-          .update({ is_active: false, updated_at: new Date().toISOString() })
-          .eq('id', row.id)
+    const platform = row.platform ?? 'web'
+
+    if (platform === 'android' || platform === 'ios') {
+      if (!row.fcm_token) {
+        failed += 1
+        continue
+      }
+      const result = await sendFcmToSubscription(supabase, row.id, row.fcm_token, {
+        title: payload.title,
+        body: payload.body,
+        data: buildFcmData(payload),
+      })
+      result.sent ? (sent += 1) : (failed += 1)
+    } else {
+      // Web push via VAPID
+      try {
+        ensureWebPushConfigured()
+        await webpush.sendNotification(
+          getWebPushSubscription(row as { endpoint: string; p256dh: string; auth: string }),
+          JSON.stringify(payload)
+        )
+        sent += 1
+      } catch (err: unknown) {
+        failed += 1
+        const statusCode =
+          typeof err === 'object' &&
+          err !== null &&
+          'statusCode' in err &&
+          typeof (err as { statusCode?: unknown }).statusCode === 'number'
+            ? (err as { statusCode: number }).statusCode
+            : 0
+        if (statusCode === 404 || statusCode === 410) {
+          await supabase
+            .from('push_subscriptions')
+            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .eq('id', row.id)
+        }
       }
     }
   }
@@ -127,8 +155,6 @@ export async function sendPushToAllUsers(
   category: PushCategory = 'new_events',
   options?: SendPushOptions
 ) {
-  ensureWebPushConfigured()
-
   const pageSize = 500
   let offset = 0
   let totalSent = 0
@@ -161,4 +187,3 @@ export async function sendPushToAllUsers(
     skippedUsers: totalSkipped,
   }
 }
-

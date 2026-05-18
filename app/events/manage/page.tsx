@@ -348,17 +348,68 @@ export default function EventManagementPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    // Event creators can only see their own events, admins see all
-    let query = supabase
-      .from('events')
-      .select('*, venue_id')
-      .order('date', { ascending: true })
+    let data: any[] | null = null
+    let error: any = null
 
-    if (userRole === 'event_creator') {
-      query = query.eq('created_by', user.id)
+    if (userRole === 'admin') {
+      // Platform admins see all events.
+      const result = await supabase
+        .from('events')
+        .select('*, venue_id')
+        .order('date', { ascending: true })
+      data = result.data
+      error = result.error
+    } else {
+      // For event_creator (and co-admins who have that profile role):
+      // show own events + events from communities where they are co_admin/admin.
+      const ownEventsResult = await supabase
+        .from('events')
+        .select('*, venue_id')
+        .eq('created_by', user.id)
+        .order('date', { ascending: true })
+
+      const ownEvents: any[] = ownEventsResult.data ?? []
+
+      // Find communities where this user is co_admin or admin.
+      const { data: adminMemberships } = await supabase
+        .from('community_members')
+        .select('community_id')
+        .eq('user_id', user.id)
+        .in('role', ['admin', 'co_admin'])
+
+      const adminCommunityIds = (adminMemberships ?? []).map((m: any) => m.community_id as string)
+
+      let communityEvents: any[] = []
+      if (adminCommunityIds.length > 0) {
+        const { data: links } = await supabase
+          .from('event_communities')
+          .select('event_id')
+          .in('community_id', adminCommunityIds)
+          .in('status', ['approved', 'pending'])
+
+        const communityEventIds = [...new Set((links ?? []).map((l: any) => l.event_id as string))]
+
+        // Remove IDs already in ownEvents to avoid duplicates.
+        const ownIds = new Set(ownEvents.map((e: any) => e.id as string))
+        const extraIds = communityEventIds.filter((eid) => !ownIds.has(eid))
+
+        if (extraIds.length > 0) {
+          const { data: extraEvents } = await supabase
+            .from('events')
+            .select('*, venue_id')
+            .in('id', extraIds)
+            .order('date', { ascending: true })
+          communityEvents = extraEvents ?? []
+        }
+      }
+
+      // Merge and sort by date.
+      const merged = [...ownEvents, ...communityEvents].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      )
+      data = merged
+      error = ownEventsResult.error
     }
-
-    const { data, error } = await query
 
     if (!error && data) {
       setEvents(data)

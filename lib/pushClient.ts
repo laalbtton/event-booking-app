@@ -39,10 +39,34 @@ async function getServiceWorkerRegistration() {
   return navigator.serviceWorker.register('/sw.js')
 }
 
+/**
+ * Subscribe the current user to push notifications.
+ *
+ * On a native Capacitor build the function delegates to FCM registration via
+ * the @capacitor/push-notifications plugin.  The actual token upload is handled
+ * by the CapacitorProvider which listens for the 'registration' event — this
+ * function only requests permission and calls register() to trigger that flow.
+ *
+ * On the web the existing VAPID / service-worker path is used unchanged.
+ */
 export async function subscribeCurrentUserToPush(accessToken: string): Promise<{
   permission: NotificationPermission
   subscribed: boolean
 }> {
+  // Detect native Capacitor environment via dynamic import to avoid SSR errors.
+  let isNative = false
+  try {
+    const { Capacitor } = await import('@capacitor/core')
+    isNative = Capacitor.isNativePlatform()
+  } catch {
+    isNative = false
+  }
+
+  if (isNative) {
+    return subscribeNative(accessToken)
+  }
+
+  // --- Web push path (unchanged) ---
   const state = getPushClientState()
   if (!state.supported) {
     throw new Error('Push notifications are not supported on this device/browser')
@@ -84,7 +108,98 @@ export async function subscribeCurrentUserToPush(accessToken: string): Promise<{
   return { permission, subscribed: true }
 }
 
+/**
+ * Native FCM registration path.
+ *
+ * Requests permission then triggers register().  The CapacitorProvider
+ * (mounted in app/layout.tsx) listens for the 'registration' event and
+ * sends the token to /api/push/register-fcm.
+ */
+async function subscribeNative(accessToken: string): Promise<{
+  permission: NotificationPermission
+  subscribed: boolean
+}> {
+  const [{ PushNotifications }, { Capacitor }] = await Promise.all([
+    import('@capacitor/push-notifications'),
+    import('@capacitor/core'),
+  ])
+
+  const result = await PushNotifications.requestPermissions()
+
+  if (result.receive === 'denied') {
+    return { permission: 'denied', subscribed: false }
+  }
+
+  // Register with FCM.  The CapacitorProvider's 'registration' listener will
+  // receive the token and POST it to /api/push/register-fcm with the
+  // current session.  We pass accessToken here as well so we can do a
+  // direct call if CapacitorProvider hasn't set up its listener yet.
+  return new Promise<{ permission: NotificationPermission; subscribed: boolean }>((resolve) => {
+    let settled = false
+
+    const settle = (subscribed: boolean) => {
+      if (settled) return
+      settled = true
+      resolve({ permission: 'granted', subscribed })
+    }
+
+    // Set up one-shot listeners for the initial registration response.
+    Promise.all([
+      PushNotifications.addListener('registration', async (token) => {
+        try {
+          const platform = Capacitor.getPlatform()
+          const res = await fetch('/api/push/register-fcm', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ fcmToken: token.value, platform }),
+          })
+          settle(res.ok)
+        } catch {
+          settle(false)
+        }
+      }),
+      PushNotifications.addListener('registrationError', () => {
+        settle(false)
+      }),
+    ]).then(([regHandle, errHandle]) => {
+      // Clean up one-shot listeners after a reasonable timeout.
+      setTimeout(() => {
+        regHandle.remove()
+        errHandle.remove()
+        settle(false)
+      }, 15_000)
+    })
+
+    PushNotifications.register()
+  })
+}
+
 export async function unsubscribeCurrentUserFromPush(accessToken: string) {
+  let isNative = false
+  try {
+    const { Capacitor } = await import('@capacitor/core')
+    isNative = Capacitor.isNativePlatform()
+  } catch {
+    isNative = false
+  }
+
+  if (isNative) {
+    // Deactivate all subscriptions for this user (no endpoint needed).
+    await fetch('/api/push/unsubscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({}),
+    })
+    return
+  }
+
+  // Web path (unchanged)
   const state = getPushClientState()
   if (!state.supported) return
 
@@ -105,4 +220,3 @@ export async function unsubscribeCurrentUserFromPush(accessToken: string) {
     body: JSON.stringify({ endpoint }),
   })
 }
-
