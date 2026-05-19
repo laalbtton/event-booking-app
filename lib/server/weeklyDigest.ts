@@ -12,18 +12,13 @@ import { sendEmail } from '@/lib/email'
 import { getWeeklyDigestEmail, type DigestCommunitySection } from '@/lib/email'
 import { getEmailTemplate, interpolate, TEMPLATE_KEYS } from '@/lib/server/emailTemplates'
 import { addCalendarDaysToYmd, getEasternCalendarDateString } from '@/lib/dateUtils'
+import { getSiteUrl, buildEventUrl, validateBaseUrl } from '@/lib/server/emailUrl'
 
 function getAdminSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
-}
-
-function getSiteUrl() {
-  // Strip trailing slash so paths like /events/abc are never doubled to //events/abc.
-  // Use www to avoid non-www → www redirect that may drop the path.
-  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.laalbutton.com').replace(/\/$/, '')
 }
 
 /** Stable message fragment for deduplication queries */
@@ -61,10 +56,21 @@ export async function prepareWeeklyDigest(): Promise<WeeklyDigestPrepared | null
   const siteUrl = getSiteUrl()
   const weekKey = getEasternCalendarDateString(new Date())
 
+  // Validate the base URL before we build any links.  A wrong NEXT_PUBLIC_SITE_URL
+  // causes every link in the digest to silently redirect to the homepage.
+  const baseCheck = await validateBaseUrl()
+  if (!baseCheck.ok) {
+    console.error(
+      `[weeklyDigest] Aborting: base URL "${siteUrl}" is unreachable. ${baseCheck.reason ?? ''}` +
+      `  Fix: set NEXT_PUBLIC_SITE_URL=https://app.laalbutton.com in Vercel.`
+    )
+    return null
+  }
+
   const todayStr = getEasternCalendarDateString(new Date())
   const cutoffStr = addCalendarDaysToYmd(todayStr, 14)
 
-  const { data: events, error: evErr } = await supabase
+  const { data: rawEvents, error: evErr } = await supabase
     .from('events')
     .select('id, title, date, slug, location, venue_id, poster_url')
     .gte('date', todayStr)
@@ -72,9 +78,21 @@ export async function prepareWeeklyDigest(): Promise<WeeklyDigestPrepared | null
     .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
     .order('date', { ascending: true })
 
-  if (evErr || !events || events.length === 0) {
+  if (evErr || !rawEvents || rawEvents.length === 0) {
     return null
   }
+
+  // Drop events whose slug AND id are both missing – they would generate a
+  // broken URL like "https://app.laalbutton.com/events/undefined".
+  const events = (rawEvents as { id: string; slug: string | null }[]).filter((e) => {
+    const url = buildEventUrl(e.slug ?? e.id)
+    if (!url) {
+      console.warn(`[weeklyDigest] Skipping event ${e.id}: cannot build a valid URL (slug=${e.slug}).`)
+    }
+    return !!url
+  })
+
+  if (events.length === 0) return null
 
   const eventIds = (events as { id: string }[]).map((e) => e.id)
   const venueIds = [

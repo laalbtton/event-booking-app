@@ -8,6 +8,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { getPostEventFeedbackEmail, sendEmail } from '@/lib/email'
 import { formatDateTimeEastern } from '@/lib/dateUtils'
+import { getSiteUrl, buildEventUrl } from '@/lib/server/emailUrl'
 
 export const FEEDBACK_FORM_URL =
   'https://docs.google.com/forms/d/e/1FAIpQLSdoMsGHkla6nxE7ZRLKg71QtCGxaY70xRP00X6C6VrVPZ0xFg/viewform?usp=dialog'
@@ -20,9 +21,7 @@ export function getAdminSupabase() {
   return createClient(url, key)
 }
 
-export function getSiteUrl() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.laalbutton.com').replace(/\/$/, '')
-}
+export { getSiteUrl }
 
 export type SendResult = {
   emailsSent: number
@@ -42,7 +41,6 @@ export async function sendFeedbackEmailsForEvent(
   overrides: EmailOverrides = {},
 ): Promise<SendResult> {
   const supabase = getAdminSupabase()
-  const siteUrl = getSiteUrl()
 
   // Load the event + venue
   const { data: eventRow, error: eventErr } = await supabase
@@ -83,7 +81,7 @@ export async function sendFeedbackEmailsForEvent(
 
   const venueName = ev.venues?.name ?? 'the venue'
   const venueGoogleReviewUrl = ev.venues?.google_review_url ?? null
-  const eventUrl = `${siteUrl}/events/${ev.slug ?? ev.id}`
+  const eventUrl = buildEventUrl(ev.slug ?? ev.id) ?? `${getSiteUrl()}/events/${ev.id}`
 
   // All confirmed bookings (performers + audience)
   const { data: bookings, error: bookingsErr } = await supabase

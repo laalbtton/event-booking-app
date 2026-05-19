@@ -4,6 +4,7 @@ import { stripe } from '@/lib/stripe'
 import type Stripe from 'stripe'
 import { sendEmail, getCreditPurchaseEmail, getTicketPurchaseEmail } from '@/lib/email'
 import { formatDateTimeEastern } from '@/lib/dateUtils'
+import { buildEventUrl, getSiteUrl } from '@/lib/server/emailUrl'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -232,7 +233,7 @@ async function handleTicketPurchase(session: Stripe.Checkout.Session): Promise<N
     if (eventRow) {
       const venueName = (eventRow.venues as any)?.name as string | null
       const eventDate = eventRow.date ? formatDateTimeEastern(eventRow.date) : 'TBA'
-      const origin = (process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.laalbutton.com').replace(/\/$/, '')
+      const origin = getSiteUrl()
       const html = getTicketPurchaseEmail({
         buyerName: buyerName || 'there',
         eventTitle: eventRow.title as string,

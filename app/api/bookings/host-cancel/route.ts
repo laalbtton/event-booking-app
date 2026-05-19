@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, getHostCancellationEmail } from '@/lib/email'
 import { formatDateTimeEastern } from '@/lib/dateUtils'
+import { buildEventUrl, getSiteUrl } from '@/lib/server/emailUrl'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -9,10 +10,6 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 function getAdminClient() {
   if (!supabaseUrl || !supabaseServiceKey) return null
   return createClient(supabaseUrl, supabaseServiceKey)
-}
-
-function getSiteUrl() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.laalbutton.com').replace(/\/$/, '')
 }
 
 /**
@@ -216,7 +213,7 @@ export async function POST(request: NextRequest) {
     const performerName = (performerProfile as any).full_name || 'Performer'
     const performerEmail = (performerProfile as any).email
     const eventSlug = (event as any).slug || event.id
-    const eventUrl = `${getSiteUrl()}/events/${eventSlug}`
+    const eventUrl = buildEventUrl(eventSlug) ?? `${getSiteUrl()}/events/${event.id}`
     const eventDate = formatDateTimeEastern(event.date)
 
     if (performerEmail) {

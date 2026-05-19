@@ -5,6 +5,7 @@ import { getRegistrationOpeningEmail, sendEmail } from '@/lib/email'
 import { formatDateTimeEastern } from '@/lib/dateUtils'
 import { sendPushToAllUsers, sendPushToUser } from '@/lib/server/push'
 import { getAdminClient } from '@/lib/server/supabaseAdmin'
+import { buildEventUrl, getSiteUrl } from '@/lib/server/emailUrl'
 
 function isThursday(dateValue: string | null) {
   if (!dateValue) return false
@@ -81,7 +82,7 @@ export async function GET() {
             continue
           }
 
-          const eventUrl = `${(process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.laalbutton.com').replace(/\/$/, '')}/events/${event.id}`
+          const eventUrl = buildEventUrl(event.id) ?? `${getSiteUrl()}/events/${event.id}`
 
           // Create in-app notification
           await createNotification(

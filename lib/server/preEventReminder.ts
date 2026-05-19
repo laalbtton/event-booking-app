@@ -11,16 +11,13 @@ import { sendEmail } from '@/lib/email'
 import { getPreEventReminderEmail } from '@/lib/email'
 import { getEmailTemplate, interpolate, TEMPLATE_KEYS } from '@/lib/server/emailTemplates'
 import { formatDateTimeEastern } from '@/lib/dateUtils'
+import { getSiteUrl, buildEventUrl } from '@/lib/server/emailUrl'
 
 function getAdminSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
-}
-
-function getSiteUrl() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.laalbutton.com').replace(/\/$/, '')
 }
 
 export type ReminderResult = {
@@ -33,7 +30,6 @@ const NOTIFICATION_TYPE = 'pre_event_reminder'
 
 export async function sendPreEventReminders(eventId: string): Promise<ReminderResult> {
   const supabase = getAdminSupabase()
-  const siteUrl = getSiteUrl()
   const result: ReminderResult = { emailsSent: 0, skipped: 0, errors: [] }
 
   // ── 1. Load event + venue ─────────────────────────────────────────────────
@@ -75,7 +71,7 @@ export async function sendPreEventReminders(eventId: string): Promise<ReminderRe
     }
   }
 
-  const eventUrl = `${siteUrl}/events/${ev.slug ?? ev.id}`
+  const eventUrl = buildEventUrl(ev.slug ?? ev.id) ?? `${getSiteUrl()}/events/${ev.id}`
   const eventDate = formatDateTimeEastern(ev.date)
 
   // ── 2. Find the primary community name (for branding in the email) ────────
