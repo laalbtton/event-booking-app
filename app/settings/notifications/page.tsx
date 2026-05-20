@@ -39,9 +39,35 @@ export default function SettingsNotificationsPage() {
   const [socapTestLoading, setSocapTestLoading] = useState(false)
 
   useEffect(() => {
-    const state = getPushClientState()
-    setPushSupported(state.supported)
-    setPushPermission(state.permission)
+    async function checkPushSupport() {
+      // On native Capacitor the web PushManager API doesn't exist, so we
+      // detect native first and ask the plugin for current permission state.
+      let isNative = false
+      try {
+        const { Capacitor } = await import('@capacitor/core')
+        isNative = Capacitor.isNativePlatform()
+      } catch { /* not native */ }
+
+      if (isNative) {
+        setPushSupported(true)
+        try {
+          const { PushNotifications } = await import('@capacitor/push-notifications')
+          const { receive } = await PushNotifications.checkPermissions()
+          if (receive === 'granted') setPushPermission('granted')
+          else if (receive === 'denied') setPushPermission('denied')
+          else setPushPermission('default')
+        } catch {
+          setPushPermission('default')
+        }
+        return
+      }
+
+      // Web fallback — check PWA push support
+      const state = getPushClientState()
+      setPushSupported(state.supported)
+      setPushPermission(state.permission)
+    }
+    checkPushSupport()
   }, [])
 
   useEffect(() => {
@@ -320,7 +346,7 @@ export default function SettingsNotificationsPage() {
                 : pushPermission === 'granted'
                 ? 'Enabled'
                 : pushPermission === 'denied'
-                ? 'Blocked by browser settings'
+                ? 'Blocked — enable in device Settings → Apps → Laal Button → Notifications'
                 : 'Not enabled'}
             </p>
             <div className="flex flex-wrap gap-2">
@@ -383,7 +409,7 @@ export default function SettingsNotificationsPage() {
             </div>
             {pushPermission === 'denied' && (
               <p className="text-xs text-muted-foreground">
-                Notifications were denied by the browser. To re-enable, allow notifications in browser/site settings.
+                Notifications were denied. To re-enable, go to your device Settings → Apps → Laal Button → Notifications and turn them on.
               </p>
             )}
 
