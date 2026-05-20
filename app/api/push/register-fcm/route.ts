@@ -28,30 +28,54 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString()
+    // Use the full token as the endpoint so the unique-endpoint constraint is
+    // never violated between two different FCM registrations.
+    const endpoint = `fcm:${fcmToken}`
 
-    // Upsert on fcm_token so token refreshes just update the user_id / last_seen.
-    const { error } = await supabase
+    // Select-then-update/insert avoids relying on the PostgREST upsert's
+    // ability to target a UNIQUE CONSTRAINT by name (partial indexes are not
+    // supported as conflict targets in older PostgREST versions).
+    const { data: existing } = await supabase
       .from('push_subscriptions')
-      .upsert(
-        {
+      .select('id')
+      .eq('fcm_token', fcmToken)
+      .maybeSingle()
+
+    let dbError
+    if (existing?.id) {
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .update({
+          user_id: user.id,
+          platform,
+          endpoint,
+          is_active: true,
+          last_seen_at: now,
+          updated_at: now,
+        })
+        .eq('id', existing.id)
+      dbError = error
+    } else {
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .insert({
           user_id: user.id,
           platform,
           fcm_token: fcmToken,
-          // Nullify web-push fields so constraints are not violated.
-          endpoint: `fcm:${fcmToken.slice(0, 16)}`,
+          endpoint,
           p256dh: null,
           auth: null,
           user_agent: request.headers.get('user-agent'),
           is_active: true,
           last_seen_at: now,
           updated_at: now,
-        },
-        { onConflict: 'fcm_token' }
-      )
+        })
+      dbError = error
+    }
 
-    if (error) {
-      console.error('register-fcm upsert error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (dbError) {
+      console.error('register-fcm db error:', dbError)
+      return NextResponse.json({ error: dbError.message }, { status: 500 })
     }
 
     // Ensure a push_notification_prefs row exists for this user.
