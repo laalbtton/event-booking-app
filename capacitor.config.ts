@@ -9,7 +9,7 @@ const config: CapacitorConfig = {
   server: {
     // Point the native WebView at the live hosted app so all Next.js
     // server features (API routes, auth, real-time) continue working.
-    url: 'https://www.laalbutton.com',
+    url: 'https://app.laalbutton.com',
     cleartext: false,
   },
   plugins: {
