@@ -163,7 +163,6 @@ function LoginContent() {
     }
   }
 
-  // NEW: Google OAuth login
   async function handleGoogleLogin() {
     setError('')
     setLoading(true)
@@ -173,18 +172,45 @@ function LoginContent() {
       if (inviteToken) {
         setPendingAppInviteToken(inviteToken)
       }
-      // Ensure we use the current origin (localhost or production)
-      const redirectUrl = typeof window !== 'undefined' 
-        ? `${window.location.origin}/auth/callback`
-        : '/auth/callback'
-      
+
+      // Detect whether we're inside the native Capacitor shell.
+      let isNative = false
+      try {
+        const { Capacitor } = await import('@capacitor/core')
+        isNative = Capacitor.isNativePlatform()
+      } catch { /* running on web */ }
+
+      if (isNative) {
+        // On Android/iOS we must NOT let Supabase redirect the WebView itself —
+        // that breaks out into the system browser.  Instead:
+        //  1. Get the OAuth URL without navigating  (skipBrowserRedirect)
+        //  2. Open it in a Capacitor Browser tab (Chrome Custom Tabs on Android)
+        //  3. After auth Google redirects to com.laalbutton.app://auth/callback
+        //  4. Android intercepts the custom scheme and fires appUrlOpen in the app
+        //  5. CapacitorProvider exchanges the code and navigates to /dashboard
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: 'com.laalbutton.app://auth/callback',
+            skipBrowserRedirect: true,
+          },
+        })
+        if (error) throw error
+        if (data.url) {
+          const { Browser } = await import('@capacitor/browser')
+          await Browser.open({ url: data.url })
+        }
+        // Keep loading=true — CapacitorProvider will navigate away once the
+        // appUrlOpen callback fires; the user never returns to this screen.
+        return
+      }
+
+      // Web: standard OAuth redirect flow
+      const redirectUrl = `${window.location.origin}/auth/callback`
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-        },
+        options: { redirectTo: redirectUrl },
       })
-
       if (error) throw error
     } catch (error: any) {
       setError(error.message)

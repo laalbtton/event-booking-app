@@ -42,10 +42,56 @@ export function CapacitorProvider() {
       ])
 
       // ─── 1. Deep link handler ───────────────────────────────────────────────
-      const appUrlHandle = await App.addListener('appUrlOpen', (event) => {
+      const appUrlHandle = await App.addListener('appUrlOpen', async (event) => {
         try {
+          // ── OAuth callback from Google Sign-in ──────────────────────────
+          // After the user authenticates in the Capacitor Browser tab, Google
+          // redirects to  com.laalbutton.app://auth/callback?code=<pkce_code>
+          // Android intercepts the custom scheme and fires this event.
+          if (event.url.startsWith('com.laalbutton.app://auth/callback')) {
+            // Close the Chrome Custom Tab immediately so the user is back in-app.
+            try {
+              const { Browser } = await import('@capacitor/browser')
+              await Browser.close()
+            } catch { /* best-effort */ }
+
+            // Parse the code out of the custom-scheme URL.
+            // URL() requires an http/https scheme so we normalise it first.
+            const normalised = event.url.replace('com.laalbutton.app://', 'https://app.laalbutton.com/')
+            const parsed = new URL(normalised)
+            const code = parsed.searchParams.get('code')
+
+            if (code) {
+              const { supabase } = await import('@/lib/supabase')
+              const { error } = await supabase.auth.exchangeCodeForSession(code)
+              if (error) {
+                console.error('OAuth code exchange failed:', error.message)
+                router.replace('/login?error=auth_failed')
+              } else {
+                router.replace('/dashboard')
+              }
+            } else {
+              // Fallback: implicit-flow tokens arrive in the hash fragment.
+              const hash = parsed.hash.replace('#', '')
+              const hashParams = new URLSearchParams(hash)
+              const accessToken = hashParams.get('access_token')
+              const refreshToken = hashParams.get('refresh_token')
+              if (accessToken && refreshToken) {
+                const { supabase } = await import('@/lib/supabase')
+                const { error } = await supabase.auth.setSession({
+                  access_token: accessToken,
+                  refresh_token: refreshToken,
+                })
+                router.replace(error ? '/login?error=auth_failed' : '/dashboard')
+              } else {
+                router.replace('/login?error=no_code')
+              }
+            }
+            return
+          }
+
+          // ── Regular deep link (notification taps, shared links, etc.) ───
           const url = new URL(event.url)
-          // Navigate to the in-app path, stripping the host.
           router.push(url.pathname + url.search + url.hash)
         } catch {
           // Malformed URL — ignore.

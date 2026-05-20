@@ -84,7 +84,7 @@ export async function prepareWeeklyDigest(): Promise<WeeklyDigestPrepared | null
 
   // Drop events whose slug AND id are both missing – they would generate a
   // broken URL like "https://app.laalbutton.com/events/undefined".
-  const events = (rawEvents as { id: string; slug: string | null }[]).filter((e) => {
+  const events = (rawEvents as { id: string; slug: string | null; venue_id: string | null }[]).filter((e) => {
     const url = buildEventUrl(e.slug ?? e.id)
     if (!url) {
       console.warn(`[weeklyDigest] Skipping event ${e.id}: cannot build a valid URL (slug=${e.slug}).`)
@@ -97,7 +97,7 @@ export async function prepareWeeklyDigest(): Promise<WeeklyDigestPrepared | null
   const eventIds = (events as { id: string }[]).map((e) => e.id)
   const venueIds = [
     ...new Set(
-      (events as { venue_id: string | null }[]).map((e) => e.venue_id).filter(Boolean) as string[],
+      events.map((e) => e.venue_id).filter(Boolean) as string[],
     ),
   ]
 
