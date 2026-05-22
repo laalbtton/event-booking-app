@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
   appId: 'com.laalbutton.app',
-  appName: 'Laal Button',
+  appName: 'One Mic Stand',
   // webDir is required by Capacitor tooling even when server.url is used.
   // The Android WebView will load from server.url at runtime.
   webDir: 'out',
