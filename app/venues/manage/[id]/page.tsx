@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { formatDateTime } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
+import { CalBookingsCalendar } from '@/components/venue/CalBookingsCalendar'
 
 type Venue = {
   id: string
@@ -623,6 +624,20 @@ export default function VenueManagePage() {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Booking calendar — shown for Ryan's Chai (Cal.com integration) */}
+        {venue.name.toLowerCase() === "ryan's chai" && (
+          <div className="space-y-2">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Booking calendar
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Amber = app events · Indigo = Cal.com venue bookings. Click any entry for details.
+            </p>
+            <CalBookingsCalendar venueId={venueId} showDetails={true} />
+          </div>
+        )}
 
         {/* Upcoming shows */}
         <Card>

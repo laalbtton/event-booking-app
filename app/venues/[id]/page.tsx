@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { formatDateTime } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
+import { CalBookingsCalendar } from '@/components/venue/CalBookingsCalendar'
 
 type VenuePublic = {
   id: string
@@ -286,6 +287,20 @@ export default function VenuePublicPage() {
             </ul>
           )}
         </section>
+
+        {/* ── Booking calendar (Ryan's Chai only) ───────────────────────── */}
+        {venue.name.toLowerCase() === "ryan's chai" && (
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <CalendarDays className="h-5 w-5" />
+              Venue availability
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              See when the space is booked. Amber = upcoming shows · Indigo = venue reservations.
+            </p>
+            <CalBookingsCalendar venueId={venueId} showDetails={false} />
+          </section>
+        )}
 
         {/* ── Google review CTA (bottom) ─────────────────────────────────── */}
         {venue.google_review_url && (
