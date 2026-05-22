@@ -10,6 +10,7 @@ import { InstagramUsernamePromptProvider } from '@/components/providers/instagra
 import { PushServiceWorkerProvider } from '@/components/providers/push-service-worker-provider'
 import { CapacitorProvider } from '@/components/providers/capacitor-provider'
 import { InstallBonusProvider } from '@/components/providers/install-bonus-provider'
+import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
 import { ThemeProvider } from '@/components/providers/theme-provider'
 import AppNavigationShell from '@/components/AppNavigationShell'
 
@@ -75,7 +76,7 @@ export default function RootLayout({
             <InstagramUsernamePromptProvider>
             <PushServiceWorkerProvider />
             <CapacitorProvider />
-            <InstallBonusProvider />
+            {INSTALL_PROMPT_ENABLED && <InstallBonusProvider />}
             <GlobalAlertsProvider />
             {/* Main content area */}
             <main className="flex-1">

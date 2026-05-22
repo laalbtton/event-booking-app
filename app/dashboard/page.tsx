@@ -41,6 +41,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
+import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
 
 type PushNotificationPrefs = {
   user_id: string
@@ -583,7 +584,7 @@ export default function Dashboard() {
   }, [userRole])
 
   useEffect(() => {
-    if (!authResolved || !user) return
+    if (!authResolved || !user || !INSTALL_PROMPT_ENABLED) return
 
     initInstallPromptCapture()
     setInstallPlatform(getInstallPlatform())
@@ -604,7 +605,7 @@ export default function Dashboard() {
 
   // Grant 5 credits when user has installed the app (standalone mode)
   useEffect(() => {
-    if (!authResolved || !user || !isStandaloneMode()) return
+    if (!authResolved || !user || !isStandaloneMode() || !INSTALL_PROMPT_ENABLED) return
 
     let cancelled = false
     async function claimInstallBonus() {
@@ -1652,7 +1653,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {showInstallBanner && (
+        {INSTALL_PROMPT_ENABLED && showInstallBanner && (
           <Card className="mb-6 border-yellow-400/30 bg-yellow-400/10 shadow-sm">
             <CardContent className="p-4 sm:p-5 space-y-3">
               <div className="flex items-start justify-between gap-3">

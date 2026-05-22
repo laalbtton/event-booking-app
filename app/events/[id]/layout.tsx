@@ -5,6 +5,7 @@ import { buildEventMetadata, getSiteUrl } from '@/lib/seo/metadata'
 import { buildEventJsonLd } from '@/lib/seo/schemaEvent'
 import { PublicEventCTA } from '@/components/public/PublicEventCTA'
 import { PublicInstallBanner } from '@/components/public/PublicInstallBanner'
+import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { PublicEventDateTime } from '@/components/public/PublicEventDateTime'
 import { LayoutEventSummary } from '@/components/public/LayoutEventSummary'
@@ -202,7 +203,7 @@ export default async function EventLayout({ children, params }: Props) {
               isPast={isPast}
             />
 
-            <PublicInstallBanner />
+            {INSTALL_PROMPT_ENABLED && <PublicInstallBanner />}
           </div>
         </div>
       </LayoutEventSummary>

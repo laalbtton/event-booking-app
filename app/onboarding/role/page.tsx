@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { isStandaloneMode } from '@/lib/installPromptClient'
+import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
 import { redeemPendingCommunityInvite } from '@/lib/communityInviteClient'
 
 export default function RoleOnboardingPage() {
@@ -134,7 +135,7 @@ export default function RoleOnboardingPage() {
       if (isStandaloneMode()) {
         router.replace('/dashboard')
       } else {
-        router.replace('/onboarding/install')
+        router.replace(INSTALL_PROMPT_ENABLED ? '/onboarding/install' : '/dashboard')
       }
     } catch (err: any) {
       setError(err.message || 'Failed to save your role')
