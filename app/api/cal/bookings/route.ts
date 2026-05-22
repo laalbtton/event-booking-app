@@ -117,23 +117,9 @@ export async function GET(request: NextRequest) {
       .not('status', 'in', '("cancelled","archived")')
       .order('date', { ascending: true })
 
-    // Fetch venue name to determine if Cal.com should be used
-    const { data: venueRow } = await supabase
-      .from('venues')
-      .select('name')
-      .eq('id', venueId)
-      .single()
-
-    const venueName: string = (venueRow as { name?: string } | null)?.name ?? ''
-
-    // Cal.com is enabled for Ryan's Chai (or any venue matching CAL_COM_VENUE_NAME env var)
-    const calVenueName = process.env.CAL_COM_VENUE_NAME ?? "Ryan's Chai"
-    const isCalVenue = venueName.toLowerCase() === calVenueName.toLowerCase()
-
-    // Fetch Cal.com bookings in parallel with the Supabase fetch (already done above)
-    const calBookings: BookingEntry[] = isCalVenue
-      ? await fetchCalComBookings(from, to)
-      : []
+    // All Cal.com bookings belong to this venue — no name matching needed.
+    // The frontend already gates the calendar to the correct venue page.
+    const calBookings: BookingEntry[] = await fetchCalComBookings(from, to)
 
     const appEvents: BookingEntry[] = ((venueAndEvents ?? []) as Array<{
       id: string
@@ -162,10 +148,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       bookings: [...calBookings, ...appEvents],
-      isCalVenue,
       _debug: {
-        venueName,
-        calVenueNameExpected: calVenueName,
         calApiKeySet: !!CAL_API_KEY,
         calBookingsCount: calBookings.length,
         appEventsCount: appEvents.length,
