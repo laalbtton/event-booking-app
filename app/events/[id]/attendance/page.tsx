@@ -671,10 +671,11 @@ export default function AttendancePage() {
         setInviteExpiresAt(expiresLocal)
       }
 
-      // Calculate stats
+      // Calculate stats — performers default to attended (null = attended).
+      // Only 'not_present' counts as a no-show.
       const total = performerBookings?.length || 0
-      const attended = performerBookings?.filter((b: any) => b.attendance_status === 'attended').length || 0
-      const noShow = total - attended // All non-attended are no shows by default
+      const attended = performerBookings?.filter((b: any) => b.attendance_status !== 'not_present').length || 0
+      const noShow = performerBookings?.filter((b: any) => b.attendance_status === 'not_present').length || 0
       const confirmed = performerBookings?.filter((b: any) => !b.attendance_status || b.attendance_status === 'confirmed').length || 0
       const pending = performerBookings?.filter((b: any) => !b.attendance_status).length || 0
 
@@ -696,8 +697,8 @@ export default function AttendancePage() {
 
   function recalcStats(updatedBookings: BookingWithProfile[]) {
     const total = updatedBookings.length
-    const attended = updatedBookings.filter((b) => b.attendance_status === 'attended').length
-    const noShow = total - attended
+    const attended = updatedBookings.filter((b) => b.attendance_status !== 'not_present').length
+    const noShow = updatedBookings.filter((b) => b.attendance_status === 'not_present').length
     const confirmed = updatedBookings.filter((b) => !b.attendance_status || b.attendance_status === 'confirmed').length
     const pending = updatedBookings.filter((b) => !b.attendance_status).length
 
@@ -744,7 +745,7 @@ export default function AttendancePage() {
     return bookings.filter(
       (booking) =>
         Number(booking.credits_used || 0) <= 0 &&
-        booking.attendance_status !== 'attended' &&
+        booking.attendance_status === 'not_present' &&
         !booking.no_show_penalty_charged_at
     )
   }
@@ -1126,8 +1127,8 @@ export default function AttendancePage() {
   }
 
   function copyAttendanceList() {
-    const attended = bookings.filter((booking) => booking.attendance_status === 'attended')
-    const noShow = bookings.filter((booking) => booking.attendance_status !== 'attended')
+    const attended = bookings.filter((booking) => booking.attendance_status !== 'not_present')
+    const noShow = bookings.filter((booking) => booking.attendance_status === 'not_present')
 
     const buildSection = (label: string, rows: BookingWithProfile[]) => {
       const grouped = groupBookingsByArtType(rows)
@@ -2259,9 +2260,9 @@ export default function AttendancePage() {
 
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <Switch
-                                  checked={attendanceStatus === 'attended'}
+                                  checked={attendanceStatus !== 'not_present'}
                                   disabled={isUpdating}
-                                  onCheckedChange={(checked) => updateAttendance(booking.id, checked ? 'attended' : null)}
+                                  onCheckedChange={(checked) => updateAttendance(booking.id, checked ? 'attended' : 'not_present')}
                                   aria-label="Mark attended"
                                 />
                               </div>

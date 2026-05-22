@@ -76,7 +76,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const nextStatus = status === 'attended' ? 'attended' : null
+    // Performers default to attended, so toggling OFF stores 'not_present'
+    // so the switch stays off on reload. Audience keeps null for backward compat.
+    const nextStatus =
+      status === 'attended'
+        ? 'attended'
+        : status === 'not_present'
+        ? 'not_present'
+        : null
 
     if (booking.booking_scope === 'audience') {
       const now = new Date()
