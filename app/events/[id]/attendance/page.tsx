@@ -773,7 +773,7 @@ export default function AttendancePage() {
     setAudienceCheckinCodeInput('')
   }
 
-  async function updateAttendance(bookingId: string, status: 'attended' | null) {
+  async function updateAttendance(bookingId: string, status: 'attended' | 'not_present' | null) {
     setUpdating(bookingId)
     try {
       const { data: { session } } = await supabase.auth.getSession()
