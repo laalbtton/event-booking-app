@@ -148,6 +148,8 @@ export function CalBookingsCalendar({ venueId, showDetails = false }: Props) {
         `/api/cal/bookings?venueId=${encodeURIComponent(venueId)}&from=${from.toISOString()}&to=${to.toISOString()}`,
       )
       const data = await res.json()
+      // Temporary debug — remove after Cal.com issue is resolved
+      console.log('[CalBookingsCalendar] API response debug:', data._debug)
       setBookings((data.bookings as BookingEntry[]) ?? [])
     } catch {
       setBookings([])

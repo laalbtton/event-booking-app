@@ -163,6 +163,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       bookings: [...calBookings, ...appEvents],
       isCalVenue,
+      _debug: {
+        venueName,
+        calVenueNameExpected: calVenueName,
+        calApiKeySet: !!CAL_API_KEY,
+        calBookingsCount: calBookings.length,
+        appEventsCount: appEvents.length,
+      },
     })
   } catch (err: unknown) {
     console.error('[/api/cal/bookings]', err)
