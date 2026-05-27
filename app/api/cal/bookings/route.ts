@@ -2,16 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const CAL_API_KEY = process.env.CAL_COM_API_KEY
+const CAL_API_VERSION = '2026-05-01'
 
-type CalRawBooking = {
+type CalV2Booking = {
   id: number
+  uid: string
   title?: string
-  startTime: string
-  endTime: string
+  start: string
+  end: string
   status: string
   attendees?: { name?: string; email?: string }[]
   location?: string
   description?: string
+}
+
+type CalV2ListResponse = {
+  status: string
+  data?: CalV2Booking[]
+  pagination?: { hasMore: boolean; nextCursor: string | null }
 }
 
 type BookingEntry = {
@@ -36,52 +44,76 @@ function getAdminClient() {
   return createClient(url, key)
 }
 
+async function fetchCalComStatus(
+  status: 'upcoming' | 'past',
+  from: Date,
+  to: Date,
+): Promise<CalV2Booking[]> {
+  const headers = {
+    Authorization: `Bearer ${CAL_API_KEY}`,
+    'cal-api-version': CAL_API_VERSION,
+  }
+  const collected: CalV2Booking[] = []
+  let cursor: string | undefined
+
+  do {
+    const params = new URLSearchParams({
+      status,
+      limit: '100',
+      afterStart: from.toISOString(),
+    })
+    if (cursor) params.set('cursor', cursor)
+
+    const res = await fetch(`https://api.cal.com/v2/bookings?${params}`, {
+      headers,
+      next: { revalidate: 120 },
+    })
+    if (!res.ok) break
+
+    const body = (await res.json()) as CalV2ListResponse
+    if (body.status !== 'success' || !Array.isArray(body.data)) break
+
+    collected.push(...body.data)
+    cursor =
+      body.pagination?.hasMore && body.pagination.nextCursor
+        ? body.pagination.nextCursor
+        : undefined
+  } while (cursor)
+
+  return collected
+}
+
 async function fetchCalComBookings(from: Date, to: Date): Promise<BookingEntry[]> {
   if (!CAL_API_KEY) return []
 
+  const [upcoming, past] = await Promise.all([
+    fetchCalComStatus('upcoming', from, to),
+    fetchCalComStatus('past', from, to),
+  ])
+
+  const seen = new Set<number>()
   const results: BookingEntry[] = []
-
-  // Fetch both upcoming and recently-past bookings in parallel.
-  // Cal.com v1 doesn't support date-range filtering so we fetch a large
-  // batch and filter on our side.
-  const [upcomingRes, pastRes] = await Promise.all([
-    fetch(`https://api.cal.com/v1/bookings?apiKey=${CAL_API_KEY}&status=upcoming&take=500`, {
-      next: { revalidate: 120 },
-    }),
-    fetch(`https://api.cal.com/v1/bookings?apiKey=${CAL_API_KEY}&status=past&take=200`, {
-      next: { revalidate: 120 },
-    }),
-  ])
-
-  const [upcomingData, pastData] = await Promise.all([
-    upcomingRes.ok ? upcomingRes.json() : { bookings: [] },
-    pastRes.ok ? pastRes.json() : { bookings: [] },
-  ])
-
-  const raw: CalRawBooking[] = [
-    ...((upcomingData.bookings as CalRawBooking[]) ?? []),
-    ...((pastData.bookings as CalRawBooking[]) ?? []),
-  ]
-
   const fromMs = from.getTime()
   const toMs = to.getTime()
 
-  for (const b of raw) {
-    const startMs = new Date(b.startTime).getTime()
+  for (const b of [...upcoming, ...past]) {
+    if (seen.has(b.id)) continue
+    seen.add(b.id)
+
+    const startMs = new Date(b.start).getTime()
     if (startMs < fromMs || startMs > toMs) continue
-    // Skip cancelled bookings
-    if (b.status === 'CANCELLED' || b.status === 'REJECTED') continue
+    if (b.status === 'cancelled' || b.status === 'rejected') continue
 
     results.push({
       id: `cal_${b.id}`,
       title: b.title || 'Venue Reserved',
-      startTime: b.startTime,
-      endTime: b.endTime ?? null,
+      startTime: b.start,
+      endTime: b.end ?? null,
       status: b.status,
       source: 'calcom',
       attendeeName: b.attendees?.[0]?.name,
       attendeeEmail: b.attendees?.[0]?.email,
-      location: b.location ?? undefined,
+      location: typeof b.location === 'string' ? b.location : undefined,
       description: b.description ?? undefined,
     })
   }
