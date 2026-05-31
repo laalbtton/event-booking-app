@@ -31,3 +31,11 @@ export function appendSlugSuffix(base: string, suffix: string): string {
   if (!cleanSuffix) return base
   return `${base}-${cleanSuffix}`
 }
+
+/** Venue profile path segment, e.g. `ryans-chai` or `ryans-chai-brampton`. */
+export function buildVenueSlugBase(name: string, city?: string | null): string {
+  const parts = [slugifyPart(name)]
+  if (city?.trim()) parts.push(slugifyPart(city))
+  const base = parts.filter(Boolean).join('-')
+  return base || 'venue'
+}

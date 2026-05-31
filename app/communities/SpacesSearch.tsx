@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { MapPin, Car, Accessibility, UtensilsCrossed, Wine, Globe, Star, CalendarDays } from 'lucide-react'
 import type { PublicVenue } from '@/lib/server/publicVenues'
+import { venuePublicPath } from '@/lib/venuePaths'
 
 type Props = {
   venues: PublicVenue[]
@@ -97,7 +98,7 @@ function VenueCard({ venue, muted = false }: { venue: PublicVenue; muted?: boole
 
   return (
     <Link
-      href={`/venues/${venue.id}`}
+      href={venuePublicPath(venue)}
       className={`block rounded-xl border bg-card p-4 hover:shadow-md transition-shadow group ${muted ? 'opacity-70' : ''}`}
     >
       <div className="flex items-start justify-between gap-3">

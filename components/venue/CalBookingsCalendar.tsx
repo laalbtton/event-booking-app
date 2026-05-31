@@ -12,6 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import { useSwipeNavigate } from '@/lib/hooks/useSwipeNavigate'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -168,6 +169,12 @@ export function CalBookingsCalendar({ venueId, showDetails = false }: Props) {
     })
   }
 
+  const swipeNav = useSwipeNavigate({
+    onSwipeLeft: () => navigate(1),
+    onSwipeRight: () => navigate(-1),
+    enabled: !loading,
+  })
+
   // ── Derived data ───────────────────────────────────────────────────────────
   const today = useMemo(() => {
     const d = new Date()
@@ -201,7 +208,10 @@ export function CalBookingsCalendar({ venueId, showDetails = false }: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div
+      className="rounded-xl border border-border bg-card overflow-hidden"
+      aria-label="Calendar — swipe left or right to change period"
+    >
       {/* ── Toolbar ── */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border">
         <div className="flex items-center gap-1">
@@ -268,7 +278,11 @@ export function CalBookingsCalendar({ venueId, showDetails = false }: Props) {
 
       {/* ── Month View ── */}
       {!loading && view === 'month' && (
-        <div>
+        <div
+          onTouchStart={swipeNav.onTouchStart}
+          onTouchEnd={swipeNav.onTouchEnd}
+          className={cn(swipeNav.className, 'select-none')}
+        >
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 border-b border-border bg-muted/10">
             {DAY_LABELS.map((l) => (
@@ -349,7 +363,12 @@ export function CalBookingsCalendar({ venueId, showDetails = false }: Props) {
 
       {/* ── Week View ── */}
       {!loading && view === 'week' && (
-        <div className="overflow-auto" style={{ maxHeight: '560px' }}>
+        <div
+          onTouchStart={swipeNav.onTouchStart}
+          onTouchEnd={swipeNav.onTouchEnd}
+          className={cn(swipeNav.className, 'overflow-auto select-none')}
+          style={{ maxHeight: '560px' }}
+        >
           {/* Sticky column headers */}
           <div
             className="flex sticky top-0 z-20 bg-card border-b border-border"

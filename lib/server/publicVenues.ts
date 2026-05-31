@@ -1,5 +1,6 @@
 import { getAdminClient } from '@/lib/server/supabaseAdmin'
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
+import { isVenueUuid } from '@/lib/venuePaths'
 
 // Venues RLS is TO authenticated, so we use the admin client (bypasses RLS)
 // to make the list available on the public communities/spaces page.
@@ -9,6 +10,7 @@ function getVenueClient() {
 
 export type PublicVenue = {
   id: string
+  slug: string | null
   name: string
   address: string
   city: string | null
@@ -39,7 +41,7 @@ export async function listPublicVenues(): Promise<PublicVenue[]> {
     supabase
       .from('venues')
       .select(
-        'id, name, address, city, region, country, description, google_review_url, website_url, parking_options, accessibility, food_drinks_available, drinks_available',
+        'id, slug, name, address, city, region, country, description, google_review_url, website_url, parking_options, accessibility, food_drinks_available, drinks_available',
       )
       .order('name', { ascending: true }),
     supabase
@@ -52,6 +54,7 @@ export async function listPublicVenues(): Promise<PublicVenue[]> {
 
   const venues = (venueRes.data ?? []) as Array<{
     id: string
+    slug: string | null
     name: string
     address: string
     city: string | null
@@ -75,6 +78,7 @@ export async function listPublicVenues(): Promise<PublicVenue[]> {
 
   const result: PublicVenue[] = venues.map((v) => ({
     id: v.id,
+    slug: v.slug,
     name: v.name,
     address: v.address,
     city: v.city,
@@ -99,4 +103,63 @@ export async function listPublicVenues(): Promise<PublicVenue[]> {
   })
 
   return result
+}
+
+export async function getPublicVenue(idOrSlug: string): Promise<PublicVenue | null> {
+  const supabase = getVenueClient()
+  if (!supabase) return null
+
+  let query = supabase
+    .from('venues')
+    .select(
+      'id, slug, name, address, city, region, country, description, google_review_url, website_url, parking_options, accessibility, food_drinks_available, drinks_available',
+    )
+
+  query = isVenueUuid(idOrSlug) ? query.eq('id', idOrSlug) : query.eq('slug', idOrSlug)
+
+  const { data: venue } = await query.maybeSingle()
+  if (!venue) return null
+
+  const now = new Date().toISOString()
+  const { count } = await supabase
+    .from('events')
+    .select('id', { count: 'exact', head: true })
+    .eq('venue_id', (venue as { id: string }).id)
+    .gte('date', now)
+    .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
+
+  const v = venue as {
+    id: string
+    slug: string | null
+    name: string
+    address: string
+    city: string | null
+    region: string | null
+    country: string | null
+    description: string | null
+    google_review_url: string | null
+    website_url: string | null
+    parking_options: string | null
+    accessibility: string | null
+    food_drinks_available: boolean
+    drinks_available: boolean
+  }
+
+  return {
+    id: v.id,
+    slug: v.slug,
+    name: v.name,
+    address: v.address,
+    city: v.city,
+    region: v.region,
+    country: v.country,
+    description: v.description,
+    google_review_url: v.google_review_url,
+    website_url: v.website_url,
+    parking_options: v.parking_options,
+    accessibility: v.accessibility,
+    food_drinks_available: v.food_drinks_available ?? false,
+    drinks_available: v.drinks_available ?? false,
+    upcomingEventCount: count ?? 0,
+  }
 }

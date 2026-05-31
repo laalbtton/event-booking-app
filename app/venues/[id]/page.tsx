@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -23,9 +23,11 @@ import {
 import { formatDateTime } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
 import { CalBookingsCalendar } from '@/components/venue/CalBookingsCalendar'
+import { isVenueUuid, venuePublicPath } from '@/lib/venuePaths'
 
 type VenuePublic = {
   id: string
+  slug: string | null
   name: string
   address: string
   city: string | null
@@ -52,7 +54,8 @@ type ShowEvent = {
 }
 
 export default function VenuePublicPage() {
-  const { id: venueId } = useParams<{ id: string }>()
+  const { id: routeParam } = useParams<{ id: string }>()
+  const router = useRouter()
   const [venue, setVenue] = useState<VenuePublic | null>(null)
   const [shows, setShows] = useState<ShowEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -60,27 +63,40 @@ export default function VenuePublicPage() {
 
   useEffect(() => {
     void load()
-  }, [venueId])
+  }, [routeParam])
+
+  useEffect(() => {
+    if (!venue?.slug || !routeParam) return
+    if (isVenueUuid(routeParam) && routeParam !== venue.slug) {
+      router.replace(venuePublicPath(venue))
+    }
+  }, [venue, routeParam, router])
 
   async function load() {
     setLoading(true)
     try {
-      const [{ data: venueData, error: venueError }, { data: eventsData }] = await Promise.all([
-        supabase.from('venues').select('*').eq('id', venueId).single(),
-        supabase
-          .from('events')
-          .select('id, slug, title, date, credits_required, event_type, max_attendees')
-          .eq('venue_id', venueId)
-          .gte('date', new Date().toISOString())
-          .not('status', 'in', '("cancelled","archived","draft","pending_approval","private")')
-          .order('date', { ascending: true })
-          .limit(30),
-      ])
+      const byId = isVenueUuid(routeParam)
+      const venueQuery = byId
+        ? supabase.from('venues').select('*').eq('id', routeParam)
+        : supabase.from('venues').select('*').eq('slug', routeParam)
+
+      const [{ data: venueData, error: venueError }] = await Promise.all([venueQuery.single()])
 
       if (venueError || !venueData) {
         setNotFound(true)
         return
       }
+
+      const resolvedVenueId = (venueData as { id: string }).id
+
+      const { data: eventsData } = await supabase
+          .from('events')
+          .select('id, slug, title, date, credits_required, event_type, max_attendees')
+          .eq('venue_id', resolvedVenueId)
+          .gte('date', new Date().toISOString())
+          .not('status', 'in', '("cancelled","archived","draft","pending_approval","private")')
+          .order('date', { ascending: true })
+          .limit(30)
 
       setVenue(venueData as unknown as VenuePublic)
       setShows((eventsData ?? []) as unknown as ShowEvent[])
@@ -298,7 +314,7 @@ export default function VenuePublicPage() {
             <p className="text-sm text-muted-foreground">
               See when the space is booked. Amber = upcoming shows · Indigo = venue reservations.
             </p>
-            <CalBookingsCalendar venueId={venueId} showDetails={false} />
+            <CalBookingsCalendar venueId={venue.id} showDetails={false} />
           </section>
         )}
 

@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { NotificationsBellLink } from '@/components/NotificationsBellLink'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Globe, Instagram, Pencil, Settings, Share2, Twitter, Youtube } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSwipeNavigate } from '@/lib/hooks/useSwipeNavigate'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { QRCodeSVG } from 'qrcode.react'
@@ -106,6 +107,14 @@ export default function ProfilePage() {
   const [profileDetailsExpanded, setProfileDetailsExpanded] = useState(false)
   const [calendarExpanded, setCalendarExpanded] = useState(false)
   const [calendarCursor, setCalendarCursor] = useState(new Date())
+
+  const profileCalendarSwipe = useSwipeNavigate({
+    onSwipeLeft: () =>
+      setCalendarCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)),
+    onSwipeRight: () =>
+      setCalendarCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)),
+    enabled: calendarExpanded,
+  })
   const { confirm } = useConfirmDialog()
   const touchStartX = useRef<Record<string, number>>({})
   const touchStartY = useRef<Record<string, number>>({})
@@ -1234,7 +1243,15 @@ export default function ProfilePage() {
             </button>
           </CardHeader>
           {calendarExpanded && (
-            <CardContent className="p-4 sm:p-6 pt-0">
+            <CardContent
+              className="p-4 sm:p-6 pt-0"
+              aria-label="Bookings calendar — swipe left or right to change month"
+            >
+              <div
+                onTouchStart={profileCalendarSwipe.onTouchStart}
+                onTouchEnd={profileCalendarSwipe.onTouchEnd}
+                className={cn(profileCalendarSwipe.className, 'select-none')}
+              >
               <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground mb-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
                   <div key={d}>{d}</div>
@@ -1259,6 +1276,7 @@ export default function ProfilePage() {
                     </div>
                   )
                 })}
+              </div>
               </div>
             </CardContent>
           )}

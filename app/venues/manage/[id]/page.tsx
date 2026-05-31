@@ -33,9 +33,11 @@ import {
 import { formatDateTime } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
 import { CalBookingsCalendar } from '@/components/venue/CalBookingsCalendar'
+import { venuePublicPath } from '@/lib/venuePaths'
 
 type Venue = {
   id: string
+  slug: string | null
   name: string
   address: string
   city: string | null
@@ -420,7 +422,7 @@ export default function VenueManagePage() {
         {/* Quick action links */}
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm" className="gap-1.5">
-            <Link href={`/venues/${venueId}`} target="_blank">
+            <Link href={venue ? venuePublicPath(venue) : `/venues/${venueId}`} target="_blank">
               <Eye className="h-3.5 w-3.5" />
               View public profile
             </Link>

@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
+import { venuePublicPath } from '@/lib/venuePaths'
 import { Bell, BellOff, ChevronLeft, ChevronDown, ChevronUp, Copy, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
@@ -58,6 +59,7 @@ type EventDetails = {
 
 type VenueDetails = {
   id: string
+  slug?: string | null
   name: string
   address: string
   city?: string | null
@@ -458,7 +460,7 @@ export default function EventDetailsPage() {
         eventData.venue_id
           ? supabase
               .from('venues')
-              .select('id, name, address, city, region, country, parking_options, accessibility, food_drinks_available, drinks_available, description, google_review_url, website_url')
+              .select('id, slug, name, address, city, region, country, parking_options, accessibility, food_drinks_available, drinks_available, description, google_review_url, website_url')
               .eq('id', eventData.venue_id)
               .single()
           : Promise.resolve({ data: null, error: null }),
@@ -1455,7 +1457,7 @@ export default function EventDetailsPage() {
                 {/* Action links */}
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Link
-                    href={`/venues/${venue.id}`}
+                    href={venuePublicPath(venue)}
                     onClick={() => setVenueOpen(false)}
                     className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
                   >
