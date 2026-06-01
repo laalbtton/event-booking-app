@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "build:android": "next build && npx cap sync android",
-    "open:android": "npx cap open android"
+    "open:android": "npx cap open android",
+    "screenshots:tablet": "node scripts/capture-play-store-tablet-screenshots.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.0",
@@ -51,6 +52,7 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "playwright": "^1.49.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
