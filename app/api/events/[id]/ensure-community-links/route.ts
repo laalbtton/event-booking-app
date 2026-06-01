@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ensureApprovedCommunityLinksForEvent } from '@/lib/server/ensureEventCommunityLinks'
+import { sendNewEventPushToCommunityMembers } from '@/lib/server/newEventCommunityPush'
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -62,6 +63,17 @@ export async function POST(
     }
 
     const result = await ensureApprovedCommunityLinksForEvent(supabase, eventId, typed.created_by)
+
+    if (
+      typed.status === 'active' &&
+      result.affectedCommunityIds.length > 0
+    ) {
+      void sendNewEventPushToCommunityMembers(
+        supabase,
+        eventId,
+        result.affectedCommunityIds,
+      ).catch((err) => console.warn('new-event community push after ensure-links:', err))
+    }
 
     return NextResponse.json({
       success: true,

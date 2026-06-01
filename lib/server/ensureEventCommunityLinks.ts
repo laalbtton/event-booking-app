@@ -46,19 +46,28 @@ export async function ensureApprovedCommunityLinksForEvent(
   supabase: SupabaseClient,
   eventId: string,
   creatorUserId: string
-): Promise<{ linked: number; upgraded: number; membershipCommunities: number }> {
+): Promise<{
+  linked: number
+  upgraded: number
+  membershipCommunities: number
+  affectedCommunityIds: string[]
+}> {
   const { data: memberships, error: memErr } = await supabase
     .from('community_members')
     .select('community_id, joined_at, role')
     .eq('user_id', creatorUserId)
 
   if (memErr) throw memErr
-  if (!memberships?.length) return { linked: 0, upgraded: 0, membershipCommunities: 0 }
+  if (!memberships?.length) {
+    return { linked: 0, upgraded: 0, membershipCommunities: 0, affectedCommunityIds: [] }
+  }
 
   const membershipOrder = orderedCommunityIdsForCreator(memberships as { community_id: string; joined_at: string; role: string }[])
   if (membershipOrder.length === 0) {
-    return { linked: 0, upgraded: 0, membershipCommunities: 0 }
+    return { linked: 0, upgraded: 0, membershipCommunities: 0, affectedCommunityIds: [] }
   }
+
+  const affectedCommunityIds: string[] = []
 
   const { data: communityRows } = await supabase
     .from('communities')
@@ -112,6 +121,7 @@ export async function ensureApprovedCommunityLinksForEvent(
       }
       linked += 1
       activeCount += 1
+      affectedCommunityIds.push(cid)
       continue
     }
 
@@ -128,7 +138,10 @@ export async function ensureApprovedCommunityLinksForEvent(
           expires_at: null,
         })
         .eq('id', row.id as string)
-      if (!upErr) upgraded += 1
+      if (!upErr) {
+        upgraded += 1
+        affectedCommunityIds.push(cid)
+      }
       continue
     }
 
@@ -160,5 +173,10 @@ export async function ensureApprovedCommunityLinksForEvent(
       .eq('id', r.id as string)
   }
 
-  return { linked, upgraded, membershipCommunities: membershipOrder.length }
+  return {
+    linked,
+    upgraded,
+    membershipCommunities: membershipOrder.length,
+    affectedCommunityIds: [...new Set(affectedCommunityIds)],
+  }
 }

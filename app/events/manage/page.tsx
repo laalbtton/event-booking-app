@@ -793,35 +793,47 @@ export default function EventManagementPage() {
           console.warn('Failed to link event to communities:', communityErr)
         }
 
-        // If event is pending approval, notify community admins for review
-        // Use the same primaryCommunityId determined above for consistency
-        try {
-          if (primaryCommunityId) {
-            const { data: communityAdmins } = await supabase
-              .from('community_members')
-              .select('user_id')
-              .eq('community_id', primaryCommunityId)
-              .in('role', ['admin', 'co_admin'])
-            for (const admin of (communityAdmins || []) as { user_id: string }[]) {
-              await supabase.rpc('create_notification', {
-                p_user_id: admin.user_id,
-                p_type: 'event_pending_approval',
-                p_title: 'New Event Awaiting Approval',
-                p_message: `"${(formData as any).title}" has been submitted and is waiting for your review.`,
-                p_related_booking_id: null,
-                p_related_event_id: data.id,
-              }).then(null, () => null)
+        // Notify community admins in the background (does not block create confirmation).
+        void (async () => {
+          try {
+            if (primaryCommunityId) {
+              const { data: communityAdmins } = await supabase
+                .from('community_members')
+                .select('user_id')
+                .eq('community_id', primaryCommunityId)
+                .in('role', ['admin', 'co_admin'])
+              for (const admin of (communityAdmins || []) as { user_id: string }[]) {
+                await supabase.rpc('create_notification', {
+                  p_user_id: admin.user_id,
+                  p_type: 'event_pending_approval',
+                  p_title: 'New Event Awaiting Approval',
+                  p_message: `"${(formData as any).title}" has been submitted and is waiting for your review.`,
+                  p_related_booking_id: null,
+                  p_related_event_id: data.id,
+                }).then(null, () => null)
+              }
             }
-          }
-        } catch { /* non-blocking */ }
+          } catch { /* non-blocking */ }
+        })()
       }
 
-      // Always ensure event_communities rows from creator memberships (covers pending + active,
-      // members with only "member" role, and gaps when submit-event did not run).
-      try {
-        const commSession = await supabase.auth.getSession()
-        const accessToken = commSession.data.session?.access_token
-        if (accessToken) {
+      const isLiveNow = userRole === 'admin' || !communitySubmissionEnabled
+      if (isLiveNow) {
+        toast.success('Event created successfully!')
+      } else {
+        toast.success('Event submitted for review! You\'ll be notified within 24 hours once approved.')
+      }
+      setShowCreateForm(false)
+      setCreateStep('details')
+      resetFormData()
+      void loadEvents()
+
+      // Link remaining communities and send member push when auto-approved (server-side).
+      void (async () => {
+        try {
+          const commSession = await supabase.auth.getSession()
+          const accessToken = commSession.data.session?.access_token
+          if (!accessToken) return
           const ens = await fetch(`/api/events/${data.id}/ensure-community-links`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${accessToken}` },
@@ -835,41 +847,10 @@ export default function EventManagementPage() {
               { duration: 6000 }
             )
           }
+        } catch (e) {
+          console.warn('ensure-community-links failed', e)
         }
-      } catch (e) {
-        console.warn('ensure-community-links failed', e)
-      }
-
-      // Notify when the event is live immediately (admin always; creators when community review is off).
-      // Pending-approval events notify after approval via /api/events/[id]/review or review-event-submission.
-      if (userRole === 'admin' || !communitySubmissionEnabled) {
-        try {
-          const { data: sessionData } = await supabase.auth.getSession()
-          const accessToken = sessionData.session?.access_token
-          if (accessToken) {
-            await fetch('/api/events/notify-new', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({ eventId: data.id }),
-            })
-          }
-        } catch (pushErr) {
-          console.warn('Failed to send new event push notification:', pushErr)
-        }
-      }
-
-      if (userRole === 'admin' || !communitySubmissionEnabled) {
-        toast.success('Event created successfully!')
-      } else {
-        toast.success('Event submitted for review! You\'ll be notified within 24 hours once approved.')
-      }
-      setShowCreateForm(false)
-      setCreateStep('details')
-      resetFormData()
-      loadEvents()
+      })()
     } catch (error: any) {
       console.error('Full error:', error)
       toast.error('Error: ' + error.message)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { ensureApprovedCommunityLinksForEvent } from '@/lib/server/ensureEventCommunityLinks'
+import { sendNewEventPushToCommunityMembers } from '@/lib/server/newEventCommunityPush'
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -121,24 +122,9 @@ export async function POST(
         })
       }
 
-      // Send new-event push to all users (now that it's live)
-      try {
-        const origin = request.nextUrl.origin
-        const res = await fetch(`${origin}/api/events/notify-new`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ eventId }),
-        })
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}))
-          console.warn('notify-new after event review:', res.status, j)
-        }
-      } catch (err) {
-        console.warn('notify-new fetch failed after event review:', err)
-      }
+      void sendNewEventPushToCommunityMembers(supabase, eventId, [communityId]).catch((err) =>
+        console.warn('new-event community push after event review:', err),
+      )
     } else {
       // Rejected: keep as pending_approval with a note, notify creator
       if (typedEvent.created_by) {

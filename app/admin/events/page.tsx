@@ -495,32 +495,25 @@ export default function AdminEventsPage() {
         })
       }
 
-      try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        const accessToken = sessionData.session?.access_token
-        if (accessToken) {
-          await fetch(`/api/events/${data.id}/ensure-community-links`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }).catch((err) => console.warn('ensure-community-links:', err))
-          await fetch('/api/events/notify-new', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({ eventId: data.id }),
-          })
-        }
-      } catch (pushErr) {
-        console.warn('Failed to send new event push notification:', pushErr)
-      }
-
       toast.success('Event created successfully!')
       setShowCreateForm(false)
       setCreateStep('details')
       resetFormData()
-      loadEvents()
+      void loadEvents()
+
+      void (async () => {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession()
+          const accessToken = sessionData.session?.access_token
+          if (!accessToken) return
+          await fetch(`/api/events/${data.id}/ensure-community-links`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }).catch((err) => console.warn('ensure-community-links:', err))
+        } catch (err) {
+          console.warn('ensure-community-links failed:', err)
+        }
+      })()
     } catch (error: any) {
       console.error('Full error:', error)
       toast.error('Error: ' + error.message)

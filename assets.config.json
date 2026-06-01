@@ -1,0 +1,10 @@
+{
+  "android": {
+    "icon": {
+      "backgroundColor": "#ffffff"
+    },
+    "splash": {
+      "backgroundColor": "#000000"
+    }
+  }
+}

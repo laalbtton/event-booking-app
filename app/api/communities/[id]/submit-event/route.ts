@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { communityAutoApprovesNewEvents } from '@/lib/communityAutoApprove'
+import { sendNewEventPushToCommunityMembers } from '@/lib/server/newEventCommunityPush'
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -159,6 +160,19 @@ export async function POST(
           p_related_booking_id: null,
           p_related_event_id: eventId,
         })
+      }
+    }
+
+    if (linkApproved) {
+      const { data: ev } = await supabase
+        .from('events')
+        .select('status')
+        .eq('id', eventId)
+        .maybeSingle()
+      if ((ev as { status?: string } | null)?.status === 'active') {
+        void sendNewEventPushToCommunityMembers(supabase, eventId, [communityId]).catch((err) =>
+          console.warn('new-event community push after submit-event:', err),
+        )
       }
     }
 

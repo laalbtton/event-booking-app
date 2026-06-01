@@ -1,5 +1,14 @@
 # Google Play store listing assets
 
+## Store listing graphics (upload in Play Console)
+
+| File | Size | Play Console field |
+|------|------|-------------------|
+| `app-icon-512.png` | 512×512 | App icon |
+| `feature-graphic.png` | 1024×500 | Feature graphic |
+
+Source masters live in `assets/icon.png` (1024×1024). Regenerate native Android icons with `npm run assets:android`.
+
 ## Tablet screenshots
 
 Generated with:

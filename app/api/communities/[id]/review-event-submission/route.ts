@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sendNewEventPushToCommunityMembers } from '@/lib/server/newEventCommunityPush'
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -150,25 +151,18 @@ export async function POST(
       })
     }
 
-    // Same broadcast as /api/events/[id]/review — was missing here so events approved via
-    // "New Events" never triggered the new-event push.
-    if (activatedEvent) {
-      try {
-        const origin = request.nextUrl.origin
-        const res = await fetch(`${origin}/api/events/notify-new`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ eventId: sub.event_id }),
-        })
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}))
-          console.warn('notify-new after review-event-submission:', res.status, j)
-        }
-      } catch (err) {
-        console.warn('notify-new fetch failed after review-event-submission:', err)
+    if (action === 'approved') {
+      const { data: ev } = await supabase
+        .from('events')
+        .select('status')
+        .eq('id', sub.event_id)
+        .maybeSingle()
+      if ((ev as { status?: string } | null)?.status === 'active') {
+        void sendNewEventPushToCommunityMembers(
+          supabase,
+          sub.event_id,
+          activatedEvent ? undefined : [communityId],
+        ).catch((err) => console.warn('new-event community push after review-event-submission:', err))
       }
     }
 

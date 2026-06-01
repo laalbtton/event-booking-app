@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/server/supabaseAdmin'
-import { sendPushToAllUsers } from '@/lib/server/push'
+import { sendNewEventPushToCommunityMembers } from '@/lib/server/newEventCommunityPush'
 
 type ProfileRoleRow = { id: string; role?: string } | null
 
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, title, date, location')
+      .select('id, status')
       .eq('id', eventId)
       .maybeSingle()
 
@@ -91,21 +91,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Event not found' }, { status: 404 })
     }
 
-    const result = await sendPushToAllUsers(
-      supabase,
-      {
-        title: 'New event added',
-        body: `"${event.title}" is now available. Check it out!`,
-        data: { url: `/events/${event.id}` },
-      },
-      'new_events'
-    )
+    if ((event.status as string) !== 'active') {
+      return NextResponse.json(
+        { error: 'Push is only sent for active events after community approval' },
+        { status: 400 },
+      )
+    }
+
+    const communityIds = Array.isArray(body?.communityIds)
+      ? (body.communityIds as unknown[]).filter((id): id is string => typeof id === 'string')
+      : undefined
+
+    const result = await sendNewEventPushToCommunityMembers(supabase, eventId, communityIds)
 
     return NextResponse.json({
       success: true,
       sent: result.sent,
       failed: result.failed,
       skippedUsers: result.skippedUsers,
+      memberCount: result.memberCount,
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
