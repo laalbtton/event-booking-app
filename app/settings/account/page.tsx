@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, LogOut } from 'lucide-react'
+import { ChevronLeft, LogOut, Trash2 } from 'lucide-react'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 
@@ -31,7 +31,7 @@ export default function SettingsAccountPage() {
               <span className="block">Sign out of your account on this device.</span>
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <Button
               variant="destructive"
               onClick={async () => {
@@ -41,6 +41,23 @@ export default function SettingsAccountPage() {
             >
               <LogOut className="w-4 h-4 mr-2" />
               Sign out
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-destructive/30">
+          <CardHeader>
+            <CardTitle className="text-xl text-destructive">Delete account</CardTitle>
+            <CardDescription>
+              Permanently delete your account and associated data. This cannot be undone.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline" className="w-full gap-2 border-destructive/50 text-destructive hover:bg-destructive/10">
+              <Link href="/delete-account">
+                <Trash2 className="w-4 h-4" />
+                Delete account
+              </Link>
             </Button>
           </CardContent>
         </Card>
