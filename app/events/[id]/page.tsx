@@ -13,6 +13,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { cn } from '@/lib/utils'
+import {
+  canAffordWithVenueCredits,
+  type VenueCreditGrant,
+} from '@/lib/venueCredits'
 import { venuePublicPath } from '@/lib/venuePaths'
 import { Bell, BellOff, ChevronLeft, ChevronDown, ChevronUp, Copy, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
@@ -111,6 +115,7 @@ export default function EventDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
+  const [venueCreditGrants, setVenueCreditGrants] = useState<VenueCreditGrant[]>([])
   const [userBooking, setUserBooking] = useState<any>(null)
   const [bookingLoading, setBookingLoading] = useState(false)
   const [settingAlert, setSettingAlert] = useState(false)
@@ -391,16 +396,23 @@ export default function EventDetailsPage() {
 
       if (!user) {
         setProfile(null)
+        setVenueCreditGrants([])
         setUserBooking(null)
         setEventAutoPostEnabled(false)
         setAlertSet(false)
       } else {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
+        const now = new Date().toISOString()
+        const [{ data: profileData }, { data: grantRows }] = await Promise.all([
+          supabase.from('profiles').select('*').eq('id', user.id).single(),
+          supabase
+            .from('venue_credit_grants')
+            .select('venue_id, credits_remaining')
+            .eq('user_id', user.id)
+            .gt('credits_remaining', 0)
+            .or(`expires_at.is.null,expires_at.gt.${now}`),
+        ])
         if (profileData) setProfile(profileData)
+        setVenueCreditGrants((grantRows || []) as VenueCreditGrant[])
       }
 
       // Load event details by id first, then fallback to slug.
@@ -738,7 +750,14 @@ export default function EventDetailsPage() {
             Math.ceil(Math.max(0, Number(eventData.food_coupon_value_cents || 0)) / 100)
           : eventData.credits_required)
 
-      if (Number(profile.credits || 0) < effectiveCreditsRequired) {
+      if (
+        !canAffordWithVenueCredits(
+          Number(profile.credits || 0),
+          venueCreditGrants,
+          eventData.venue_id,
+          effectiveCreditsRequired,
+        )
+      ) {
         throw new Error('Insufficient credits')
       }
 
@@ -832,7 +851,12 @@ export default function EventDetailsPage() {
       ? Math.max(0, Number(event.spot_fee_credits || 0)) +
         Math.ceil(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100)
       : event.credits_required)
-  const canAfford = Number(profile?.credits || 0) >= creditsRequiredForButton
+  const canAfford = canAffordWithVenueCredits(
+    Number(profile?.credits || 0),
+    venueCreditGrants,
+    event?.venue_id,
+    creditsRequiredForButton,
+  )
   const bookingLabel = isFull ? 'Join Waitlist' : isAudienceUser ? 'Reserve Spot' : 'Book Event'
   const now = new Date()
   const startTime = new Date(event.date)

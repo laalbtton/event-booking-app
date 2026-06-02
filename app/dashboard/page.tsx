@@ -42,6 +42,11 @@ import {
   type InstallPlatform,
 } from '@/lib/installPromptClient'
 import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
+import {
+  canAffordWithVenueCredits,
+  venueCreditsForEvent,
+  type VenueCreditGrant,
+} from '@/lib/venueCredits'
 
 type PushNotificationPrefs = {
   user_id: string
@@ -70,6 +75,7 @@ type InviteItem = {
     title: string
     date: string
     location: string | null
+    venue_id: string | null
     credits_required: number | null
     event_type: string | null
   }
@@ -131,7 +137,8 @@ export default function Dashboard() {
   const [isCommunityEventCreator, setIsCommunityEventCreator] = useState(false)
   const [hasCreatedEvents, setHasCreatedEvents] = useState(false)
   const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
-  const [activeVenueGrantCount, setActiveVenueGrantCount] = useState(0)
+  const [venueCreditGrants, setVenueCreditGrants] = useState<VenueCreditGrant[]>([])
+  const activeVenueGrantCount = venueCreditGrants.length
   const [eventTab, setEventTab] = useState<'perform' | 'attend'>('perform')
   const [invitedEventIds, setInvitedEventIds] = useState<Set<string>>(new Set())
   const previousBookingsRef = useRef<any[]>([])
@@ -948,16 +955,18 @@ export default function Dashboard() {
         setProfile(profileData)
       }
 
-      // Load active venue credit grants for this user
+      // Load active venue credit grants (used for affordability + header badge)
       void (async () => {
         const now = new Date().toISOString()
-        const { count } = await supabase
+        const { data: grantRows } = await supabase
           .from('venue_credit_grants')
-          .select('id', { count: 'exact', head: true })
+          .select('venue_id, credits_remaining')
           .eq('user_id', userId)
           .gt('credits_remaining', 0)
           .or(`expires_at.is.null,expires_at.gt.${now}`)
-        setActiveVenueGrantCount(count ?? 0)
+        setVenueCreditGrants(
+          (grantRows || []) as VenueCreditGrant[],
+        )
       })()
 
       // Load upcoming and in-progress events, scoped to communities the user belongs to
@@ -1055,7 +1064,7 @@ export default function Dashboard() {
           .in('status', ['pending', 'accepted']),
         supabase
           .from('event_invites')
-          .select('id, status, created_at, events (id, title, date, location, credits_required, event_type)')
+          .select('id, status, created_at, events (id, title, date, location, venue_id, credits_required, event_type)')
           .eq('invited_user_id', userId)
           .eq('status', 'pending')
           .order('created_at', { ascending: false }),
@@ -1108,9 +1117,29 @@ export default function Dashboard() {
       const creditsRequired = invite.events.credits_required ?? 0
       const isBookedShow = invite.events.event_type === 'booked_show'
       if (isBookedShow && creditsRequired > 0) {
+        if (
+          !profile ||
+          !canAffordWithVenueCredits(
+            profile.credits ?? 0,
+            venueCreditGrants,
+            invite.events.venue_id,
+            creditsRequired,
+          )
+        ) {
+          toast.error('Insufficient credits')
+          return
+        }
+        const venueCover = venueCreditsForEvent(venueCreditGrants, invite.events.venue_id)
+        const regularNeeded = Math.max(0, creditsRequired - venueCover)
+        const chargeNote =
+          venueCover > 0 && regularNeeded > 0
+            ? ` (${venueCover} from venue pass, ${regularNeeded} from your balance)`
+            : venueCover > 0
+              ? ' (covered by your venue pass)'
+              : ''
         const shouldProceed = await confirm({
           title: 'Confirm acceptance',
-          message: `Accepting this invite will charge you ${creditsRequired} credit${creditsRequired !== 1 ? 's' : ''}.\n\nOnly proceed if you are okay with this charge.`,
+          message: `Accepting this invite will charge you ${creditsRequired} credit${creditsRequired !== 1 ? 's' : ''}${chargeNote}.\n\nOnly proceed if you are okay with this charge.`,
           confirmText: `Accept & pay ${creditsRequired} credit${creditsRequired !== 1 ? 's' : ''}`,
           cancelText: 'Cancel',
           variant: 'default',
@@ -1274,7 +1303,14 @@ export default function Dashboard() {
       const effectiveCreditsRequired = isAudienceUser
         ? (audienceHasFreePass ? 0 : audienceDepositCredits)
         : getEffectiveCreditsRequired(event)
-      if (profile.credits < effectiveCreditsRequired) {
+      if (
+        !canAffordWithVenueCredits(
+          profile.credits,
+          venueCreditGrants,
+          event.venue_id,
+          effectiveCreditsRequired,
+        )
+      ) {
         throw new Error('Insufficient credits')
       }
       const { data: sessionData } = await supabase.auth.getSession()
@@ -1961,7 +1997,12 @@ export default function Dashboard() {
                   const hasRedeemableCredits = event.tickets_enabled && Number((event as any).audience_deposit_credits || 0) > 0
                   const showRedeemableHelpDot = hasRedeemableCredits && isAudienceUser
                   const languageSummary = formatEventLanguages(event)
-                  const canAfford = (profile?.credits || 0) >= creditsRequiredForCard
+                  const canAfford = canAffordWithVenueCredits(
+                    profile?.credits || 0,
+                    venueCreditGrants,
+                    event.venue_id,
+                    creditsRequiredForCard,
+                  )
                   const isBooking = bookingLoading === event.id
                   const now = new Date()
                   const startTime = new Date(event.date)

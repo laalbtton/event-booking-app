@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendPushToAllUsers } from '@/lib/server/push'
 import { splitDeduction, hasEnoughCredits } from '@/lib/creditLedger'
+import { applyVenueCreditGrants } from '@/lib/server/venueCreditGrants'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -132,41 +133,19 @@ export async function POST(request: NextRequest) {
     const hasAudienceFreePass = isAudienceBooking && Number(profile.audience_free_passes_remaining || 0) > 0
     const creditsToDebitBeforeVenue = hasAudienceFreePass ? 0 : totalCreditsRequired
 
-    // ── Venue credit passes ─────────────────────────────────────────────────
-    // If the event has a venue, check for active venue-restricted credit grants.
-    // Apply them FIFO (oldest first) before touching regular credits.
     let venueCreditsApplied = 0
     let creditsToDebit = creditsToDebitBeforeVenue
 
-    if (creditsToDebit > 0 && event.venue_id) {
-      const now = new Date().toISOString()
-      const { data: activeGrants } = await supabase
-        .from('venue_credit_grants')
-        .select('id, credits_remaining, expires_at')
-        .eq('user_id', authData.user.id)
-        .eq('venue_id', event.venue_id)
-        .gt('credits_remaining', 0)
-        .or(`expires_at.is.null,expires_at.gt.${now}`)
-        .order('issued_at', { ascending: true })
-
-      if (activeGrants && activeGrants.length > 0) {
-        let remaining = creditsToDebit
-        for (const grant of activeGrants) {
-          if (remaining <= 0) break
-          const use = Math.min(grant.credits_remaining as number, remaining)
-          if (use > 0) {
-            venueCreditsApplied += use
-            remaining -= use
-            await supabase
-              .from('venue_credit_grants')
-              .update({ credits_remaining: (grant.credits_remaining as number) - use })
-              .eq('id', grant.id)
-          }
-        }
-        creditsToDebit = remaining
-      }
+    if (creditsToDebitBeforeVenue > 0) {
+      const venueApply = await applyVenueCreditGrants(
+        supabase,
+        authData.user.id,
+        event.venue_id,
+        creditsToDebitBeforeVenue,
+      )
+      venueCreditsApplied = venueApply.venueCreditsApplied
+      creditsToDebit = venueApply.creditsToDebit
     }
-    // ───────────────────────────────────────────────────────────────────────
 
     const purchased = profile.credits_purchased ?? 0
     const complimentary = profile.credits_complimentary ?? 0
