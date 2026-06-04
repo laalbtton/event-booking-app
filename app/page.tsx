@@ -3,8 +3,10 @@ import type { Metadata } from 'next'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { PublicEventCard } from '@/components/public/PublicEventCard'
 import { HomeAuthRedirect } from '@/components/public/HomeAuthRedirect'
+import { StatsBand } from '@/components/public/StatsBand'
 import { listPublicEvents } from '@/lib/server/publicContent'
 import { listPublicCommunities } from '@/lib/server/publicCommunities'
+import { getPublicAppStats } from '@/lib/server/publicStats'
 
 export const revalidate = 300
 
@@ -24,9 +26,10 @@ export const metadata: Metadata = {
 export default async function Home() {
   const now = new Date()
 
-  const [allEvents, communities] = await Promise.all([
+  const [allEvents, communities, stats] = await Promise.all([
     listPublicEvents(20),
     listPublicCommunities(),
+    getPublicAppStats(),
   ])
 
   const upcomingEvents = allEvents
@@ -73,6 +76,13 @@ export default async function Home() {
           </p>
         </div>
       </section>
+
+      {/* ── Activity Stats ────────────────────────────────────────── */}
+      <StatsBand
+        usersRegistered={stats.usersRegistered}
+        eventsHosted={stats.eventsHosted}
+        performerSlotsBooked={stats.performerSlotsBooked}
+      />
 
       {/* ── Upcoming Events ───────────────────────────────────────── */}
       {upcomingEvents.length > 0 && (
