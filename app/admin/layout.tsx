@@ -7,7 +7,7 @@ import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider
 import Link from 'next/link'
 import NavigationTabs from '@/components/NavigationTabs'
 import { useIsMobile } from '@/hooks/useMediaQuery'
-import { ChevronLeft, Users, MapPin, BookOpen, CreditCard, ClipboardList, Globe, Mail } from 'lucide-react'
+import { ChevronLeft, Users, MapPin, BookOpen, CreditCard, ClipboardList, Globe, Mail, Star } from 'lucide-react'
 
 export default function AdminLayout({
   children,
@@ -82,6 +82,7 @@ export default function AdminLayout({
     { href: '/admin/requests',         label: 'Requests',        icon: ClipboardList, exact: true },
     { href: '/admin/communities',      label: 'Communities',     icon: Globe,         exact: false },
     { href: '/admin/email-templates',  label: 'Email Templates', icon: Mail,          exact: false },
+    { href: '/admin/founding-members', label: 'Insider Members', icon: Star,          exact: false },
   ]
 
   return (

@@ -1,0 +1,665 @@
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  AGE_RANGES,
+  CANADA_STATUSES,
+  CITIES,
+  COMEDY_PREFERENCES,
+  CREDIT_ACCOUNT,
+  CREDIT_EMAIL_UPDATES,
+  CREDIT_PREFERENCES,
+  CREDIT_TOTAL_AVAILABLE,
+  DOWNTOWN_INTEREST,
+  INSTAGRAM_HANDLE,
+  INSTAGRAM_URL,
+  TICKET_PRICE_RANGES,
+  isValidEmail,
+  trackInsiderEvent,
+} from '@/lib/foundingMembers'
+
+type MemberState = {
+  totalCredits: number
+  accountAwarded: boolean
+  preferencesAwarded: boolean
+  emailAwarded: boolean
+  signupCompleted: boolean
+  preferencesCompleted: boolean
+  emailUpdatesOptIn: boolean
+}
+
+type Props = {
+  initialClaimed: number
+  initialRemaining: number
+  limit: number
+}
+
+const BENEFITS = [
+  'Earn a free comedy ticket',
+  'Exclusive comedy invites',
+  'Early access to future shows',
+  'Members-only ticket offers',
+  'Priority access to limited-seat events',
+  'Founding Member status',
+]
+
+export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Props) {
+  const [remaining, setRemaining] = useState(initialRemaining)
+  const [claimed, setClaimed] = useState(initialClaimed)
+  const [step, setStep] = useState<'account' | 'preferences' | 'done'>('account')
+  const [member, setMember] = useState<MemberState | null>(null)
+  const [magicSent, setMagicSent] = useState(false)
+  const [capturedEmail, setCapturedEmail] = useState('')
+  const [activated, setActivated] = useState(false)
+
+  const formRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    trackInsiderEvent('landing_page_view')
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('activated') === '1') {
+      setActivated(true)
+      trackInsiderEvent('signup_completed')
+    }
+    // Refresh the live counter on mount
+    fetch('/api/founding-members/stats')
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof d?.remaining === 'number') setRemaining(d.remaining)
+        if (typeof d?.claimed === 'number') setClaimed(d.claimed)
+      })
+      .catch(() => {})
+  }, [])
+
+  function scrollToForm() {
+    trackInsiderEvent('cta_clicked')
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const earned = member?.totalCredits ?? 0
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-stone-100">
+      {activated && (
+        <div className="bg-green-500 px-4 py-2.5 text-center text-sm font-semibold text-zinc-950">
+          ✓ Your Brampton Comedy Insider account is activated. Your credits are unlocked!
+        </div>
+      )}
+
+      {/* ── HERO ─────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-black via-neutral-950 to-stone-900 px-4 pt-14 pb-16">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.10),transparent_55%)]" />
+        <div className="relative mx-auto max-w-2xl text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-yellow-400/40 bg-yellow-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-yellow-300">
+            🎙 Founding Members Club
+          </span>
+
+          <h1 className="mt-6 text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-5xl">
+            Join <span className="text-yellow-400">Brampton Comedy Insider</span>
+          </h1>
+
+          <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-stone-300 sm:text-lg">
+            Be one of the first 500 members and earn a free comedy ticket, exclusive event invites,
+            discounted tickets, and priority access to future comedy shows in Brampton.
+          </p>
+
+          <ul className="mx-auto mt-8 grid max-w-md grid-cols-1 gap-2 text-left sm:grid-cols-2">
+            {BENEFITS.map((b) => (
+              <li key={b} className="flex items-center gap-2 text-sm text-stone-200">
+                <span className="text-yellow-400">✓</span>
+                {b}
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-9">
+            <Button
+              size="lg"
+              onClick={scrollToForm}
+              className="bg-yellow-400 px-8 text-base font-bold text-zinc-950 shadow-lg shadow-yellow-400/20 hover:bg-yellow-300"
+            >
+              Claim My Founding Member Spot
+            </Button>
+          </div>
+
+          {/* Scarcity */}
+          <div className="mx-auto mt-9 max-w-xs rounded-2xl border border-white/10 bg-white/5 px-6 py-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-stone-400">
+              Founding Members Remaining
+            </p>
+            <p className="mt-2 text-3xl font-extrabold text-yellow-400 tabular-nums">
+              {remaining} <span className="text-stone-500">/ {limit}</span>
+            </p>
+            <p className="mt-1 text-xs text-stone-400">Spots left</p>
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-yellow-400 transition-all"
+                style={{ width: `${Math.min(100, (claimed / limit) * 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FREE TICKET PROGRESS ─────────────────────────────── */}
+      <section className="px-4 py-12">
+        <div className="mx-auto max-w-md">
+          <h2 className="text-center text-2xl font-bold text-white">
+            Earn Your First Free Comedy Ticket
+          </h2>
+          <p className="mx-auto mt-3 max-w-md text-center text-sm leading-relaxed text-stone-400">
+            Complete 3 simple steps and unlock ${CREDIT_TOTAL_AVAILABLE} in comedy credits that can be
+            redeemed toward future comedy events, subject to ticket availability.
+          </p>
+
+          <div className="mt-7 rounded-2xl border border-white/10 bg-white/5 p-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-yellow-300">
+              🎟 Free Ticket Progress
+            </p>
+            <div className="mt-4 space-y-3">
+              <ProgressRow
+                label="Create Account"
+                amount={CREDIT_ACCOUNT}
+                done={!!member?.accountAwarded}
+              />
+              <ProgressRow
+                label="Complete Preferences"
+                amount={CREDIT_PREFERENCES}
+                done={!!member?.preferencesAwarded}
+              />
+              <ProgressRow
+                label="Enable Email Updates"
+                amount={CREDIT_EMAIL_UPDATES}
+                done={!!member?.emailAwarded}
+              />
+            </div>
+            <div className="mt-5 border-t border-white/10 pt-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-stone-300">Earned</span>
+                <span className="text-xl font-extrabold text-yellow-400 tabular-nums">
+                  ${earned} <span className="text-stone-500">/ ${CREDIT_TOTAL_AVAILABLE}</span>
+                </span>
+              </div>
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-yellow-400 transition-all"
+                  style={{ width: `${Math.min(100, (earned / CREDIT_TOTAL_AVAILABLE) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── REWARDS ──────────────────────────────────────────── */}
+      <section className="px-4 pb-12">
+        <div className="mx-auto max-w-md rounded-2xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent p-6">
+          <h2 className="text-center text-lg font-bold text-white">How your credits add up</h2>
+          <div className="mt-5 space-y-3 text-sm">
+            <RewardRow label="Create Your Account" amount={CREDIT_ACCOUNT} />
+            <RewardRow label="Complete Your Preferences" amount={CREDIT_PREFERENCES} />
+            <RewardRow label="Enable Email Updates" amount={CREDIT_EMAIL_UPDATES} />
+            <div className="flex items-center justify-between border-t border-white/10 pt-3 font-bold text-white">
+              <span>Total Available Immediately</span>
+              <span className="text-yellow-400">${CREDIT_TOTAL_AVAILABLE} Credit</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FORM / CONFIRMATION ──────────────────────────────── */}
+      <section ref={formRef} className="scroll-mt-4 px-4 pb-20">
+        <div className="mx-auto max-w-md">
+          {step === 'done' ? (
+            <Confirmation credits={earned} />
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <div className="mb-5 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Personalize Your Comedy Experience</h2>
+                <span className="text-xs font-medium text-stone-400">
+                  Step {step === 'account' ? '1' : '2'} of 2
+                </span>
+              </div>
+
+              {step === 'account' ? (
+                <AccountStep
+                  magicSent={magicSent}
+                  onComplete={(m, sent, email) => {
+                    setMember(m)
+                    setMagicSent(sent)
+                    setCapturedEmail(email)
+                    setStep('preferences')
+                    trackInsiderEvent('preferences_started')
+                    // Refresh counter (a new spot may have been claimed)
+                    fetch('/api/founding-members/stats')
+                      .then((r) => r.json())
+                      .then((d) => {
+                        if (typeof d?.remaining === 'number') setRemaining(d.remaining)
+                        if (typeof d?.claimed === 'number') setClaimed(d.claimed)
+                      })
+                      .catch(() => {})
+                  }}
+                />
+              ) : (
+                <PreferencesStep
+                  email={capturedEmail}
+                  magicSent={magicSent}
+                  onComplete={(m) => {
+                    setMember((prev) => (prev ? { ...prev, ...m } : prev))
+                    setStep('done')
+                  }}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── FOOTER ───────────────────────────────────────────── */}
+      <footer className="border-t border-white/10 px-4 py-10 text-center">
+        <p className="text-sm text-stone-400">Follow us on Instagram</p>
+        <a
+          href={INSTAGRAM_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => trackInsiderEvent('instagram_clicked')}
+          className="mt-1 inline-block font-semibold text-yellow-400 hover:text-yellow-300"
+        >
+          @{INSTAGRAM_HANDLE}
+        </a>
+      </footer>
+    </div>
+  )
+}
+
+function ProgressRow({ label, amount, done }: { label: string; amount: number; done: boolean }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-xs ${
+          done ? 'border-yellow-400 bg-yellow-400 text-zinc-950' : 'border-white/30 text-transparent'
+        }`}
+      >
+        ✓
+      </span>
+      <span className={`flex-1 text-sm ${done ? 'text-stone-200' : 'text-stone-400'}`}>{label}</span>
+      <span className={`text-sm font-semibold ${done ? 'text-yellow-400' : 'text-stone-500'}`}>
+        ${amount}
+      </span>
+    </div>
+  )
+}
+
+function RewardRow({ label, amount }: { label: string; amount: number }) {
+  return (
+    <div className="flex items-center justify-between text-stone-300">
+      <span>{label}</span>
+      <span className="font-semibold text-yellow-400">→ ${amount} Credit</span>
+    </div>
+  )
+}
+
+function AccountStep({
+  magicSent,
+  onComplete,
+}: {
+  magicSent: boolean
+  onComplete: (member: MemberState, magicSent: boolean, email: string) => void
+}) {
+  const [firstName, setFirstName] = useState('')
+  const [email, setEmail] = useState('')
+  const [optIn, setOptIn] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+
+    if (!firstName.trim()) {
+      setError('Please enter your first name.')
+      return
+    }
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const res = await fetch('/api/founding-members/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          email: email.trim(),
+          emailUpdatesOptIn: optIn,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || 'Something went wrong. Please try again.')
+
+      trackInsiderEvent('email_submitted')
+      trackInsiderEvent('credit_awarded', { reason: 'account', amount: CREDIT_ACCOUNT })
+      if (optIn) trackInsiderEvent('email_opt_in')
+
+      // Trigger the existing magic-link signup flow (best-effort)
+      let sent = false
+      try {
+        const callbackUrl = `${window.location.origin}/auth/callback?intent=insider`
+        const { error: otpError } = await supabase.auth.signInWithOtp({
+          email: email.trim(),
+          options: { emailRedirectTo: callbackUrl },
+        })
+        if (!otpError) {
+          sent = true
+          trackInsiderEvent('magic_link_sent')
+        }
+      } catch {
+        // Non-blocking — preferences can still be completed
+      }
+
+      onComplete(data.member as MemberState, sent, email.trim().toLowerCase())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-stone-300">First Name</label>
+        <Input
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          placeholder="Your first name"
+          autoComplete="given-name"
+          className="border-white/15 bg-zinc-900 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-stone-300">Email Address</label>
+        <Input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="your@email.com"
+          autoComplete="email"
+          className="border-white/15 bg-zinc-900 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
+        />
+      </div>
+
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+        <input
+          type="checkbox"
+          checked={optIn}
+          onChange={(e) => setOptIn(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-yellow-400"
+        />
+        <span className="text-sm text-stone-300">
+          I want email updates about future comedy events, ticket offers, and exclusive invites.
+        </span>
+      </label>
+
+      <p className="text-xs leading-relaxed text-stone-500">
+        By signing up, you agree to receive updates about Brampton comedy events, ticket offers, and
+        exclusive invites. You can unsubscribe anytime.
+      </p>
+
+      {error && <p className="text-sm text-red-400">{error}</p>}
+
+      <Button
+        type="submit"
+        disabled={loading}
+        className="w-full bg-yellow-400 font-bold text-zinc-950 hover:bg-yellow-300"
+      >
+        {loading ? 'Saving…' : 'Continue'}
+      </Button>
+
+      {magicSent && (
+        <p className="text-center text-xs text-green-400">Check your email for your magic link.</p>
+      )}
+    </form>
+  )
+}
+
+function PreferencesStep({
+  email,
+  onComplete,
+  magicSent,
+}: {
+  email: string
+  magicSent: boolean
+  onComplete: (member: Partial<MemberState>) => void
+}) {
+  const [ageRange, setAgeRange] = useState<string | null>(null)
+  const [canadaStatus, setCanadaStatus] = useState<string | null>(null)
+  const [city, setCity] = useState<string | null>(null)
+  const [downtown, setDowntown] = useState<string | null>(null)
+  const [comedyPrefs, setComedyPrefs] = useState<string[]>([])
+  const [priceRange, setPriceRange] = useState<string | null>(null)
+  const [favorites, setFavorites] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  function toggleComedy(value: string) {
+    setComedyPrefs((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value],
+    )
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const res = await fetch('/api/founding-members/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          ageRange,
+          canadaStatus,
+          city,
+          downtownBramptonInterest: downtown,
+          comedyPreferences: comedyPrefs,
+          ticketPriceRange: priceRange,
+          favoriteComedians: favorites.trim() || null,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || 'Could not save your preferences.')
+
+      trackInsiderEvent('preferences_completed')
+      trackInsiderEvent('credit_awarded', { reason: 'preferences', amount: CREDIT_PREFERENCES })
+
+      onComplete({
+        totalCredits: data.member?.totalCredits ?? 0,
+        preferencesAwarded: true,
+        preferencesCompleted: true,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div>
+        <p className="text-lg font-semibold text-white">Tell Us What You Actually Want to Attend</p>
+        <p className="mt-1 text-sm text-stone-400">
+          Your answers help us send you the right event invites, early access offers, and ticket
+          deals.
+        </p>
+      </div>
+
+      {magicSent && (
+        <div className="rounded-lg border border-green-700/50 bg-green-900/20 p-3 text-center text-xs text-green-300">
+          Check your email for your magic link. Complete sign-up to activate your Brampton Comedy
+          Insider account and unlock your credits.
+        </div>
+      )}
+
+      <SingleSelect label="Age Range" options={AGE_RANGES} value={ageRange} onChange={setAgeRange} />
+      <SingleSelect
+        label="Which best describes you?"
+        options={CANADA_STATUSES}
+        value={canadaStatus}
+        onChange={setCanadaStatus}
+      />
+      <SingleSelect label="Where do you live?" options={CITIES} value={city} onChange={setCity} />
+      <SingleSelect
+        label="Would you attend a comedy show in Downtown Brampton?"
+        options={DOWNTOWN_INTEREST}
+        value={downtown}
+        onChange={setDowntown}
+      />
+
+      <div>
+        <p className="mb-2 text-sm font-medium text-stone-300">What kind of comedy interests you?</p>
+        <div className="flex flex-wrap gap-2">
+          {COMEDY_PREFERENCES.map((opt) => {
+            const active = comedyPrefs.includes(opt)
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => toggleComedy(opt)}
+                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  active
+                    ? 'border-yellow-400 bg-yellow-400 text-zinc-950 font-semibold'
+                    : 'border-white/20 text-stone-300 hover:border-white/40'
+                }`}
+              >
+                {opt}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <SingleSelect
+        label="How much would you realistically pay for a local comedy ticket?"
+        options={TICKET_PRICE_RANGES}
+        value={priceRange}
+        onChange={setPriceRange}
+      />
+
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-stone-300">
+          Who are your favourite comedians?{' '}
+          <span className="font-normal text-stone-500">(optional)</span>
+        </label>
+        <Input
+          value={favorites}
+          onChange={(e) => setFavorites(e.target.value)}
+          placeholder="e.g. comedians you'd love to see live"
+          className="border-white/15 bg-zinc-900 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
+        />
+      </div>
+
+      {error && <p className="text-sm text-red-400">{error}</p>}
+
+      <Button
+        type="submit"
+        disabled={loading}
+        className="w-full bg-yellow-400 font-bold text-zinc-950 hover:bg-yellow-300"
+      >
+        {loading ? 'Unlocking…' : 'Finish & Unlock Credits'}
+      </Button>
+    </form>
+  )
+}
+
+function SingleSelect({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string
+  options: readonly string[]
+  value: string | null
+  onChange: (v: string) => void
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-sm font-medium text-stone-300">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => {
+          const active = value === opt
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onChange(opt)}
+              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                active
+                  ? 'border-yellow-400 bg-yellow-400 text-zinc-950 font-semibold'
+                  : 'border-white/20 text-stone-300 hover:border-white/40'
+              }`}
+            >
+              {opt}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function Confirmation({ credits }: { credits: number }) {
+  const items = [
+    'Founding Member Status Activated',
+    'Preferences Saved',
+    'Credits Added',
+    'Early Access Enabled',
+  ]
+  return (
+    <div className="rounded-2xl border border-yellow-400/30 bg-gradient-to-b from-yellow-400/10 to-transparent p-7 text-center">
+      <div className="text-4xl">🎉</div>
+      <h2 className="mt-3 text-2xl font-extrabold text-white">You&apos;re Officially a Founding Member</h2>
+      <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-stone-300">
+        You&apos;re now on the priority list for future comedy events, early access offers, and
+        special ticket deals.
+      </p>
+
+      <ul className="mx-auto mt-6 max-w-xs space-y-2 text-left">
+        {items.map((i) => (
+          <li key={i} className="flex items-center gap-2 text-sm text-stone-200">
+            <span className="text-yellow-400">✓</span>
+            {i}
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-6 rounded-xl border border-white/10 bg-white/5 px-5 py-4">
+        <p className="text-xs font-semibold uppercase tracking-widest text-stone-400">
+          Credits Earned
+        </p>
+        <p className="mt-1 text-3xl font-extrabold text-yellow-400">${credits}</p>
+      </div>
+
+      <div className="mt-7">
+        <p className="text-sm text-stone-400">Follow us on Instagram</p>
+        <p className="font-semibold text-white">@{INSTAGRAM_HANDLE}</p>
+        <Button
+          asChild
+          className="mt-3 bg-yellow-400 font-bold text-zinc-950 hover:bg-yellow-300"
+          onClick={() => trackInsiderEvent('instagram_clicked')}
+        >
+          <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer">
+            Visit Instagram
+          </a>
+        </Button>
+      </div>
+    </div>
+  )
+}

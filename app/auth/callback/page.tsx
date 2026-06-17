@@ -104,6 +104,83 @@ export default function AuthCallbackPage() {
       router.replace(`/events/${eventSlug}?attended=1`)
     }
 
+    /**
+     * Brampton Comedy Insider magic-link flow:
+     * - Always assign audience role and auto-join public communities
+     * - Activate founding member + sync redeemable credits to profile
+     * - Redirect to the campaign page with an activated flag
+     */
+    async function handleInsiderIntent(
+      user: { id: string; user_metadata?: Record<string, unknown>; email?: string },
+      session: { access_token: string },
+    ) {
+      // Campaign signups are always audience members.
+      const profileUpdate: Record<string, unknown> = {
+        role: 'audience',
+        updated_at: new Date().toISOString(),
+      }
+
+      const userEmail = user.email?.trim().toLowerCase()
+      if (userEmail) {
+        const { data: member } = await supabase
+          .from('founding_members')
+          .select('first_name')
+          .eq('email', userEmail)
+          .maybeSingle()
+        if (member?.first_name) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .maybeSingle()
+          if (!profile?.full_name) {
+            profileUpdate.full_name = member.first_name
+          }
+        }
+      }
+
+      await supabase.from('profiles').update(profileUpdate).eq('id', user.id)
+
+      await supabase.auth.updateUser({
+        data: { ...user.user_metadata, onboarding_role_pending: false },
+      })
+
+      try {
+        const { data: publicCommunities } = await supabase
+          .from('communities')
+          .select('id')
+          .eq('is_public', true)
+          .eq('status', 'active')
+
+        if (publicCommunities) {
+          await Promise.allSettled(
+            publicCommunities.map((c: { id: string }) =>
+              fetch(`/api/communities/${c.id}/join`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${session.access_token}` },
+              }),
+            ),
+          )
+        }
+      } catch {
+        // Non-blocking
+      }
+
+      window.localStorage.removeItem('pending_role_onboarding')
+
+      // Mark the founding member account as activated (email comes from the session server-side)
+      try {
+        await fetch('/api/founding-members/activate', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        })
+      } catch {
+        // Non-blocking
+      }
+
+      router.replace('/brampton-comedy-insider?activated=1')
+    }
+
     async function handleAuthCallback() {
       try {
         const url = new URL(window.location.href)
@@ -160,6 +237,12 @@ export default function AuthCallbackPage() {
 
         if (intent === 'attend' && eventId && eventSlug && session?.access_token) {
           await handleAttendIntent(user, session, eventId, eventSlug)
+          return
+        }
+
+        // ── Brampton Comedy Insider campaign intent ──────────────────────
+        if (intent === 'insider' && session?.access_token) {
+          await handleInsiderIntent(user, session)
           return
         }
         // ────────────────────────────────────────────────────────────────
