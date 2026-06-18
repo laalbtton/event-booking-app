@@ -152,99 +152,54 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
 
   return (
     <div className="min-h-screen bg-zinc-950 text-stone-100">
-      {/* ── HERO + FORM (side-by-side on desktop, stacked on mobile) ── */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-black via-neutral-950 to-stone-900 px-4 pt-10 pb-14 sm:pt-12 sm:pb-16">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(250,204,21,0.10),transparent_50%)]" />
 
-        <div className="relative mx-auto grid max-w-5xl grid-cols-1 gap-10 lg:grid-cols-2 lg:items-start lg:gap-14">
-          {/* Left — headline, benefits, scarcity */}
-          <div className="text-center lg:text-left">
-            <span className="inline-flex items-center gap-2 rounded-full border border-yellow-400/40 bg-yellow-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-yellow-300">
-              🎙 Founding Members Club
-            </span>
+      {/* ── HERO (full-width, centred) ────────────────────────── */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-black via-neutral-950 to-stone-900 px-4 pt-10 pb-12 sm:pt-14 sm:pb-16">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.10),transparent_55%)]" />
+        <div className="relative mx-auto max-w-2xl text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-yellow-400/40 bg-yellow-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-yellow-300">
+            🎙 Founding Members Club
+          </span>
 
-            <h1 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight text-white sm:text-4xl lg:text-5xl">
-              Join{' '}
-              <span className="text-yellow-400">Brampton&nbsp;Comedy&nbsp;Insider</span>
-            </h1>
+          <h1 className="mt-5 text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-5xl">
+            Join <span className="text-yellow-400">Brampton Comedy Insider</span>
+          </h1>
 
-            <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-stone-300 sm:text-base lg:mx-0">
-              Be one of the first 500 members and earn a free comedy ticket, exclusive event invites,
-              discounted tickets, and priority access to future comedy shows in Brampton.
+          <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-stone-300 sm:text-lg">
+            Be one of the first 500 members and earn a free comedy ticket, exclusive event invites,
+            discounted tickets, and priority access to future comedy shows in Brampton.
+          </p>
+
+          <ul className="mx-auto mt-7 grid max-w-md grid-cols-1 gap-2 text-left sm:grid-cols-2">
+            {BENEFITS.map((b) => (
+              <li key={b} className="flex items-center gap-2 text-sm text-stone-200">
+                <span className="text-yellow-400">✓</span>
+                {b}
+              </li>
+            ))}
+          </ul>
+
+          {/* Scarcity counter */}
+          <div className="mx-auto mt-8 max-w-xs rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-stone-400">
+              Founding Members Remaining
             </p>
-
-            <ul className="mx-auto mt-6 grid max-w-sm grid-cols-1 gap-2 text-left sm:grid-cols-2 lg:mx-0 lg:max-w-none">
-              {BENEFITS.map((b) => (
-                <li key={b} className="flex items-center gap-2 text-sm text-stone-200">
-                  <span className="text-yellow-400">✓</span>
-                  {b}
-                </li>
-              ))}
-            </ul>
-
-            {/* Scarcity counter */}
-            <div className="mx-auto mt-8 max-w-xs rounded-2xl border border-white/10 bg-white/5 px-5 py-4 lg:mx-0">
-              <p className="text-xs font-semibold uppercase tracking-widest text-stone-400">
-                Founding Members Remaining
-              </p>
-              <p className="mt-1.5 text-3xl font-extrabold text-yellow-400 tabular-nums">
-                {remaining}{' '}
-                <span className="text-lg font-normal text-stone-500">/ {limit} Spots Left</span>
-              </p>
-              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-yellow-400 transition-all duration-700"
-                  style={{ width: `${Math.min(100, (claimed / limit) * 100)}%` }}
-                />
-              </div>
+            <p className="mt-1.5 text-3xl font-extrabold text-yellow-400 tabular-nums">
+              {remaining}{' '}
+              <span className="text-lg font-normal text-stone-500">/ {limit} Spots Left</span>
+            </p>
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-yellow-400 transition-all duration-700"
+                style={{ width: `${Math.min(100, (claimed / limit) * 100)}%` }}
+              />
             </div>
-          </div>
-
-          {/* Right — form card */}
-          <div ref={formRef} className="scroll-mt-6">
-            {step === 'done' ? (
-              <Confirmation credits={earned} />
-            ) : (
-              <div className="rounded-2xl border border-white/10 bg-zinc-900/80 p-6 shadow-xl shadow-black/40 backdrop-blur">
-                {/* Step header */}
-                <div className="mb-5 flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-white">
-                    Personalize Your Comedy Experience
-                  </h2>
-                  <span className="shrink-0 text-xs font-medium text-stone-400">
-                    Step {step === 'account' ? '1' : '2'} of 2
-                  </span>
-                </div>
-
-                {step === 'account' ? (
-                  <AccountStep
-                    onComplete={(m, sent, email) => {
-                      setMember(m)
-                      setMagicSent(sent)
-                      setCapturedEmail(email)
-                      setStep('preferences')
-                      trackInsiderEvent('preferences_started')
-                      refreshCounter()
-                    }}
-                  />
-                ) : (
-                  <PreferencesStep
-                    email={capturedEmail}
-                    magicSent={magicSent}
-                    onComplete={(m) => {
-                      setMember((prev) => (prev ? { ...prev, ...m } : prev))
-                      setStep('done')
-                    }}
-                  />
-                )}
-              </div>
-            )}
           </div>
         </div>
       </section>
 
       {/* ── FREE TICKET PROGRESS ─────────────────────────────── */}
-      <section className="px-4 py-12">
+      <section className="px-4 pt-12 pb-8">
         <div className="mx-auto max-w-md">
           <h2 className="text-center text-2xl font-bold text-white">
             Earn Your First Free Comedy Ticket
@@ -279,6 +234,48 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── FORM ─────────────────────────────────────────────── */}
+      <section ref={formRef} className="scroll-mt-4 px-4 py-8">
+        <div className="mx-auto max-w-md">
+          {step === 'done' ? (
+            <Confirmation credits={earned} />
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/80 p-6 shadow-xl shadow-black/40 backdrop-blur">
+              <div className="mb-5 flex items-center justify-between">
+                <h2 className="text-lg font-bold text-white">
+                  Personalize Your Comedy Experience
+                </h2>
+                <span className="shrink-0 text-xs font-medium text-stone-400">
+                  Step {step === 'account' ? '1' : '2'} of 2
+                </span>
+              </div>
+
+              {step === 'account' ? (
+                <AccountStep
+                  onComplete={(m, sent, email) => {
+                    setMember(m)
+                    setMagicSent(sent)
+                    setCapturedEmail(email)
+                    setStep('preferences')
+                    trackInsiderEvent('preferences_started')
+                    refreshCounter()
+                  }}
+                />
+              ) : (
+                <PreferencesStep
+                  email={capturedEmail}
+                  magicSent={magicSent}
+                  onComplete={(m) => {
+                    setMember((prev) => (prev ? { ...prev, ...m } : prev))
+                    setStep('done')
+                  }}
+                />
+              )}
+            </div>
+          )}
         </div>
       </section>
 
