@@ -549,14 +549,19 @@ function AccountStep({
       trackInsiderEvent('credit_awarded', { reason: 'account', amount: CREDIT_ACCOUNT })
       if (optIn) trackInsiderEvent('email_opt_in')
 
+      // Send branded magic-link email via server route instead of Supabase's generic template
       let sent = false
       try {
-        const callbackUrl = `${window.location.origin}/auth/callback?intent=insider`
-        const { error: otpError } = await supabase.auth.signInWithOtp({
-          email: email.trim(),
-          options: { emailRedirectTo: callbackUrl },
+        const mlRes = await fetch('/api/founding-members/send-magic-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.trim(),
+            firstName: firstName.trim(),
+            totalCredits: (data.member as MemberState)?.totalCredits ?? 5,
+          }),
         })
-        if (!otpError) { sent = true; trackInsiderEvent('magic_link_sent') }
+        if (mlRes.ok) { sent = true; trackInsiderEvent('magic_link_sent') }
       } catch { /* non-blocking */ }
 
       onComplete(data.member as MemberState, sent, email.trim().toLowerCase())
