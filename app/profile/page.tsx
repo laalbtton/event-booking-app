@@ -96,6 +96,9 @@ export default function ProfilePage() {
   const [installActionLoading, setInstallActionLoading] = useState(false)
   const [isStandalone, setIsStandalone] = useState(false)
   const [transactionsExpanded, setTransactionsExpanded] = useState(false)
+  const [privateFeedback, setPrivateFeedback] = useState<import('@/lib/supabase').ReceivedProfileReview[]>([])
+  const [privateFeedbackLoaded, setPrivateFeedbackLoaded] = useState(false)
+  const [privateFeedbackExpanded, setPrivateFeedbackExpanded] = useState(false)
   const [myBookings, setMyBookings] = useState<any[]>([])
   const [myCoupons, setMyCoupons] = useState<MyCoupon[]>([])
   const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
@@ -295,8 +298,8 @@ export default function ProfilePage() {
         }
       }
 
-      // Load coupons, push prefs, and poster automation in parallel
-      const [, pushPrefsResult] = await Promise.all([
+      // Load coupons, push prefs, poster automation, and private feedback in parallel
+      const [, pushPrefsResult, , privateFeedbackResult] = await Promise.all([
         loadMyCoupons(userId),
         supabase
           .from('push_notification_prefs')
@@ -304,9 +307,16 @@ export default function ProfilePage() {
           .eq('user_id', userId)
           .maybeSingle(),
         loadPosterAutomationState(userId),
+        supabase.rpc('get_my_received_profile_reviews', { p_limit: 50 }),
       ])
 
       setPushPrefs((pushPrefsResult.data || null) as PushNotificationPrefs | null)
+
+      const fbRaw = (privateFeedbackResult as { data?: unknown })?.data
+      if (Array.isArray(fbRaw)) {
+        setPrivateFeedback(fbRaw as import('@/lib/supabase').ReceivedProfileReview[])
+      }
+      setPrivateFeedbackLoaded(true)
 
     } catch (error: any) {
       console.error('Error loading profile:', error)
@@ -1582,6 +1592,90 @@ export default function ProfilePage() {
             })()}
           </CardContent>
         </Card>
+
+        {/* ── Private Feedback (anonymous reviews received) ─────────── */}
+        {privateFeedbackLoaded && (
+          <Card className="shadow-sm rounded-none sm:rounded-lg">
+            <CardHeader
+              className="cursor-pointer p-4 sm:p-6"
+              onClick={() => setPrivateFeedbackExpanded((p) => !p)}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">
+                    Private Feedback
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Anonymous reviews only you can see
+                    {privateFeedback.length > 0 && ` · ${privateFeedback.length} review${privateFeedback.length === 1 ? '' : 's'}`}
+                  </CardDescription>
+                </div>
+                <ChevronDown
+                  className={cn('h-5 w-5 text-muted-foreground transition-transform', privateFeedbackExpanded && 'rotate-180')}
+                />
+              </div>
+            </CardHeader>
+
+            {privateFeedbackExpanded && (
+              <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
+                {privateFeedback.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No anonymous feedback yet.
+                  </p>
+                ) : (
+                  privateFeedback.map((rev) => (
+                    <div
+                      key={rev.id}
+                      className="rounded-xl border border-border bg-muted/40 px-4 py-4 space-y-2"
+                    >
+                      {/* Rating row */}
+                      <div className="flex items-center gap-2">
+                        {rev.isAnonymous ? (
+                          <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                            Anonymous
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            {rev.reviewerAvatar ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={rev.reviewerAvatar}
+                                alt={rev.reviewerName ?? ''}
+                                className="h-6 w-6 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                                {(rev.reviewerName ?? '?')[0]?.toUpperCase()}
+                              </div>
+                            )}
+                            <span className="text-sm font-medium">{rev.reviewerName ?? 'Unknown'}</span>
+                          </div>
+                        )}
+                        <span className="ml-auto text-yellow-500 text-sm">
+                          {'★'.repeat(rev.rating)}
+                          <span className="text-muted-foreground">{'★'.repeat(5 - rev.rating)}</span>
+                        </span>
+                      </div>
+
+                      {rev.comment && (
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{rev.comment}</p>
+                      )}
+
+                      <p className="text-xs text-muted-foreground">
+                        {rev.eventTitle && <span>{rev.eventTitle} · </span>}
+                        {new Date(rev.createdAt).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            )}
+          </Card>
+        )}
 
         {/* My Transactions - collapsible at bottom, full-bleed on mobile */}
         <Card className="shadow-sm rounded-none sm:rounded-lg">

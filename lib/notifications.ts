@@ -11,6 +11,7 @@ export type NotificationType =
   | 'host_poster_reminder_5d'
   | 'host_poster_reminder_24h'
   | 'general'
+  | 'profile_review_received'
 
 /**
  * Creates a notification for a user

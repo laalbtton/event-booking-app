@@ -77,6 +77,7 @@ export default function WriteProfileReviewPage() {
 
   const [rating, setRating] = useState<number | null>(null)
   const [comment, setComment] = useState('')
+  const [isAnonymous, setIsAnonymous] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
@@ -166,7 +167,7 @@ export default function WriteProfileReviewPage() {
 
     try {
       if (existing) {
-        // PATCH existing review
+        // PATCH existing review (anonymous flag cannot be changed after submit)
         const res = await fetch(`/api/profile-reviews/${existing.id}`, {
           method: 'PATCH',
           headers: {
@@ -194,6 +195,7 @@ export default function WriteProfileReviewPage() {
             rateeId,
             rating,
             comment: comment.trim() || null,
+            isAnonymous,
           }),
         })
         const json = await res.json()
@@ -351,6 +353,53 @@ export default function WriteProfileReviewPage() {
             />
             <p className="text-xs text-stone-600 text-right">{comment.length} / 2 000</p>
           </div>
+
+          {/* Anonymous feedback toggle (only on new reviews; cannot change after submit) */}
+          {!existing && (
+            <div className="space-y-2">
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className="relative mt-0.5 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={isAnonymous}
+                    onChange={(e) => setIsAnonymous(e.target.checked)}
+                    disabled={submitting}
+                    className="sr-only"
+                  />
+                  <div
+                    className={[
+                      'h-5 w-5 rounded border-2 transition-colors flex items-center justify-center',
+                      isAnonymous
+                        ? 'bg-yellow-500 border-yellow-500'
+                        : 'border-zinc-600 bg-zinc-800 group-hover:border-zinc-500',
+                    ].join(' ')}
+                  >
+                    {isAnonymous && (
+                      <svg className="h-3 w-3 text-zinc-900" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                </div>
+                <span className="text-sm text-stone-300 leading-snug">
+                  Submit as anonymous feedback
+                </span>
+              </label>
+
+              {isAnonymous && (
+                <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 px-4 py-3 ml-8">
+                  <p className="text-xs text-stone-400 leading-relaxed">
+                    <span className="font-semibold text-stone-300">Anonymous feedback is private.</span>{' '}
+                    Your name and avatar will not appear on their public profile. Only{' '}
+                    <span className="font-semibold text-stone-300">{ratee?.full_name ?? 'this person'}</span>{' '}
+                    can see this review — it will not be visible to other users or shown publicly.
+                    They will still receive a notification that someone left feedback, but your identity
+                    will not be disclosed.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Error banner */}
           {error && (

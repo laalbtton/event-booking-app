@@ -416,6 +416,7 @@ export type ProfileReview = {
   comment: string | null
   event_context_id: string | null
   credits_granted: boolean
+  is_anonymous: boolean
   created_at: string
   updated_at: string
 }
@@ -443,6 +444,22 @@ export type ProfileReviewSnippetRow = {
   rating: number
   comment: string
   createdAt: string
+  reviewerName: string | null
+  reviewerAvatar: string | null
+  eventTitle: string | null
+}
+
+/**
+ * Review row returned by get_my_received_profile_reviews() RPC.
+ * Reviewer name/avatar are null when is_anonymous = true.
+ */
+export type ReceivedProfileReview = {
+  id: string
+  rating: number
+  comment: string | null
+  isAnonymous: boolean
+  createdAt: string
+  updatedAt: string
   reviewerName: string | null
   reviewerAvatar: string | null
   eventTitle: string | null

@@ -965,3 +965,47 @@ export function getPreEventReminderEmail(data: {
       </body>
     </html>`
 }
+
+/**
+ * Email template for "you received a new profile review"
+ */
+export function getNewReviewReceivedEmail(data: {
+  rateeName: string
+  reviewerName: string | null   // null when anonymous
+  rating: number
+  comment: string | null
+  profileUrl: string
+}): string {
+  const stars = '★'.repeat(data.rating) + '☆'.repeat(5 - data.rating)
+  const fromLine = data.reviewerName
+    ? `<strong>${data.reviewerName}</strong> left you a review`
+    : 'Someone left you an anonymous review'
+  const commentBlock = data.comment
+    ? `<div style="background:#f9fafb;border-left:4px solid #f59e0b;padding:16px 20px;border-radius:0 8px 8px 0;margin:20px 0;">
+        <p style="font-size:15px;color:#374151;margin:0;line-height:1.7;font-style:italic;">"${data.comment}"</p>
+       </div>`
+    : ''
+
+  return `<!DOCTYPE html><html>
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+  <body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;background:#f3f4f6;">
+    <div style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);padding:32px 30px;text-align:center;border-radius:12px 12px 0 0;">
+      <p style="color:rgba(255,255,255,0.8);font-size:13px;margin:0 0 6px 0;letter-spacing:1px;text-transform:uppercase;">One Mic Stand</p>
+      <h1 style="color:white;margin:0;font-size:24px;font-weight:700;">New Review ⭐</h1>
+    </div>
+    <div style="background:#ffffff;padding:28px 30px;border-radius:0 0 12px 12px;border:1px solid #e5e7eb;border-top:none;">
+      <p style="font-size:16px;margin:0 0 8px 0;">Hi ${data.rateeName},</p>
+      <p style="font-size:15px;color:#374151;margin:0 0 20px 0;">${fromLine} on your profile.</p>
+      <div style="text-align:center;font-size:28px;letter-spacing:4px;color:#f59e0b;margin:0 0 4px 0;">${stars}</div>
+      <p style="text-align:center;font-size:13px;color:#6b7280;margin:0 0 20px 0;">${data.rating} out of 5</p>
+      ${commentBlock}
+      <div style="text-align:center;margin:28px 0 8px 0;">
+        <a href="${data.profileUrl}" style="display:inline-block;background:#f59e0b;color:#1f2937;padding:12px 28px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:15px;">View Your Profile →</a>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:20px;color:#9ca3af;font-size:12px;">
+      <p style="margin:0;">© 2025 One Mic Stand. All rights reserved.</p>
+    </div>
+  </body>
+</html>`
+}
