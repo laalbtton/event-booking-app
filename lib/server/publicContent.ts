@@ -113,8 +113,19 @@ export type PublicEventDetails = {
   recurrenceDescription: string | null
 }
 
+export type PerformerEvent = {
+  id: string
+  slug: string | null
+  title: string
+  date: string
+  location: string | null
+  bookingStatus: string
+  waitlistPosition: number | null
+}
+
 export type PublicPerformerProfile = {
   id: string
+  username: string | null
   fullName: string
   avatarUrl: string | null
   bio: string
@@ -122,15 +133,8 @@ export type PublicPerformerProfile = {
   instagramLink: string | null
   youtubeLink: string | null
   twitterLink: string | null
-  upcomingEvents: Array<{
-    id: string
-    slug: string | null
-    title: string
-    date: string
-    location: string | null
-    bookingStatus: string
-    waitlistPosition: number | null
-  }>
+  upcomingEvents: PerformerEvent[]
+  recentEvents: PerformerEvent[]
   upcomingCount: number
   attendedCount: number
   /** From RPC get_profile_rating_aggregates (public). */
@@ -613,18 +617,32 @@ export async function listPublicPerformerProfiles(limit = 500) {
   }))
 }
 
-export async function getPublicPerformerProfile(profileId: string): Promise<PublicPerformerProfile | null> {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+/**
+ * Resolves a profile by UUID or username, then fetches full public details.
+ * If `identifier` looks like a UUID it is matched against `profiles.id`;
+ * otherwise it is matched against `profiles.username` (case-insensitive).
+ */
+export async function getPublicPerformerProfile(identifier: string): Promise<PublicPerformerProfile | null> {
   const supabase = getPublicServerClient()
 
-  const { data: profileData } = await supabase
+  const isUuid = UUID_RE.test(identifier)
+  const profileQuery = supabase
     .from('profiles')
-    .select('id, full_name, avatar_url, bio, website_link, instagram_link, youtube_link, twitter_link')
-    .eq('id', profileId)
-    .maybeSingle()
+    .select('id, username, full_name, avatar_url, bio, website_link, instagram_link, youtube_link, twitter_link')
+
+  const { data: profileData } = isUuid
+    ? await profileQuery.eq('id', identifier).maybeSingle()
+    : await profileQuery.ilike('username', identifier).maybeSingle()
+
   if (!profileData) return null
 
+  const profileId = String(profileData.id)
   const now = new Date().toISOString()
+
   const [bookingsRes, attendedRes, aggRes, snipRes, prSummaryRes, prSnipsRes] = await Promise.all([
+    // All confirmed/waitlist bookings – we split into upcoming/recent client-side
     supabase
       .from('bookings')
       .select(
@@ -643,7 +661,7 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
       )
       .eq('user_id', profileId)
       .in('status', ['confirmed', 'waitlist'])
-      .order('booked_at', { ascending: true }),
+      .order('booked_at', { ascending: false }),
     supabase
       .from('bookings')
       .select('id', { count: 'exact', head: true })
@@ -655,18 +673,30 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
     supabase.rpc('get_profile_recent_written_reviews', { p_ratee_id: profileId, p_limit: 5 }),
   ])
 
-  const upcomingEvents = ((bookingsRes.data as any[]) || [])
-    .filter((row) => row.events && row.events.status !== 'cancelled')
+  const allBookings = ((bookingsRes.data as any[]) || []).filter(
+    (row) => row.events && row.events.status !== 'cancelled',
+  )
+
+  const mapEvent = (row: any): PerformerEvent => ({
+    id: row.events.id as string,
+    slug: row.events.slug ? String(row.events.slug) : null,
+    title: String(row.events.title || 'Event'),
+    date: String(row.events.date),
+    location: row.events.location ? String(row.events.location) : null,
+    bookingStatus: String(row.status || 'confirmed'),
+    waitlistPosition: row.waitlist_position ?? null,
+  })
+
+  const upcomingEvents = allBookings
     .filter((row) => new Date(row.events.date) > new Date(now))
-    .map((row) => ({
-      id: row.events.id as string,
-      slug: row.events.slug ? String(row.events.slug) : null,
-      title: String(row.events.title || 'Event'),
-      date: String(row.events.date),
-      location: row.events.location ? String(row.events.location) : null,
-      bookingStatus: String(row.status || 'confirmed'),
-      waitlistPosition: row.waitlist_position ?? null,
-    }))
+    .reverse()       // ascending for upcoming
+    .map(mapEvent)
+
+  // Past events: descending by date, limit 3, confirmed attendance only
+  const recentEvents = allBookings
+    .filter((row) => new Date(row.events.date) <= new Date(now) && row.status === 'confirmed')
+    .slice(0, 3)
+    .map(mapEvent)
 
   const ratingAggregates =
     aggRes.error || aggRes.data == null ? null : parseProfileRatingAggregates(aggRes.data)
@@ -684,7 +714,8 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
     : []
 
   return {
-    id: String(profileData.id),
+    id: profileId,
+    username: (profileData as any).username ?? null,
     fullName: profileData.full_name || 'Performer',
     avatarUrl: profileData.avatar_url || null,
     bio: profileData.bio || '',
@@ -693,6 +724,7 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
     youtubeLink: profileData.youtube_link || null,
     twitterLink: profileData.twitter_link || null,
     upcomingEvents,
+    recentEvents,
     upcomingCount: upcomingEvents.length,
     attendedCount: attendedRes.count || 0,
     ratingAggregates,

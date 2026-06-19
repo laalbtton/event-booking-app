@@ -1,11 +1,12 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getPublicPerformerProfile } from '@/lib/server/publicContent'
 import { buildPerformerMetadata } from '@/lib/seo/metadata'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
+import PerformanceTabs from '@/components/PerformanceTabs'
 
 type Props = {
   params: Promise<{ id: string }>
@@ -75,6 +76,12 @@ export default async function PublicProfilePage({ params }: Props) {
     getPublicJokes(id).catch(() => [] as PublicJoke[]),
   ])
   if (!profile) notFound()
+
+  // Canonical redirect: if the user has a username and the URL still uses their UUID,
+  // send them to /profile/<username> for cleaner, shareable links.
+  if (profile.username && id !== profile.username) {
+    redirect(`/profile/${profile.username}`)
+  }
 
   const initials = profile.fullName
     .split(/\s+/)
@@ -333,30 +340,11 @@ export default async function PublicProfilePage({ params }: Props) {
           ) : null}
         </section>
 
-        {/* ── Upcoming performances ─────────────────────────────────── */}
-        <section>
-          <h2 className="text-lg font-semibold text-stone-200 mb-3">Upcoming performances</h2>
-          {profile.upcomingEvents.length === 0 ? (
-            <p className="text-sm text-stone-500">No upcoming performances listed.</p>
-          ) : (
-            <ul className="space-y-2">
-              {profile.upcomingEvents.map((event) => (
-                <li key={`${event.id}-${event.bookingStatus}`} className="rounded-xl border border-zinc-700 bg-zinc-900 p-4 hover:border-zinc-500 transition-colors">
-                  <Link href={`/events/${event.slug || event.id}`} className="font-medium text-stone-100 hover:text-yellow-400 transition-colors">
-                    {event.title}
-                  </Link>
-                  <p className="text-sm text-stone-400 mt-1">
-                    {new Date(event.date).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                    {event.location ? ` · ${event.location}` : ' · Venue TBA'}
-                  </p>
-                  {event.bookingStatus === 'waitlist' && event.waitlistPosition && (
-                    <p className="text-xs text-stone-500 mt-1">Waitlist position #{event.waitlistPosition}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {/* ── Performances (Upcoming / Recent tabs) ─────────────────── */}
+        <PerformanceTabs
+          upcomingEvents={profile.upcomingEvents}
+          recentEvents={profile.recentEvents}
+        />
 
         {/* ── Jokes ─────────────────────────────────────────────────── */}
         {jokes.length > 0 && (

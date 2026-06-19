@@ -129,8 +129,12 @@ export default function ProfilePage() {
     website_link: '',
     instagram_link: '',
     youtube_link: '',
-    twitter_link: ''
+    twitter_link: '',
+    username: '',
   })
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [usernameError, setUsernameError] = useState<string | null>(null)
+  const [usernameChecking, setUsernameChecking] = useState(false)
 
   useEffect(() => {
     if (!authResolved) return
@@ -241,7 +245,8 @@ export default function ProfilePage() {
         website_link: profileData.website_link || '',
         instagram_link: extractInstagramUsername(profileData.instagram_link),
         youtube_link: profileData.youtube_link || '',
-        twitter_link: profileData.twitter_link || ''
+        twitter_link: profileData.twitter_link || '',
+        username: (profileData as any).username || '',
       })
 
       // Load all three booking/invite datasets in parallel — all only need userId
@@ -664,6 +669,11 @@ export default function ProfilePage() {
     e.preventDefault()
     if (!profile) return
 
+    // Block save if username is invalid
+    if (usernameError) return
+
+    const usernameValue = formData.username.trim().toLowerCase() || null
+
     setSubmitting(true)
     try {
       const { error } = await supabase
@@ -675,20 +685,83 @@ export default function ProfilePage() {
           instagram_link: toInstagramUrl(formData.instagram_link),
           youtube_link: formData.youtube_link || null,
           twitter_link: formData.twitter_link || null,
+          avatar_url: avatarUrl || null,
+          username: usernameValue,
           updated_at: new Date().toISOString()
         })
         .eq('id', profile.id)
 
-      if (error) throw error
+      if (error) {
+        // Unique violation on username
+        if (error.code === '23505' || error.message?.includes('profiles_username')) {
+          throw new Error('That username is already taken. Please choose another.')
+        }
+        throw error
+      }
 
       setIsEditing(false)
       await loadProfile(profile.id)
-      alert('Profile updated successfully!')
+      toast.success('Profile updated!')
     } catch (error: any) {
       console.error('Error updating profile:', error)
-      alert('Error updating profile: ' + error.message)
+      toast.error(error.message || 'Error updating profile')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleAvatarUpload(file: File) {
+    if (!profile) return
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const path = `${profile.id}/avatar.${ext}`
+
+    setAvatarUploading(true)
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true, contentType: file.type })
+
+      if (uploadError) throw uploadError
+
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+      // Bust cache by appending a timestamp query param
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`
+      setAvatarUrl(publicUrl)
+      toast.success('Photo updated — save your profile to keep it.')
+    } catch (err: any) {
+      console.error('Avatar upload error:', err)
+      toast.error(err.message || 'Could not upload photo')
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  const USERNAME_RE = /^[a-z0-9][a-z0-9_-]*[a-z0-9]$/
+
+  async function handleUsernameChange(value: string) {
+    const v = value.toLowerCase().replace(/[^a-z0-9_-]/g, '')
+    setFormData((p) => ({ ...p, username: v }))
+    setUsernameError(null)
+
+    if (v.length === 0) return
+    if (v.length < 3) { setUsernameError('Too short — minimum 3 characters'); return }
+    if (v.length > 30) { setUsernameError('Too long — maximum 30 characters'); return }
+    if (!USERNAME_RE.test(v)) { setUsernameError('Must start and end with a letter or number'); return }
+
+    // Check availability (skip if unchanged from existing)
+    if (v === ((profile as any)?.username ?? '').toLowerCase()) return
+
+    setUsernameChecking(true)
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('username', v)
+        .neq('id', profile!.id)
+        .maybeSingle()
+      if (data) setUsernameError('That username is already taken')
+    } finally {
+      setUsernameChecking(false)
     }
   }
 
@@ -1094,13 +1167,15 @@ export default function ProfilePage() {
                     variant="outline"
                     onClick={() => {
                       setIsEditing(false)
+                      setUsernameError(null)
                       setFormData({
                         full_name: profile.full_name || '',
                         bio: profile.bio || '',
                         website_link: profile.website_link || '',
                         instagram_link: extractInstagramUsername(profile.instagram_link),
                         youtube_link: profile.youtube_link || '',
-                        twitter_link: profile.twitter_link || ''
+                        twitter_link: profile.twitter_link || '',
+                        username: (profile as any).username || '',
                       })
                     }}
                     className="flex-1 sm:flex-initial"
@@ -1117,6 +1192,54 @@ export default function ProfilePage() {
                 </div>
               </div>
 
+              {/* ── Avatar upload ───────────────────────────────────── */}
+              <div className="space-y-2.5">
+                <Label className="text-sm font-semibold">Profile Photo</Label>
+                <div className="flex items-center gap-4">
+                  {/* Preview */}
+                  <div className="shrink-0">
+                    {avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={avatarUrl}
+                        alt="Avatar preview"
+                        className="h-16 w-16 rounded-full object-cover border-2 border-border"
+                      />
+                    ) : (
+                      <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center text-lg font-bold text-muted-foreground border-2 border-border">
+                        {getInitials(profile?.full_name || formData.full_name)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1 flex-1">
+                    <label
+                      htmlFor="avatar-upload"
+                      className={[
+                        'inline-flex items-center gap-2 cursor-pointer px-3 py-2 rounded-lg border text-sm font-medium transition-colors',
+                        avatarUploading
+                          ? 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground border-border'
+                          : 'border-border hover:bg-muted text-foreground',
+                      ].join(' ')}
+                    >
+                      {avatarUploading ? 'Uploading…' : 'Upload photo'}
+                    </label>
+                    <input
+                      id="avatar-upload"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      disabled={avatarUploading}
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleAvatarUpload(file)
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF · max 5 MB</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Full Name ────────────────────────────────────────── */}
               <div className="space-y-2.5">
                 <Label htmlFor="fullName" className="text-sm font-semibold">
                   Full Name *
@@ -1129,6 +1252,48 @@ export default function ProfilePage() {
                   required
                   className="h-11"
                 />
+              </div>
+
+              {/* ── Username ─────────────────────────────────────────── */}
+              <div className="space-y-2.5">
+                <Label htmlFor="username" className="text-sm font-semibold">
+                  Username
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground select-none">
+                    app.laalbutton.com/profile/
+                  </span>
+                  <Input
+                    id="username"
+                    type="text"
+                    value={formData.username}
+                    onChange={(e) => handleUsernameChange(e.target.value)}
+                    placeholder="yourname"
+                    className="h-11 pl-[calc(theme(spacing.3)+theme(spacing.3)+14ch)] font-mono"
+                    maxLength={30}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                  {usernameChecking && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                      checking…
+                    </span>
+                  )}
+                </div>
+                {usernameError ? (
+                  <p className="text-xs text-red-500">{usernameError}</p>
+                ) : formData.username.length >= 3 ? (
+                  <p className="text-xs text-green-600">
+                    Your profile URL:{' '}
+                    <span className="font-mono">app.laalbutton.com/profile/{formData.username}</span>
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    3–30 characters · letters, numbers, hyphens and underscores only
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2.5">

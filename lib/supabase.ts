@@ -22,6 +22,7 @@ export type Profile = {
   email: string
   full_name: string | null
   avatar_url: string | null
+  username: string | null
   credits: number
   credits_purchased?: number
   credits_complimentary?: number
