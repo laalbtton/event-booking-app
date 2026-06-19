@@ -91,6 +91,9 @@ export default async function PublicProfilePage({ params }: Props) {
       (ra.performance.count > 0 || ra.hosting.count > 0 || ra.event_creator.count > 0)) ||
     profile.recentReviewSnippets.length > 0
 
+  const prSummary = profile.profileReviewSummary
+  const hasProfileReviews = prSummary.count > 0 || profile.recentProfileReviews.length > 0
+
   return (
     <div className="min-h-screen bg-zinc-950">
       <PublicHeader />
@@ -243,6 +246,92 @@ export default async function PublicProfilePage({ params }: Props) {
             )}
           </section>
         )}
+
+        {/* ── Profile reviews ────────────────────────────────────────── */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-lg font-semibold text-stone-200">Reviews</h2>
+            <Link
+              href={`/profile/${id}/review`}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-yellow-400 border border-yellow-500/30 bg-yellow-500/10 hover:bg-yellow-500/20 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Write a review
+            </Link>
+          </div>
+
+          {/* Aggregate score */}
+          {prSummary.count > 0 && prSummary.avg != null && (
+            <div className="flex items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3">
+              <span className="text-3xl font-bold text-yellow-400">{Number(prSummary.avg).toFixed(1)}</span>
+              <div>
+                <div className="flex items-center gap-0.5">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <span
+                      key={n}
+                      className={n <= Math.round(prSummary.avg ?? 0) ? 'text-yellow-400' : 'text-zinc-700'}
+                    >
+                      ★
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  {prSummary.count} review{prSummary.count === 1 ? '' : 's'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Recent written reviews */}
+          {profile.recentProfileReviews.length > 0 ? (
+            <ul className="space-y-3">
+              {profile.recentProfileReviews.map((rev) => (
+                <li
+                  key={rev.id}
+                  className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-4"
+                >
+                  {/* Reviewer info row */}
+                  <div className="flex items-center gap-2 mb-2">
+                    {rev.reviewerAvatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={rev.reviewerAvatar}
+                        alt={rev.reviewerName ?? ''}
+                        className="h-7 w-7 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-7 w-7 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold text-stone-400">
+                        {(rev.reviewerName ?? '?')[0]?.toUpperCase()}
+                      </div>
+                    )}
+                    <span className="text-sm font-medium text-stone-300">{rev.reviewerName ?? 'Anonymous'}</span>
+                    <span className="ml-auto flex items-center gap-0.5 text-xs text-yellow-400">
+                      {'★'.repeat(rev.rating)}
+                      <span className="text-zinc-700">{'★'.repeat(5 - rev.rating)}</span>
+                    </span>
+                  </div>
+
+                  {/* Comment */}
+                  <p className="text-sm text-stone-200 leading-relaxed whitespace-pre-wrap">{rev.comment}</p>
+
+                  {/* Footer */}
+                  <p className="text-xs text-stone-600 mt-2">
+                    {rev.eventTitle && <span>{rev.eventTitle} · </span>}
+                    {new Date(rev.createdAt).toLocaleDateString('en-CA', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : !hasProfileReviews ? (
+            <p className="text-sm text-stone-500">No reviews yet. Be the first!</p>
+          ) : null}
+        </section>
 
         {/* ── Upcoming performances ─────────────────────────────────── */}
         <section>

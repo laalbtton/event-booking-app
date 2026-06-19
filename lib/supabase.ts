@@ -405,3 +405,45 @@ export type EventCommunity = {
   reviewed_at: string | null
   expires_at: string | null
 }
+
+// Profile-to-profile reviews ----------------------------------------
+
+export type ProfileReview = {
+  id: string
+  reviewer_id: string
+  ratee_id: string
+  rating: number            // 1–5
+  comment: string | null
+  event_context_id: string | null
+  credits_granted: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** Single review row enriched with reviewer public details */
+export type ProfileReviewWithReviewer = ProfileReview & {
+  reviewer?: {
+    full_name: string | null
+    avatar_url: string | null
+  }
+  event_context?: {
+    title: string
+  } | null
+}
+
+/** Summary returned by get_profile_review_summary() RPC */
+export type ProfileReviewSummary = {
+  avg: number | null    // null when no reviews yet
+  count: number
+}
+
+/** Single review snippet returned by get_profile_recent_written_reviews() RPC */
+export type ProfileReviewSnippetRow = {
+  id: string
+  rating: number
+  comment: string
+  createdAt: string
+  reviewerName: string | null
+  reviewerAvatar: string | null
+  eventTitle: string | null
+}

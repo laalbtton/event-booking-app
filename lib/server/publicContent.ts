@@ -1,5 +1,5 @@
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
-import type { ProfileRatingAggregates, ProfileReviewSnippet } from '@/lib/supabase'
+import type { ProfileRatingAggregates, ProfileReviewSnippet, ProfileReviewSummary, ProfileReviewSnippetRow } from '@/lib/supabase'
 import { describeRecurrence } from '@/lib/eventSeriesUtils'
 
 type EventRow = {
@@ -137,6 +137,10 @@ export type PublicPerformerProfile = {
   ratingAggregates: ProfileRatingAggregates | null
   /** From RPC get_profile_recent_review_snippets (public). */
   recentReviewSnippets: ProfileReviewSnippet[]
+  /** Direct profile-to-profile review aggregate (avg + count). */
+  profileReviewSummary: ProfileReviewSummary
+  /** Recent written profile reviews (reviewer name, comment, event context). */
+  recentProfileReviews: ProfileReviewSnippetRow[]
 }
 
 function parseProfileRatingAggregates(raw: unknown): ProfileRatingAggregates | null {
@@ -620,7 +624,7 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
   if (!profileData) return null
 
   const now = new Date().toISOString()
-  const [bookingsRes, attendedRes, aggRes, snipRes] = await Promise.all([
+  const [bookingsRes, attendedRes, aggRes, snipRes, prSummaryRes, prSnipsRes] = await Promise.all([
     supabase
       .from('bookings')
       .select(
@@ -647,6 +651,8 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
       .eq('attendance_status', 'attended'),
     supabase.rpc('get_profile_rating_aggregates', { p_profile_id: profileId }),
     supabase.rpc('get_profile_recent_review_snippets', { p_profile_id: profileId, p_limit: 5 }),
+    supabase.rpc('get_profile_review_summary', { p_ratee_id: profileId }),
+    supabase.rpc('get_profile_recent_written_reviews', { p_ratee_id: profileId, p_limit: 5 }),
   ])
 
   const upcomingEvents = ((bookingsRes.data as any[]) || [])
@@ -667,6 +673,16 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
   const recentReviewSnippets =
     snipRes.error || snipRes.data == null ? [] : parseProfileReviewSnippets(snipRes.data)
 
+  const rawSummary = prSummaryRes.data as { avg: number | null; count: number } | null
+  const profileReviewSummary: ProfileReviewSummary = {
+    avg: rawSummary?.avg ?? null,
+    count: rawSummary?.count ?? 0,
+  }
+
+  const recentProfileReviews: ProfileReviewSnippetRow[] = Array.isArray(prSnipsRes.data)
+    ? (prSnipsRes.data as ProfileReviewSnippetRow[])
+    : []
+
   return {
     id: String(profileData.id),
     fullName: profileData.full_name || 'Performer',
@@ -681,5 +697,7 @@ export async function getPublicPerformerProfile(profileId: string): Promise<Publ
     attendedCount: attendedRes.count || 0,
     ratingAggregates,
     recentReviewSnippets,
+    profileReviewSummary,
+    recentProfileReviews,
   }
 }
