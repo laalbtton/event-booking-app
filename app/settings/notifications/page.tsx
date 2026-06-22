@@ -33,6 +33,8 @@ export default function SettingsNotificationsPage() {
   const [pushPrefs, setPushPrefs] = useState<PushNotificationPrefs | null>(null)
   const [pushSupported, setPushSupported] = useState(false)
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported')
+  const [isNativePlatform, setIsNativePlatform] = useState(false)
+  const [hasActiveNativeSub, setHasActiveNativeSub] = useState(false)
   const [pushActionLoading, setPushActionLoading] = useState(false)
   const [socapTestEventId, setSocapTestEventId] = useState('')
   const [socapScenario, setSocapScenario] = useState<ThursdaySocapScenario>('registration_open')
@@ -62,6 +64,7 @@ export default function SettingsNotificationsPage() {
 
       if (isNative) {
         setPushSupported(true)
+        setIsNativePlatform(true)
         try {
           const { PushNotifications } = await import('@capacitor/push-notifications')
           const { receive } = await PushNotifications.checkPermissions()
@@ -96,6 +99,17 @@ export default function SettingsNotificationsPage() {
         .eq('id', userId)
         .single()
       setProfile(profileData || null)
+
+      const { data: activeSubs } = await supabase
+        .from('push_subscriptions')
+        .select('id, platform, is_active')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+      setHasActiveNativeSub(
+        (activeSubs || []).some(
+          (s: { platform: string | null }) => s.platform === 'android' || s.platform === 'ios'
+        )
+      )
 
       const { data: pushPrefsData } = await supabase
         .from('push_notification_prefs')
@@ -177,6 +191,7 @@ export default function SettingsNotificationsPage() {
           new_events_enabled: pushPrefs?.new_events_enabled ?? true,
           post_event_reviews_enabled: pushPrefs?.post_event_reviews_enabled ?? true,
         })
+        setHasActiveNativeSub(true)
         toast.success('Push notifications enabled')
       }
     } catch (error: unknown) {
@@ -296,6 +311,15 @@ export default function SettingsNotificationsPage() {
       })
       const data = await res.json().catch(() => ({}))
       setTestPushResult(data as TestPushResult)
+      // Update native sub indicator from live data
+      if (Array.isArray(data?.subscriptions)) {
+        setHasActiveNativeSub(
+          data.subscriptions.some(
+            (s: { platform: string; isActive: boolean }) =>
+              (s.platform === 'android' || s.platform === 'ios') && s.isActive
+          )
+        )
+      }
 
       if (!res.ok || data.error) {
         toast.error(data.error || 'Test push failed')
@@ -399,12 +423,27 @@ export default function SettingsNotificationsPage() {
                 ? 'Blocked — enable in device Settings → Apps → Laal Button → Notifications'
                 : 'Not enabled'}
             </p>
+            {/* On native: if permission is granted but no FCM subscription exists, show a warning */}
+            {isNativePlatform && pushPermission === 'granted' && !hasActiveNativeSub && (
+              <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">
+                Permission is granted but this device is not registered to receive push notifications. Tap &quot;Register device&quot; below to fix this.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               <Button
                 onClick={handleEnablePushNotifications}
-                disabled={!pushSupported || pushActionLoading || pushPermission === 'granted'}
+                disabled={
+                  !pushSupported ||
+                  pushActionLoading ||
+                  // On native: always allow re-registering if no active native subscription
+                  (isNativePlatform ? (pushPermission === 'granted' && hasActiveNativeSub) : pushPermission === 'granted')
+                }
               >
-                {pushActionLoading ? 'Please wait...' : 'Enable Notifications'}
+                {pushActionLoading
+                  ? 'Please wait...'
+                  : isNativePlatform && pushPermission === 'granted' && !hasActiveNativeSub
+                  ? 'Register device'
+                  : 'Enable Notifications'}
               </Button>
               <Button
                 variant="outline"
