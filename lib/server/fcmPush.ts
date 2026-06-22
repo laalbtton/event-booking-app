@@ -48,12 +48,21 @@ function getAdminApp() {
     return adminApp!
   }
 
+  // Normalise the private key regardless of how it was pasted into Vercel:
+  //   • If stored with literal \n escape sequences → replace with real newlines
+  //   • If stored with real newlines already → leave as-is
+  // Then strip any stray surrounding quotes that the Vercel UI sometimes adds.
+  const normalizedKey = privateKey
+    .replace(/^["']|["']$/g, '')          // strip wrapping quotes if any
+    .replace(/\\n/g, '\n')                // literal \n → real newline
+    .replace(/\r\n/g, '\n')              // CRLF → LF
+    .trim()
+
   adminApp = initializeApp({
     credential: cert({
       projectId,
       clientEmail,
-      // Vercel stores multi-line secrets with literal \n — convert back to newlines.
-      privateKey: privateKey.replace(/\\n/g, '\n'),
+      privateKey: normalizedKey,
     }),
   })
 
