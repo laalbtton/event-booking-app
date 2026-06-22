@@ -407,11 +407,10 @@ export default function SettingsNotificationsPage() {
       const data = await res.json().catch(() => ({}))
       setTestPushResult(data as TestPushResult)
       // Update native sub indicator from live data
-      if (Array.isArray(data?.subscriptions)) {
+      if (Array.isArray(data?.subscriptions) && data.subscriptions.length > 0) {
         setHasActiveNativeSub(
-          data.subscriptions.some(
-            (s: { platform: string; isActive: boolean }) =>
-              (s.platform === 'android' || s.platform === 'ios') && s.isActive
+          (data.subscriptions as Array<{ platform: string; isActive: boolean }>).some(
+            (s) => (s.platform === 'android' || s.platform === 'ios') && s.isActive
           )
         )
       }
@@ -638,10 +637,10 @@ export default function SettingsNotificationsPage() {
                     </span>
                   </p>
 
-                  {testPushResult.subscriptions.length > 0 && (
+                  {(testPushResult.subscriptions?.length ?? 0) > 0 && (
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">Subscriptions found:</p>
-                      {testPushResult.subscriptions.map((s) => (
+                      {testPushResult.subscriptions!.map((s) => (
                         <div key={s.id} className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                           <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${s.platform === 'android' ? 'bg-green-500/15 text-green-700 dark:text-green-400' : 'bg-blue-500/15 text-blue-700 dark:text-blue-400'}`}>
                             {s.platform}
@@ -659,7 +658,7 @@ export default function SettingsNotificationsPage() {
                     </div>
                   )}
 
-                  {testPushResult.subscriptions.length === 0 && (
+                  {(testPushResult.subscriptions?.length ?? 0) === 0 && (
                     <p className="text-xs text-red-500">
                       No subscriptions in database. Open the app on your Android device and enable notifications first.
                     </p>
