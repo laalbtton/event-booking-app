@@ -195,7 +195,7 @@ export default function SettingsNotificationsPage() {
         })
         setHasActiveNativeSub(true)
         toast.success('Push notifications enabled')
-      } else if (result.permission !== 'denied') {
+      } else {
         // Subscribed: false — surface the reason so we can diagnose
         toast.error(
           result.errorMessage
