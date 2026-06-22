@@ -86,8 +86,14 @@ export async function sendFcmNotification(
       android: {
         priority: 'high',
         notification: {
+          // 'default' maps to the system default notification sound.
           sound: 'default',
-          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+          // Target the channel created in CapacitorProvider.
+          // Capacitor's plugin creates a 'default' channel automatically.
+          channelId: 'default',
+          // No clickAction — Capacitor handles the intent natively.
+          // (The old 'FLUTTER_NOTIFICATION_CLICK' was Flutter-specific and
+          // caused silent failures on Capacitor.)
         },
       },
     })

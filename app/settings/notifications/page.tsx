@@ -38,6 +38,17 @@ export default function SettingsNotificationsPage() {
   const [socapScenario, setSocapScenario] = useState<ThursdaySocapScenario>('registration_open')
   const [socapTestLoading, setSocapTestLoading] = useState(false)
 
+  type TestPushResult = {
+    success: boolean
+    sent: number
+    failed: number
+    subscriptions: Array<{ id: string; platform: string; isActive: boolean; hasToken: boolean; hasEndpoint: boolean }>
+    firebaseEnvConfigured: boolean
+    error?: string
+  }
+  const [testPushLoading, setTestPushLoading] = useState(false)
+  const [testPushResult, setTestPushResult] = useState<TestPushResult | null>(null)
+
   useEffect(() => {
     async function checkPushSupport() {
       // On native Capacitor the web PushManager API doesn't exist, so we
@@ -261,6 +272,43 @@ export default function SettingsNotificationsPage() {
     }
   }
 
+  async function sendTestPush() {
+    setTestPushLoading(true)
+    setTestPushResult(null)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const res = await fetch('/api/push/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Test notification',
+          body: 'Push notifications are working on your device! 🎉',
+          url: '/dashboard',
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      setTestPushResult(data as TestPushResult)
+
+      if (!res.ok || data.error) {
+        toast.error(data.error || 'Test push failed')
+      } else if ((data.sent ?? 0) > 0) {
+        toast.success(`Test push sent! You should hear a sound and see a notification.`)
+      } else {
+        toast.info('Push was processed but nothing was sent — check the diagnostics below.')
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Test push failed')
+    } finally {
+      setTestPushLoading(false)
+    }
+  }
+
   async function runThursdaySocapPushTest(mode: 'dry_run' | 'self_push' | 'broadcast') {
     if (!socapTestEventId.trim()) {
       toast.error('Please enter an event ID first')
@@ -411,6 +459,75 @@ export default function SettingsNotificationsPage() {
               <p className="text-xs text-muted-foreground">
                 Notifications were denied. To re-enable, go to your device Settings → Apps → Laal Button → Notifications and turn them on.
               </p>
+            )}
+
+            {/* ── Test push (always visible when subscribed) ────────────── */}
+            {pushPrefs?.subscribed_at && (
+              <div className="space-y-3 pt-3 border-t">
+                <p className="text-sm font-medium">Test device notifications</p>
+                <p className="text-xs text-muted-foreground">
+                  Sends a real notification to this device right now. You should see it in the status bar and hear a sound even if the app is open.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={sendTestPush}
+                  disabled={testPushLoading}
+                  className="w-full sm:w-auto"
+                >
+                  {testPushLoading ? 'Sending…' : 'Send test notification to this device'}
+                </Button>
+
+                {testPushResult && (
+                  <div className={`rounded-lg border px-4 py-3 text-sm space-y-2 ${testPushResult.success ? 'border-green-500/30 bg-green-500/10' : 'border-red-500/30 bg-red-500/10'}`}>
+                    {testPushResult.error ? (
+                      <p className="font-medium text-red-600 dark:text-red-400">{testPushResult.error}</p>
+                    ) : (
+                      <p className={`font-medium ${testPushResult.success ? 'text-green-700 dark:text-green-400' : 'text-yellow-700 dark:text-yellow-400'}`}>
+                        {testPushResult.success
+                          ? `Sent ${testPushResult.sent} notification${testPushResult.sent !== 1 ? 's' : ''} — check your status bar`
+                          : `Processed but 0 sent (${testPushResult.failed} failed)`}
+                      </p>
+                    )}
+
+                    {/* Firebase env status */}
+                    <p className="text-xs text-muted-foreground">
+                      Firebase env vars:{' '}
+                      <span className={testPushResult.firebaseEnvConfigured ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
+                        {testPushResult.firebaseEnvConfigured ? 'configured ✓' : 'missing — add FIREBASE_PROJECT_ID / CLIENT_EMAIL / PRIVATE_KEY to Vercel env'}
+                      </span>
+                    </p>
+
+                    {/* Per-subscription diagnostics */}
+                    {testPushResult.subscriptions.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground">Subscriptions found:</p>
+                        {testPushResult.subscriptions.map((s) => (
+                          <div key={s.id} className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                            <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${s.platform === 'android' ? 'bg-green-500/15 text-green-700 dark:text-green-400' : 'bg-blue-500/15 text-blue-700 dark:text-blue-400'}`}>
+                              {s.platform}
+                            </span>
+                            <span className={s.isActive ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground line-through'}>
+                              {s.isActive ? 'active' : 'inactive'}
+                            </span>
+                            {s.platform === 'android' && (
+                              <span className={s.hasToken ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
+                                FCM token: {s.hasToken ? 'present ✓' : 'missing ✗'}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {testPushResult.subscriptions.length === 0 && (
+                      <p className="text-xs text-red-500">
+                        No subscriptions in database. Open the app on your Android device and enable notifications first.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
 
             {(profile?.role === 'admin' || profile?.role === 'event_creator') && (

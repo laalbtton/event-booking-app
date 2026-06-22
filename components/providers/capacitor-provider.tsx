@@ -41,6 +41,27 @@ export function CapacitorProvider() {
         import('@capacitor/core'),
       ])
 
+      // ─── 0. Android notification channel ───────────────────────────────────
+      // Android 8+ (API 26+) requires every notification to belong to a channel.
+      // Capacitor creates one called 'default' automatically, but we re-create it
+      // here so we can guarantee the sound and importance settings are correct.
+      // createChannel is a no-op on iOS and on older Android.
+      if (Capacitor.getPlatform() === 'android') {
+        try {
+          await PushNotifications.createChannel({
+            id: 'default',
+            name: 'General Notifications',
+            description: 'Bookings, reminders, and event updates',
+            importance: 4,   // IMPORTANCE_HIGH — heads-up notification with sound
+            sound: 'default',
+            vibration: true,
+            visibility: 1,   // VISIBILITY_PUBLIC
+          })
+        } catch {
+          // createChannel may throw on older Capacitor versions — non-fatal.
+        }
+      }
+
       // ─── 1. Deep link handler ───────────────────────────────────────────────
       const appUrlHandle = await App.addListener('appUrlOpen', async (event) => {
         try {

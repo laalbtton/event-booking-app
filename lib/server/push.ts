@@ -52,11 +52,22 @@ function getWebPushSubscription(row: { endpoint: string; p256dh: string; auth: s
   }
 }
 
-/** Build the FCM data payload from the push payload. Values must be strings. */
+/**
+ * Build the FCM data payload from the push payload. All values must be strings.
+ *
+ * CapacitorProvider reads `data.route` to navigate after a notification tap.
+ * When the caller only supplies `url` (the common case) we mirror it into
+ * `route` so taps always deep-link correctly instead of falling back to /dashboard.
+ */
 function buildFcmData(payload: PushPayload): Record<string, string> {
   const data: Record<string, string> = {}
   if (payload.data?.url) data.url = payload.data.url
-  if (payload.data?.route) data.route = payload.data.route
+  if (payload.data?.route) {
+    data.route = payload.data.route
+  } else if (payload.data?.url) {
+    // Mirror url → route so CapacitorProvider can navigate on tap.
+    data.route = payload.data.url
+  }
   return data
 }
 
