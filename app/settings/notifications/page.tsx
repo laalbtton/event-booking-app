@@ -485,56 +485,53 @@ export default function SettingsNotificationsPage() {
                 {testPushLoading ? 'Sending…' : 'Send test notification to this device'}
               </Button>
 
-                {testPushResult && (
-                  <div className={`rounded-lg border px-4 py-3 text-sm space-y-2 ${testPushResult.success ? 'border-green-500/30 bg-green-500/10' : 'border-red-500/30 bg-red-500/10'}`}>
-                    {testPushResult.error ? (
-                      <p className="font-medium text-red-600 dark:text-red-400">{testPushResult.error}</p>
-                    ) : (
-                      <p className={`font-medium ${testPushResult.success ? 'text-green-700 dark:text-green-400' : 'text-yellow-700 dark:text-yellow-400'}`}>
-                        {testPushResult.success
-                          ? `Sent ${testPushResult.sent} notification${testPushResult.sent !== 1 ? 's' : ''} — check your status bar`
-                          : `Processed but 0 sent (${testPushResult.failed} failed)`}
-                      </p>
-                    )}
-
-                    {/* Firebase env status */}
-                    <p className="text-xs text-muted-foreground">
-                      Firebase env vars:{' '}
-                      <span className={testPushResult.firebaseEnvConfigured ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
-                        {testPushResult.firebaseEnvConfigured ? 'configured ✓' : 'missing — add FIREBASE_PROJECT_ID / CLIENT_EMAIL / PRIVATE_KEY to Vercel env'}
-                      </span>
+              {testPushResult && (
+                <div className={`rounded-lg border px-4 py-3 text-sm space-y-2 ${testPushResult.success ? 'border-green-500/30 bg-green-500/10' : 'border-red-500/30 bg-red-500/10'}`}>
+                  {testPushResult.error ? (
+                    <p className="font-medium text-red-600 dark:text-red-400">{testPushResult.error}</p>
+                  ) : (
+                    <p className={`font-medium ${testPushResult.success ? 'text-green-700 dark:text-green-400' : 'text-yellow-700 dark:text-yellow-400'}`}>
+                      {testPushResult.success
+                        ? `Sent ${testPushResult.sent} notification${testPushResult.sent !== 1 ? 's' : ''} — check your status bar`
+                        : `Processed but 0 sent (${testPushResult.failed} failed)`}
                     </p>
+                  )}
 
-                    {/* Per-subscription diagnostics */}
-                    {testPushResult.subscriptions.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground">Subscriptions found:</p>
-                        {testPushResult.subscriptions.map((s) => (
-                          <div key={s.id} className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                            <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${s.platform === 'android' ? 'bg-green-500/15 text-green-700 dark:text-green-400' : 'bg-blue-500/15 text-blue-700 dark:text-blue-400'}`}>
-                              {s.platform}
-                            </span>
-                            <span className={s.isActive ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground line-through'}>
-                              {s.isActive ? 'active' : 'inactive'}
-                            </span>
-                            {s.platform === 'android' && (
-                              <span className={s.hasToken ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
-                                FCM token: {s.hasToken ? 'present ✓' : 'missing ✗'}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <p className="text-xs text-muted-foreground">
+                    Firebase env vars:{' '}
+                    <span className={testPushResult.firebaseEnvConfigured ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
+                      {testPushResult.firebaseEnvConfigured ? 'configured ✓' : 'missing — add FIREBASE_PROJECT_ID / CLIENT_EMAIL / PRIVATE_KEY to Vercel env'}
+                    </span>
+                  </p>
 
-                    {testPushResult.subscriptions.length === 0 && (
-                      <p className="text-xs text-red-500">
-                        No subscriptions in database. Open the app on your Android device and enable notifications first.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+                  {testPushResult.subscriptions.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Subscriptions found:</p>
+                      {testPushResult.subscriptions.map((s) => (
+                        <div key={s.id} className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${s.platform === 'android' ? 'bg-green-500/15 text-green-700 dark:text-green-400' : 'bg-blue-500/15 text-blue-700 dark:text-blue-400'}`}>
+                            {s.platform}
+                          </span>
+                          <span className={s.isActive ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground line-through'}>
+                            {s.isActive ? 'active' : 'inactive'}
+                          </span>
+                          {s.platform === 'android' && (
+                            <span className={s.hasToken ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
+                              FCM token: {s.hasToken ? 'present ✓' : 'missing ✗'}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {testPushResult.subscriptions.length === 0 && (
+                    <p className="text-xs text-red-500">
+                      No subscriptions in database. Open the app on your Android device and enable notifications first.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {(profile?.role === 'admin' || profile?.role === 'event_creator') && (
