@@ -52,6 +52,7 @@ async function getServiceWorkerRegistration() {
 export async function subscribeCurrentUserToPush(accessToken: string): Promise<{
   permission: NotificationPermission
   subscribed: boolean
+  errorMessage?: string
 }> {
   // Detect native Capacitor environment via dynamic import to avoid SSR errors.
   let isNative = false
@@ -118,6 +119,7 @@ export async function subscribeCurrentUserToPush(accessToken: string): Promise<{
 async function subscribeNative(accessToken: string): Promise<{
   permission: NotificationPermission
   subscribed: boolean
+  errorMessage?: string
 }> {
   const [{ PushNotifications }, { Capacitor }] = await Promise.all([
     import('@capacitor/push-notifications'),
@@ -127,23 +129,20 @@ async function subscribeNative(accessToken: string): Promise<{
   const result = await PushNotifications.requestPermissions()
 
   if (result.receive === 'denied') {
-    return { permission: 'denied', subscribed: false }
+    return { permission: 'denied', subscribed: false, errorMessage: 'Notification permission denied by user' }
   }
 
-  // Register with FCM.  The CapacitorProvider's 'registration' listener will
-  // receive the token and POST it to /api/push/register-fcm with the
-  // current session.  We pass accessToken here as well so we can do a
-  // direct call if CapacitorProvider hasn't set up its listener yet.
-  return new Promise<{ permission: NotificationPermission; subscribed: boolean }>((resolve) => {
+  return new Promise<{ permission: NotificationPermission; subscribed: boolean; errorMessage?: string }>((resolve) => {
     let settled = false
 
-    const settle = (subscribed: boolean) => {
+    const settle = (subscribed: boolean, errorMessage?: string) => {
       if (settled) return
       settled = true
-      resolve({ permission: 'granted', subscribed })
+      resolve({ permission: 'granted', subscribed, errorMessage })
     }
 
-    // Set up one-shot listeners for the initial registration response.
+    // Await both listeners before calling register() to avoid a race where
+    // the FCM registration event fires before our JS handler is attached.
     Promise.all([
       PushNotifications.addListener('registration', async (token) => {
         try {
@@ -156,24 +155,34 @@ async function subscribeNative(accessToken: string): Promise<{
             },
             body: JSON.stringify({ fcmToken: token.value, platform }),
           })
-          settle(res.ok)
-        } catch {
-          settle(false)
+          if (res.ok) {
+            settle(true)
+          } else {
+            const body = await res.json().catch(() => ({}))
+            settle(false, `Server rejected token (${res.status}): ${body?.error ?? 'unknown error'}`)
+          }
+        } catch (err: unknown) {
+          settle(false, `Network error saving token: ${err instanceof Error ? err.message : String(err)}`)
         }
       }),
-      PushNotifications.addListener('registrationError', () => {
-        settle(false)
+      PushNotifications.addListener('registrationError', (err: unknown) => {
+        const msg =
+          err && typeof err === 'object' && 'error' in err
+            ? String((err as { error: unknown }).error)
+            : JSON.stringify(err)
+        settle(false, `FCM registration error: ${msg}`)
       }),
     ]).then(([regHandle, errHandle]) => {
-      // Clean up one-shot listeners after a reasonable timeout.
+      // Call register() only after both listeners are confirmed attached.
+      PushNotifications.register()
+
+      // Timeout safety net — 20 s should be plenty for FCM to respond.
       setTimeout(() => {
         regHandle.remove()
         errHandle.remove()
-        settle(false)
-      }, 15_000)
+        settle(false, 'FCM registration timed out after 20 s. Check Google Play Services on this device.')
+      }, 20_000)
     })
-
-    PushNotifications.register()
   })
 }
 

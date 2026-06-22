@@ -51,6 +51,8 @@ export default function SettingsNotificationsPage() {
   const [testPushLoading, setTestPushLoading] = useState(false)
   const [testPushResult, setTestPushResult] = useState<TestPushResult | null>(null)
   const [testPushMessage, setTestPushMessage] = useState('')
+  const [fcmDiagLog, setFcmDiagLog] = useState<string[]>([])
+  const [fcmDiagLoading, setFcmDiagLoading] = useState(false)
 
   useEffect(() => {
     async function checkPushSupport() {
@@ -193,6 +195,13 @@ export default function SettingsNotificationsPage() {
         })
         setHasActiveNativeSub(true)
         toast.success('Push notifications enabled')
+      } else if (result.permission !== 'denied') {
+        // Subscribed: false — surface the reason so we can diagnose
+        toast.error(
+          result.errorMessage
+            ? `Registration failed: ${result.errorMessage}`
+            : 'Device registration failed. See diagnostics in the Test section below.'
+        )
       }
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'Failed to enable push notifications')
@@ -285,6 +294,92 @@ export default function SettingsNotificationsPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to update notification category')
     } finally {
       setPushActionLoading(false)
+    }
+  }
+
+  async function runFcmDiagnostics() {
+    setFcmDiagLoading(true)
+    const log: string[] = []
+    const add = (msg: string) => { log.push(msg); setFcmDiagLog([...log]) }
+
+    try {
+      add('Checking Capacitor.isNativePlatform()...')
+      const { Capacitor } = await import('@capacitor/core')
+      const isNative = Capacitor.isNativePlatform()
+      add(`→ isNativePlatform: ${isNative}`)
+      add(`→ platform: ${Capacitor.getPlatform()}`)
+
+      if (!isNative) {
+        add('✗ Not running inside Capacitor — FCM push only works in the installed app, not a browser.')
+        setFcmDiagLoading(false)
+        return
+      }
+
+      add('Checking push permissions...')
+      const { PushNotifications } = await import('@capacitor/push-notifications')
+      const perms = await PushNotifications.checkPermissions()
+      add(`→ receive: ${perms.receive}`)
+
+      add('Adding registration + registrationError listeners...')
+      let tokenReceived = false
+
+      const [regHandle, errHandle] = await Promise.all([
+        PushNotifications.addListener('registration', async (token) => {
+          tokenReceived = true
+          add(`✓ FCM token received (first 20 chars): ${token.value.slice(0, 20)}...`)
+          add('Attempting to save token to server...')
+          try {
+            const { data: sessionData } = await supabase.auth.getSession()
+            const accessToken = sessionData.session?.access_token
+            if (!accessToken) {
+              add('✗ No session / access token found — user may need to log in again')
+              return
+            }
+            add(`→ Auth token present (${accessToken.slice(0, 12)}...)`)
+            const res = await fetch('/api/push/register-fcm', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({ fcmToken: token.value, platform: Capacitor.getPlatform() }),
+            })
+            const body = await res.json().catch(() => ({}))
+            if (res.ok) {
+              add('✓ Token saved to server successfully!')
+              setHasActiveNativeSub(true)
+            } else {
+              add(`✗ Server error ${res.status}: ${body?.error ?? JSON.stringify(body)}`)
+            }
+          } catch (err: unknown) {
+            add(`✗ Network error: ${err instanceof Error ? err.message : String(err)}`)
+          }
+        }),
+        PushNotifications.addListener('registrationError', (err: unknown) => {
+          const msg = err && typeof err === 'object' && 'error' in err
+            ? String((err as { error: unknown }).error)
+            : JSON.stringify(err)
+          add(`✗ registrationError: ${msg}`)
+          add('This usually means: (1) Google Play Services missing, (2) SHA-1 not added to Firebase, or (3) google-services.json mismatch.')
+        }),
+      ])
+
+      add('Calling PushNotifications.register()...')
+      await PushNotifications.register()
+      add('register() called — waiting up to 15s for FCM response...')
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 15_000))
+      regHandle.remove()
+      errHandle.remove()
+
+      if (!tokenReceived) {
+        add('✗ No token or error received after 15s — FCM registration timed out.')
+        add('Check: (1) Device has internet, (2) Google Play Services is up to date, (3) SHA-1 fingerprint registered in Firebase Console.')
+      }
+    } catch (err: unknown) {
+      add(`✗ Unexpected error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setFcmDiagLoading(false)
     }
   }
 
@@ -568,6 +663,46 @@ export default function SettingsNotificationsPage() {
                     <p className="text-xs text-red-500">
                       No subscriptions in database. Open the app on your Android device and enable notifications first.
                     </p>
+                  )}
+                </div>
+              )}
+
+              {/* ── FCM raw diagnostics (native only) ─────────────────── */}
+              {isNativePlatform && (
+                <div className="space-y-2 pt-3 border-t">
+                  <p className="text-sm font-medium">FCM diagnostics</p>
+                  <p className="text-xs text-muted-foreground">
+                    Runs FCM registration step-by-step and shows the raw output. Use this if &quot;Register device&quot; shows an error or does nothing.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={runFcmDiagnostics}
+                    disabled={fcmDiagLoading}
+                  >
+                    {fcmDiagLoading ? 'Running diagnostics…' : 'Run FCM diagnostics'}
+                  </Button>
+                  {fcmDiagLog.length > 0 && (
+                    <div className="rounded-md bg-muted p-3 space-y-0.5 font-mono text-xs max-h-60 overflow-y-auto">
+                      {fcmDiagLog.map((line, i) => (
+                        <p
+                          key={i}
+                          className={
+                            line.startsWith('✓')
+                              ? 'text-green-600 dark:text-green-400'
+                              : line.startsWith('✗')
+                              ? 'text-red-500'
+                              : 'text-muted-foreground'
+                          }
+                        >
+                          {line}
+                        </p>
+                      ))}
+                      {fcmDiagLoading && (
+                        <p className="text-muted-foreground animate-pulse">…waiting…</p>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
