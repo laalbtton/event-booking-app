@@ -48,6 +48,7 @@ export default function SettingsNotificationsPage() {
   }
   const [testPushLoading, setTestPushLoading] = useState(false)
   const [testPushResult, setTestPushResult] = useState<TestPushResult | null>(null)
+  const [testPushMessage, setTestPushMessage] = useState('')
 
   useEffect(() => {
     async function checkPushSupport() {
@@ -280,6 +281,7 @@ export default function SettingsNotificationsPage() {
       const accessToken = sessionData.session?.access_token
       if (!accessToken) throw new Error('Not authenticated')
 
+      const customMsg = testPushMessage.trim()
       const res = await fetch('/api/push/test', {
         method: 'POST',
         headers: {
@@ -288,7 +290,7 @@ export default function SettingsNotificationsPage() {
         },
         body: JSON.stringify({
           title: 'Test notification',
-          body: 'Push notifications are working on your device! 🎉',
+          body: customMsg || 'Push notifications are working on your device! 🎉',
           url: '/dashboard',
         }),
       })
@@ -461,22 +463,27 @@ export default function SettingsNotificationsPage() {
               </p>
             )}
 
-            {/* ── Test push (always visible when subscribed) ────────────── */}
-            {pushPrefs?.subscribed_at && (
-              <div className="space-y-3 pt-3 border-t">
-                <p className="text-sm font-medium">Test device notifications</p>
-                <p className="text-xs text-muted-foreground">
-                  Sends a real notification to this device right now. You should see it in the status bar and hear a sound even if the app is open.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={sendTestPush}
-                  disabled={testPushLoading}
-                  className="w-full sm:w-auto"
-                >
-                  {testPushLoading ? 'Sending…' : 'Send test notification to this device'}
-                </Button>
+            {/* ── Test push ──────────────────────────────────────────────── */}
+            <div className="space-y-3 pt-3 border-t">
+              <p className="text-sm font-medium">Test device notifications</p>
+              <p className="text-xs text-muted-foreground">
+                Sends a real notification to this device right now — bypasses all category preferences. You should see it in the status bar and hear a sound.
+              </p>
+              <Input
+                placeholder="Optional: custom message to display in the notification"
+                value={testPushMessage}
+                onChange={(e) => setTestPushMessage(e.target.value)}
+                maxLength={200}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={sendTestPush}
+                disabled={testPushLoading}
+                className="w-full sm:w-auto"
+              >
+                {testPushLoading ? 'Sending…' : 'Send test notification to this device'}
+              </Button>
 
                 {testPushResult && (
                   <div className={`rounded-lg border px-4 py-3 text-sm space-y-2 ${testPushResult.success ? 'border-green-500/30 bg-green-500/10' : 'border-red-500/30 bg-red-500/10'}`}>
@@ -528,7 +535,7 @@ export default function SettingsNotificationsPage() {
                   </div>
                 )}
               </div>
-            )}
+            </div>
 
             {(profile?.role === 'admin' || profile?.role === 'event_creator') && (
               <div className="space-y-3 pt-3 border-t">
