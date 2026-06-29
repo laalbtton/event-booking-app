@@ -110,6 +110,17 @@ export default function RoleOnboardingPage() {
         // Non-blocking — onboarding continues regardless
       }
 
+      // Sync new user to Resend marketing segment (non-blocking).
+      try {
+        fetch('/api/auth/sync-resend-contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id }),
+        }).catch(() => {})
+      } catch {
+        // Non-fatal — marketing sync should never block onboarding.
+      }
+
       window.localStorage.removeItem('pending_role_onboarding')
 
       // Redeem a pending community invite link (e.g. from /join/[token])

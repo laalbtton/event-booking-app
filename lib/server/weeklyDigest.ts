@@ -1,18 +1,19 @@
 /**
  * Weekly community digest sender.
  *
- * Inngest runs the digest on a weekly schedule (~Saturday 11:30 PM Eastern via cron).
- * Recipients are sorted by user id so the same person lands in the same batch every week
- * (stable send time week over week). Batches respect Resend daily limits: default 100 emails,
- * then step.sleep(24h) for the next batch, up to 5 batches (500 users) per run.
+ * New path (broadcast): builds ONE email and sends it as a single Resend Broadcast
+ * to the entire segment — no per-user loop, no daily-limit batching.
+ *
+ * Legacy path (per-user batches) is preserved below for reference / rollback.
  */
 
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
-import { getWeeklyDigestEmail, type DigestCommunitySection } from '@/lib/email'
+import { getWeeklyDigestEmail, getBroadcastWeeklyDigestEmail, type DigestCommunitySection, type DigestEvent } from '@/lib/email'
 import { getEmailTemplate, interpolate, TEMPLATE_KEYS } from '@/lib/server/emailTemplates'
 import { addCalendarDaysToYmd, getEasternCalendarDateString } from '@/lib/dateUtils'
 import { getSiteUrl, buildEventUrl, validateBaseUrl } from '@/lib/server/emailUrl'
+import { sendBroadcast } from '@/lib/server/resendAudience'
 
 function getAdminSupabase() {
   return createClient(
@@ -342,4 +343,99 @@ export async function sendWeeklyDigest(): Promise<DigestResult & { overflowCount
     errors,
     overflowCount: prepared.overflowCount,
   }
+}
+
+// ── Broadcast path (new) ──────────────────────────────────────────────────────
+
+export type BroadcastDigestResult = {
+  broadcastId: string | null
+  eventCount: number
+  skipped: boolean
+  error?: string
+}
+
+/**
+ * Fetch all upcoming events (next 14 days) as a flat list, sorted by date.
+ * Returns null when there is nothing to send.
+ */
+async function fetchUpcomingEvents(): Promise<DigestEvent[] | null> {
+  const supabase = getAdminSupabase()
+  const todayStr = getEasternCalendarDateString(new Date())
+  const cutoffStr = addCalendarDaysToYmd(todayStr, 14)
+
+  const { data: rawEvents, error: evErr } = await supabase
+    .from('events')
+    .select('id, title, date, slug, location, venue_id, poster_url')
+    .gte('date', todayStr)
+    .lte('date', cutoffStr)
+    .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
+    .order('date', { ascending: true })
+
+  if (evErr || !rawEvents || rawEvents.length === 0) return null
+
+  const events = (rawEvents as {
+    id: string; slug: string | null; venue_id: string | null
+    title: string; date: string; location: string | null; poster_url: string | null
+  }[]).filter((e) => {
+    const url = buildEventUrl(e.slug ?? e.id)
+    if (!url) console.warn(`[weeklyDigest/broadcast] Skipping event ${e.id}: cannot build URL.`)
+    return !!url
+  })
+
+  if (events.length === 0) return null
+
+  const venueIds = [...new Set(events.map((e) => e.venue_id).filter(Boolean) as string[])]
+  const venueMap = new Map<string, string>()
+  if (venueIds.length > 0) {
+    const { data: venues } = await supabase
+      .from('venues').select('id, name').in('id', venueIds)
+    ;((venues ?? []) as { id: string; name: string }[]).forEach((v) => venueMap.set(v.id, v.name))
+  }
+
+  return events.map((e) => ({
+    id: e.id,
+    slug: e.slug,
+    title: e.title,
+    date: e.date,
+    venueName: e.venue_id ? (venueMap.get(e.venue_id) ?? null) : null,
+    location: e.location,
+    posterUrl: e.poster_url ?? null,
+  }))
+}
+
+/**
+ * Build and send a single Resend Broadcast for the weekly digest.
+ * One call — no per-user loop — bypasses the transactional 100 emails/day cap.
+ */
+export async function sendBroadcastWeeklyDigest(): Promise<BroadcastDigestResult> {
+  const siteUrl = getSiteUrl()
+
+  const baseCheck = await validateBaseUrl()
+  if (!baseCheck.ok) {
+    console.error(
+      `[weeklyDigest/broadcast] Aborting: base URL "${siteUrl}" is unreachable. ${baseCheck.reason ?? ''}`,
+    )
+    return { broadcastId: null, eventCount: 0, skipped: true, error: 'Base URL unreachable' }
+  }
+
+  const events = await fetchUpcomingEvents()
+  if (!events) {
+    console.info('[weeklyDigest/broadcast] No upcoming events — skipping broadcast.')
+    return { broadcastId: null, eventCount: 0, skipped: true }
+  }
+
+  const tmpl = await getEmailTemplate(TEMPLATE_KEYS.WEEKLY_DIGEST)
+  const weekKey = getEasternCalendarDateString(new Date())
+  const subject = interpolate(tmpl.subject, { user_name: '{{{contact.first_name|there}}}' })
+
+  const html = getBroadcastWeeklyDigestEmail({ events, siteUrl })
+
+  const broadcastId = await sendBroadcast({ subject, html })
+
+  if (!broadcastId) {
+    return { broadcastId: null, eventCount: events.length, skipped: false, error: 'Broadcast API call failed' }
+  }
+
+  console.info(`[weeklyDigest/broadcast] Broadcast ${broadcastId} sent (${events.length} events, week ${weekKey}).`)
+  return { broadcastId, eventCount: events.length, skipped: false }
 }

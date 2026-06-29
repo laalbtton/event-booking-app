@@ -867,6 +867,151 @@ export function getWeeklyDigestEmail(data: {
 </html>`
 }
 
+// ── Weekly digest – Resend Broadcast version ─────────────────────────────────
+// This template is rendered once and sent as a single Broadcast to the full
+// Resend segment.  It uses Resend's triple-mustache merge tags for
+// personalisation so every recipient sees their own first name.
+
+export type DigestEvent = DigestCommunitySection['events'][number]
+
+export function getBroadcastWeeklyDigestEmail(data: {
+  events: DigestEvent[]
+  siteUrl: string
+}): string {
+  const { events, siteUrl } = data
+  const totalEvents = events.length
+
+  function eventCard(ev: DigestEvent): string {
+    const eventUrl = `${siteUrl}/events/${ev.slug ?? ev.id}`
+    const { dateLine: date, timeLine: time } = formatDigestEventDatePartsEastern(ev.date)
+    const venue = ev.venueName ?? ev.location ?? 'Venue TBA'
+
+    const imageBlock = ev.posterUrl
+      ? `<a href="${eventUrl}" style="display:block; text-decoration:none;">
+           <img src="${ev.posterUrl}" alt="${ev.title}" width="560"
+                style="display:block; width:100%; max-height:280px; object-fit:cover;
+                       border-radius:10px 10px 0 0; background:#27272a;" />
+         </a>`
+      : `<div style="background:#27272a; border-radius:10px 10px 0 0; padding:32px;
+                     text-align:center; font-size:32px;">🎤</div>`
+
+    return `
+      <div style="margin:0 0 20px 0; border-radius:10px; border:1px solid #3f3f46;
+                  background:#18181b; overflow:hidden;">
+        ${imageBlock}
+        <div style="padding:18px 20px 20px;">
+          <a href="${eventUrl}"
+             style="display:block; font-size:17px; font-weight:700; color:#f5f5f4;
+                    text-decoration:none; line-height:1.35; margin-bottom:10px;">
+            ${ev.title}
+          </a>
+          <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">
+            <tr>
+              <td style="font-size:13px; color:#a8a29e; padding:3px 0; vertical-align:top; width:18px;">📅</td>
+              <td style="font-size:13px; color:#a8a29e; padding:3px 0;">${date} &nbsp;·&nbsp; ${time} ET</td>
+            </tr>
+            <tr>
+              <td style="font-size:13px; color:#a8a29e; padding:3px 0; vertical-align:top;">📍</td>
+              <td style="font-size:13px; color:#a8a29e; padding:3px 0;">${venue}</td>
+            </tr>
+          </table>
+          <div style="margin-top:16px;">
+            <a href="${eventUrl}"
+               style="display:inline-block; background:#fbbf24; color:#09090b;
+                      font-size:13px; font-weight:700; padding:9px 20px;
+                      border-radius:7px; text-decoration:none; letter-spacing:0.01em;">
+              View event →
+            </a>
+          </div>
+        </div>
+      </div>`
+  }
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What's on this week</title>
+</head>
+<body style="margin:0; padding:0; background:#09090b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#09090b; min-height:100vh;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%;">
+
+          <!-- Header -->
+          <tr>
+            <td style="padding:0 0 28px 0; text-align:center;">
+              <p style="margin:0 0 12px 0; font-size:12px; letter-spacing:2px; text-transform:uppercase;
+                         color:#78716c; font-weight:600;">One Mic Stand</p>
+              <h1 style="margin:0; font-size:30px; font-weight:800; color:#f5f5f4; line-height:1.2;">
+                What&rsquo;s on this week 🎤
+              </h1>
+              <p style="margin:10px 0 0 0; font-size:14px; color:#a8a29e;">
+                ${totalEvents} upcoming show${totalEvents !== 1 ? 's' : ''} in the community
+              </p>
+              <p style="margin:8px 0 0 0; font-size:12px; color:#78716c;">
+                Event times are in Eastern Time (US and Canada).
+              </p>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr><td style="border-top:1px solid #3f3f46; padding:0 0 28px 0;"></td></tr>
+
+          <!-- Greeting -->
+          <tr>
+            <td style="padding:0 0 28px 0;">
+              <p style="margin:0 0 12px 0; font-size:16px; color:#f5f5f4;">Hi {{{contact.first_name|there}}},</p>
+              <p style="margin:0; font-size:15px; color:#a8a29e; line-height:1.7;">
+                Here&rsquo;s what&rsquo;s coming up on One Mic Stand. Grab your spot before it fills up!
+              </p>
+            </td>
+          </tr>
+
+          <!-- Event cards -->
+          <tr>
+            <td style="padding:0 0 8px 0;">
+              ${events.map(eventCard).join('')}
+            </td>
+          </tr>
+
+          <!-- CTA -->
+          <tr>
+            <td style="padding:12px 0 32px 0; text-align:center;">
+              <a href="${siteUrl}/dashboard"
+                 style="display:inline-block; background:#fbbf24; color:#09090b;
+                        font-size:15px; font-weight:700; padding:14px 36px;
+                        border-radius:9px; text-decoration:none; letter-spacing:0.01em;">
+                Browse All Events →
+              </a>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr><td style="border-top:1px solid #3f3f46; padding:0 0 20px 0;"></td></tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:0 0 24px 0; text-align:center;">
+              <p style="margin:0; font-size:12px; color:#52525b;">© 2025 One Mic Stand. All rights reserved.</p>
+              <p style="margin:6px 0 0 0; font-size:12px; color:#52525b;">
+                You received this because you signed up for One Mic Stand.<br>
+                <a href="{{{RESEND_UNSUBSCRIBE_URL}}}"
+                   style="color:#78716c; text-decoration:underline;">Unsubscribe</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
 // ── Ticket purchase confirmation ─────────────────────────────────────────────
 
 export function getTicketPurchaseEmail(data: {
