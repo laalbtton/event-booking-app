@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     const { data: vouchers, error: vouchersError } = await supabase
       .from('booking_vouchers')
-      .select('id, event_id, code, value_cents, status, expires_at, created_at')
+      .select('id, event_id, code, value_cents, voucher_type, status, expires_at, created_at')
       .eq('user_id', authData.user.id)
       .order('created_at', { ascending: false })
 
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: vouchersError.message }, { status: 500 })
     }
 
-    const eventIds = Array.from(new Set((vouchers || []).map((v) => v.event_id)))
+    const eventIds = Array.from(new Set((vouchers || []).map((v) => v.event_id).filter(Boolean)))
     const eventMap = new Map<string, { title: string; date: string }>()
 
     if (eventIds.length > 0) {
@@ -53,17 +53,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const payload = (vouchers || []).map((voucher) => ({
-      id: voucher.id,
-      eventId: voucher.event_id,
-      eventTitle: eventMap.get(voucher.event_id)?.title || 'Event',
-      eventDate: eventMap.get(voucher.event_id)?.date || null,
-      code: voucher.code,
-      valueCents: voucher.value_cents,
-      status: voucher.status,
-      expiresAt: voucher.expires_at,
-      createdAt: voucher.created_at,
-    }))
+    const payload = (vouchers || []).map((voucher) => {
+      const voucherType: string = (voucher as any).voucher_type ?? 'food_coupon'
+      const isLuckyDraw = voucherType === 'lucky_draw'
+      const eventInfo = voucher.event_id ? eventMap.get(voucher.event_id) : null
+      return {
+        id: voucher.id,
+        eventId: voucher.event_id ?? null,
+        eventTitle: isLuckyDraw ? "Free Chai at Ryan's Chai" : (eventInfo?.title ?? 'Event'),
+        eventDate: eventInfo?.date ?? null,
+        code: voucher.code,
+        valueCents: voucher.value_cents,
+        voucherType,
+        status: voucher.status,
+        expiresAt: voucher.expires_at,
+        createdAt: voucher.created_at,
+      }
+    })
 
     return NextResponse.json({ vouchers: payload })
   } catch (error: any) {

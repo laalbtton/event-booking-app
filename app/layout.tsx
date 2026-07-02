@@ -9,6 +9,7 @@ import { AuthBootstrapProvider } from '@/components/providers/auth-bootstrap-pro
 import { InstagramUsernamePromptProvider } from '@/components/providers/instagram-username-prompt-provider'
 import { PushServiceWorkerProvider } from '@/components/providers/push-service-worker-provider'
 import { CapacitorProvider } from '@/components/providers/capacitor-provider'
+import RedButtonListener from '@/components/RedButtonListener'
 import { InstallBonusProvider } from '@/components/providers/install-bonus-provider'
 import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
 import { ThemeProvider } from '@/components/providers/theme-provider'
@@ -76,6 +77,7 @@ export default function RootLayout({
             <InstagramUsernamePromptProvider>
             <PushServiceWorkerProvider />
             <CapacitorProvider />
+            <RedButtonListener />
             {INSTALL_PROMPT_ENABLED && <InstallBonusProvider />}
             <GlobalAlertsProvider />
             {/* Main content area */}

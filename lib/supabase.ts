@@ -37,8 +37,32 @@ export type Profile = {
   twitter_link: string | null
   website_link: string | null
   bio: string | null
+  referred_by?: string | null
   created_at: string
   updated_at: string
+}
+
+// Red Button Promo
+export type RedButtonSession = {
+  id: string
+  event_id: string
+  host_user_id: string
+  active: boolean
+  winner_user_id: string | null
+  winner_approved: boolean
+  coupon_issued: boolean
+  created_at: string
+  deactivated_at: string | null
+  // secret_code intentionally omitted — never sent to non-host clients
+}
+
+export type RedButtonResponse = {
+  id: string
+  session_id: string
+  user_id: string
+  correct: boolean
+  credits_issued: boolean
+  submitted_at: string
 }
 
 // Public profile (for viewing others)

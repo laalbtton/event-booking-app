@@ -393,6 +393,52 @@ export default async function PublicProfilePage({ params }: Props) {
           </section>
         )}
 
+        {/* ── Join the app CTA (shown only to logged-out visitors) ────── */}
+        <JoinViaReferralCTA performerId={profile.id} performerName={profile.fullName} />
+
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Server component that checks auth state and conditionally renders
+ * a "Join the app" banner for unauthenticated visitors.
+ * The ?ref= param is captured on the signup page and used to credit
+ * the performer when the new user completes onboarding.
+ */
+async function JoinViaReferralCTA({
+  performerId,
+  performerName,
+}: {
+  performerId: string
+  performerName: string
+}) {
+  const supabase = getPublicServerClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session) return null
+
+  const firstName = performerName.split(' ')[0]
+  const signupHref = `/signup?ref=${performerId}&role=audience`
+
+  return (
+    <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/5 p-6 text-center space-y-3">
+      <p className="text-stone-300 text-sm">
+        {firstName} invited you to One Mic Stand — the comedy community app for Toronto&apos;s best shows.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+        <Link
+          href={signupHref}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-yellow-400 px-5 py-2.5 text-sm font-bold text-zinc-950 hover:bg-yellow-300 transition-colors"
+        >
+          Join the app
+        </Link>
+        <Link
+          href={`/login?ref=${performerId}`}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-600 px-5 py-2.5 text-sm font-medium text-stone-300 hover:border-zinc-400 transition-colors"
+        >
+          Already have an account? Sign in
+        </Link>
       </div>
     </div>
   )

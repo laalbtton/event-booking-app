@@ -63,6 +63,7 @@ type MyCoupon = {
   eventDate: string | null
   code: string
   valueCents: number
+  voucherType?: string
   status: 'issued' | 'redeemed' | 'cancelled' | 'expired'
   expiresAt: string | null
 }
@@ -360,6 +361,7 @@ export default function ProfilePage() {
         eventDate: v.eventDate || null,
         code: v.code,
         valueCents: Number(v.valueCents || 0),
+        voucherType: v.voucherType ?? 'food_coupon',
         status: v.status,
         expiresAt: v.expiresAt || null,
       }))
@@ -438,11 +440,20 @@ export default function ProfilePage() {
   }
 
   function renderCouponCard(coupon: MyCoupon) {
+    const isLuckyDraw = coupon.voucherType === 'lucky_draw'
+    const borderColor = isLuckyDraw ? 'sm:border-l-yellow-500' : 'sm:border-l-blue-500'
     return (
-      <Card key={coupon.id} className="rounded-none sm:rounded-lg border-x-0 sm:border-x border-l-0 sm:border-l-4 sm:border-l-blue-500">
+      <Card key={coupon.id} className={`rounded-none sm:rounded-lg border-x-0 sm:border-x border-l-0 sm:border-l-4 ${borderColor}`}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-base md:text-lg line-clamp-2">{coupon.eventTitle}</CardTitle>
+            <div className="space-y-1">
+              <CardTitle className="text-base md:text-lg line-clamp-2">{coupon.eventTitle}</CardTitle>
+              {isLuckyDraw && (
+                <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-400 text-xs font-semibold">
+                  🎉 Lucky Draw Winner
+                </Badge>
+              )}
+            </div>
             <Badge
               variant="outline"
               className={cn(
@@ -457,9 +468,15 @@ export default function ProfilePage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          <div className="text-sm text-muted-foreground">
-            {coupon.eventDate ? `📅 ${formatDateTime(coupon.eventDate)}` : '📅 Event date unavailable'}
-          </div>
+          {isLuckyDraw ? (
+            <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2 text-sm text-yellow-800">
+              🍵 Show this coupon at Ryan&apos;s Chai for your free Chai!
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              {coupon.eventDate ? `📅 ${formatDateTime(coupon.eventDate)}` : '📅 Event date unavailable'}
+            </div>
+          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Code</span>
             <div className="flex items-center gap-2">
@@ -475,10 +492,12 @@ export default function ProfilePage() {
               </Button>
             </div>
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Value</span>
-            <span className="font-medium">${(coupon.valueCents / 100).toFixed(2)}</span>
-          </div>
+          {!isLuckyDraw && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Value</span>
+              <span className="font-medium">${(coupon.valueCents / 100).toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Expires</span>
             <span>{coupon.expiresAt ? formatDateTime(coupon.expiresAt) : 'No expiry'}</span>

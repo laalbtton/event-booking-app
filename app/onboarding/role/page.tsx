@@ -121,6 +121,28 @@ export default function RoleOnboardingPage() {
         // Non-fatal — marketing sync should never block onboarding.
       }
 
+      // Complete performer referral if the user arrived via ?ref= on a profile page.
+      try {
+        const signupRef = typeof window !== 'undefined' ? window.sessionStorage.getItem('signup_ref') : null
+        if (signupRef) {
+          const { data: sessionForRef } = await supabase.auth.getSession()
+          const refToken = sessionForRef?.session?.access_token
+          if (refToken) {
+            fetch('/api/auth/complete-referral', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${refToken}`,
+              },
+              body: JSON.stringify({ referrerId: signupRef }),
+            }).catch(() => {})
+          }
+          window.sessionStorage.removeItem('signup_ref')
+        }
+      } catch {
+        // Non-fatal — referral should never block onboarding.
+      }
+
       window.localStorage.removeItem('pending_role_onboarding')
 
       // Redeem a pending community invite link (e.g. from /join/[token])

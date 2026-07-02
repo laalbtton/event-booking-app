@@ -36,6 +36,12 @@ function LoginContent() {
     if (returnTo && typeof window !== 'undefined') {
       window.sessionStorage.setItem('signup_returnTo', returnTo)
     }
+    // Capture performer referral ID (login = returning user, but preserve in case
+    // they created an account and are now confirming via the login page)
+    const ref = searchParams.get('ref')
+    if (ref && typeof window !== 'undefined') {
+      window.sessionStorage.setItem('signup_ref', ref)
+    }
   }, [searchParams])
 
   useEffect(() => {

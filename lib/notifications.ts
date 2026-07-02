@@ -12,6 +12,9 @@ export type NotificationType =
   | 'host_poster_reminder_24h'
   | 'general'
   | 'profile_review_received'
+  | 'referral_credit_earned'
+  | 'red_button_credits_earned'
+  | 'red_button_lucky_draw_won'
 
 /**
  * Creates a notification for a user

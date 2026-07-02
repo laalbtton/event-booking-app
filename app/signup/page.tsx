@@ -35,6 +35,11 @@ function SignupContent() {
     if (role && typeof window !== 'undefined') {
       window.sessionStorage.setItem('signup_role', role)
     }
+    // Capture performer referral ID so the onboarding page can award credits
+    const ref = searchParams.get('ref')
+    if (ref && typeof window !== 'undefined') {
+      window.sessionStorage.setItem('signup_ref', ref)
+    }
   }, [searchParams])
 
   // Email/password signup
