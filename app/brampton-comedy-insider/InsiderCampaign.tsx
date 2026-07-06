@@ -155,8 +155,17 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
 
       {/* ── HERO (full-width, centred) ────────────────────────── */}
       <section className="relative overflow-hidden bg-gradient-to-br from-black via-neutral-950 to-stone-900 px-4 pt-10 pb-12 sm:pt-14 sm:pb-16">
+        {/* Background crowd photo (desktop only) */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/brampton-comedy-crowd.jpg"
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover opacity-15 hidden sm:block"
+        />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.10),transparent_55%)]" />
         <div className="relative mx-auto max-w-2xl text-center">
+
           <span className="inline-flex items-center gap-2 rounded-full border border-yellow-400/40 bg-yellow-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-yellow-300">
             🎙 Founding Members Club
           </span>
@@ -195,6 +204,22 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
               />
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── CROWD PHOTO ──────────────────────────────────────── */}
+      <section className="px-4 pt-6 pb-2">
+        <div className="mx-auto max-w-2xl overflow-hidden rounded-2xl border border-white/10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/brampton-comedy-crowd.jpg"
+            alt="Audience at a Brampton comedy show at Ryan's Chai"
+            className="w-full object-cover"
+            style={{ maxHeight: 400 }}
+          />
+          <p className="bg-zinc-900/80 px-4 py-2.5 text-center text-xs text-stone-500">
+            A recent show at Ryan&apos;s Chai, Brampton — the community is real 🎤
+          </p>
         </div>
       </section>
 
