@@ -9,13 +9,13 @@ export function LBFooter() {
       <div className="mx-auto max-w-6xl px-5 py-12">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-10">
           {/* Brand */}
-          <div className="space-y-3">
-            <p
-              className="text-[#c41e3a] text-2xl font-black tracking-tighter"
-              style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}
-            >
-              Laal Button
-            </p>
+          <div className="space-y-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/laalbutton-logo-white.png"
+              alt="Laal Button Comedy"
+              className="h-10 w-auto object-contain opacity-90"
+            />
             <p className="text-sm leading-relaxed text-[#6b5030]">
               Toronto&apos;s South Asian comedy community. Open mics, showcases, and spaces where stories live.
             </p>

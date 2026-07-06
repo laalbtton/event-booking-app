@@ -23,16 +23,13 @@ export function LBHeader() {
     <header className="sticky top-0 z-50 w-full border-b border-[#2a1a0e] bg-[#0d0a07]/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
         {/* Logo */}
-        <Link
-          href="/laalbutton"
-          className="flex items-center gap-2"
-        >
-          <span className="text-[#c41e3a] text-xl font-black tracking-tighter leading-none" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>
-            Laal Button
-          </span>
-          <span className="hidden sm:inline text-[#8a6a4a] text-xs font-medium tracking-widest uppercase mt-0.5">
-            Comedy
-          </span>
+        <Link href="/laalbutton" className="flex items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/laalbutton-logo-white.png"
+            alt="Laal Button Comedy"
+            className="h-9 w-auto object-contain"
+          />
         </Link>
 
         {/* Desktop nav */}

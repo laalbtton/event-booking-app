@@ -167,7 +167,17 @@ export default async function LaalButtonHome() {
     <>
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b border-[#2a1a0e]">
-        {/* Radial glow */}
+        {/* Crowd photo as hero background */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/brampton-comedy-crowd.jpg"
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ opacity: 0.12 }}
+        />
+        {/* Dark overlay + radial glow on top of photo */}
+        <div aria-hidden className="absolute inset-0 bg-[#0d0a07]/60" />
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
@@ -274,6 +284,28 @@ export default async function LaalButtonHome() {
           >
             View all events →
           </Link>
+        </div>
+      </section>
+
+      {/* ── Community Photo ──────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl px-5 pb-16">
+        <div className="relative overflow-hidden rounded-2xl border border-[#2a1a0e]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/brampton-comedy-crowd.jpg"
+            alt="Audience at a comedy show at Ryan's Chai, Brampton"
+            className="w-full object-cover"
+            style={{ maxHeight: 420 }}
+          />
+          {/* Caption overlay */}
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#0d0a07]/90 via-[#0d0a07]/40 to-transparent px-6 pt-12 pb-5">
+            <p className="text-[#e8d9c4] font-bold text-base" style={serif}>
+              The community is real.
+            </p>
+            <p className="text-[#8a6a4a] text-sm mt-0.5">
+              A packed show at Ryan&apos;s Chai, Brampton — this is what we&apos;re building.
+            </p>
+          </div>
         </div>
       </section>
 
