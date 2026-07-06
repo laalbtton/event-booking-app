@@ -1,0 +1,61 @@
+import Link from 'next/link'
+
+export function LBFooter() {
+  return (
+    <footer className="border-t border-[#2a1a0e] bg-[#07050302] text-[#8a6a4a]">
+      {/* Decorative line */}
+      <div className="h-px bg-gradient-to-r from-transparent via-[#c41e3a]/40 to-transparent" />
+
+      <div className="mx-auto max-w-6xl px-5 py-12">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-10">
+          {/* Brand */}
+          <div className="space-y-3">
+            <p
+              className="text-[#c41e3a] text-2xl font-black tracking-tighter"
+              style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}
+            >
+              Laal Button
+            </p>
+            <p className="text-sm leading-relaxed text-[#6b5030]">
+              Toronto&apos;s South Asian comedy community. Open mics, showcases, and spaces where stories live.
+            </p>
+          </div>
+
+          {/* Series */}
+          <div>
+            <p className="text-[#c8a882] text-xs font-bold uppercase tracking-widest mb-4">Our Series</p>
+            <ul className="space-y-2 text-sm">
+              <li><Link href="/laalbutton/punjabis-in-tech" className="hover:text-[#f5a623] transition-colors">Punjabis in Tech</Link></li>
+              <li><Link href="/laalbutton/multilingual-comedy" className="hover:text-[#f5a623] transition-colors">Multilingual Comedy Open Mics</Link></li>
+              <li><Link href="/laalbutton/roti-kapda-aur-comedy" className="hover:text-[#f5a623] transition-colors">Roti Kapda Aur Comedy</Link></li>
+              <li>
+                <a href="https://satrang.ca" target="_blank" rel="noopener noreferrer" className="hover:text-[#f5a623] transition-colors">
+                  Satrang ↗
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Links */}
+          <div>
+            <p className="text-[#c8a882] text-xs font-bold uppercase tracking-widest mb-4">The App</p>
+            <ul className="space-y-2 text-sm">
+              <li><Link href="/signup" className="hover:text-[#f5a623] transition-colors">Create Account</Link></li>
+              <li><Link href="/login" className="hover:text-[#f5a623] transition-colors">Sign In</Link></li>
+              <li><Link href="/events" className="hover:text-[#f5a623] transition-colors">Browse All Events</Link></li>
+              <li><Link href="/contact" className="hover:text-[#f5a623] transition-colors">Contact</Link></li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-10 pt-6 border-t border-[#1a0e05] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#4a3520]">
+          <p>© {new Date().getFullYear()} Laal Button Comedy. All rights reserved.</p>
+          <div className="flex gap-4">
+            <Link href="/privacy" className="hover:text-[#8a6a4a] transition-colors">Privacy Policy</Link>
+            <Link href="/contact" className="hover:text-[#8a6a4a] transition-colors">Contact</Link>
+          </div>
+        </div>
+      </div>
+    </footer>
+  )
+}

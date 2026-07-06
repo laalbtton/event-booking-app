@@ -4,6 +4,7 @@ import { postEventFeedbackFunction } from '@/inngest/functions/postEventFeedback
 import { weeklyDigestFunction } from '@/inngest/functions/weeklyDigest'
 import { preEventReminderFunction } from '@/inngest/functions/preEventReminder'
 import { extendEventSeriesFunction } from '@/inngest/functions/extendEventSeries'
+import { eventbriteSyncFunction } from '@/inngest/functions/eventbriteSync'
 
 /**
  * Inngest serve endpoint.
@@ -20,5 +21,6 @@ export const { GET, POST, PUT } = serve({
     weeklyDigestFunction,
     preEventReminderFunction,
     extendEventSeriesFunction,
+    eventbriteSyncFunction,
   ],
 })
