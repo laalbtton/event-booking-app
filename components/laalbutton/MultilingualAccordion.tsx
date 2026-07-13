@@ -1,73 +1,36 @@
 'use client'
 
 import * as Accordion from '@radix-ui/react-accordion'
+import Link from 'next/link'
 import { ChevronDown } from 'lucide-react'
-
-type MicNight = {
-  id: string
-  title: string
-  day: string
-  city: string
-  time: string
-  venue: string
-  address: string
-  description: string
-  languages: string[]
-  ticketUrl?: string
-}
-
-const MIC_NIGHTS: MicNight[] = [
-  {
-    id: 'wednesday-brampton',
-    title: 'Wednesday Mic in Brampton',
-    day: 'Every Wednesday',
-    city: 'Brampton',
-    time: '7:00 PM',
-    venue: "Ryan's Chai",
-    address: 'Brampton, ON',
-    description:
-      "Brampton's weekly home for multilingual comedy. Comedians take the stage in Punjabi, Hindi, Urdu, English — or all four in the same set. A warm, welcoming room that celebrates South Asian voices.",
-    languages: ['Punjabi', 'Hindi', 'Urdu', 'English'],
-  },
-  {
-    id: 'thursday-toronto',
-    title: 'Thursday Mic in Toronto',
-    day: 'Every Thursday',
-    city: 'Toronto',
-    time: '7:30 PM',
-    venue: 'TBA — Toronto venue',
-    address: 'Toronto, ON',
-    description:
-      "Toronto's midweek comedy meetup — an open mic where South Asian performers and comedy curious newcomers mix it up. Bring a tight five, or just bring yourself.",
-    languages: ['Punjabi', 'Hindi', 'English', 'More'],
-  },
-]
+import { MIC_NIGHTS, type MicNightSlug } from '@/lib/laalbutton/micNights'
 
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" } as const
 
+const MIC_LIST = [MIC_NIGHTS['brampton-open-mic'], MIC_NIGHTS['toronto-open-mic']]
+
 export function MultilingualAccordion() {
   return (
-    <Accordion.Root type="multiple" defaultValue={['wednesday-brampton']} className="space-y-3">
-      {MIC_NIGHTS.map((mic) => (
+    <Accordion.Root type="multiple" defaultValue={['brampton-open-mic']} className="space-y-3">
+      {MIC_LIST.map((mic) => (
         <Accordion.Item
-          key={mic.id}
-          value={mic.id}
+          key={mic.slug}
+          value={mic.slug}
           className="rounded-xl border border-[#2a1a0e] bg-[#120c06] overflow-hidden data-[state=open]:border-[#c41e3a]/40"
         >
           <Accordion.Trigger className="w-full flex items-center justify-between px-6 py-5 text-left group">
             <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-[#e8d9c4] group-data-[state=open]:text-[#f5a623] transition-colors" style={serif}>
-                  {mic.title}
-                </span>
-              </div>
+              <span
+                className="text-sm font-black text-[#e8d9c4] group-data-[state=open]:text-[#f5a623] transition-colors"
+                style={serif}
+              >
+                {mic.shortTitle}
+              </span>
               <p className="text-xs text-[#6b5030]">
                 {mic.day} · {mic.city} · {mic.time}
               </p>
             </div>
-            <ChevronDown
-              className="h-4 w-4 text-[#6b5030] shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180 group-data-[state=open]:text-[#c41e3a]"
-            />
+            <ChevronDown className="h-4 w-4 text-[#6b5030] shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180 group-data-[state=open]:text-[#c41e3a]" />
           </Accordion.Trigger>
 
           <Accordion.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
@@ -101,16 +64,12 @@ export function MultilingualAccordion() {
                 </div>
               </div>
 
-              {mic.ticketUrl && (
-                <a
-                  href={mic.ticketUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#c41e3a] text-white text-sm font-bold hover:bg-[#a01830] transition-colors"
-                >
-                  Get Tickets ↗
-                </a>
-              )}
+              <Link
+                href={`/laalbutton/multilingual-comedy/${mic.slug as MicNightSlug}`}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#c41e3a] text-white text-sm font-bold hover:bg-[#a01830] transition-colors"
+              >
+                View {mic.title} →
+              </Link>
             </div>
           </Accordion.Content>
         </Accordion.Item>

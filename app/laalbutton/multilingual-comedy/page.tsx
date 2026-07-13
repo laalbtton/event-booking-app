@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { MultilingualAccordion } from '@/components/laalbutton/MultilingualAccordion'
+import { LBIconBadge } from '@/components/laalbutton/LBIcons'
+import { LB_MEDIA } from '@/lib/laalbutton/media'
 
 export const revalidate = 3600
 
@@ -65,12 +67,13 @@ export default function MultilingualComedyPage() {
             </div>
           </div>
 
-          {/* Placeholder image */}
-          <div className="mt-12 rounded-2xl border border-[#2a1a0e] bg-[#120c06] h-56 md:h-72 flex items-center justify-center">
-            <div className="text-center space-y-2">
-              <p className="text-5xl">🎤</p>
-              <p className="text-[#3a2a18] text-sm">Event photo coming soon</p>
-            </div>
+          <div className="mt-12 overflow-hidden rounded-2xl border border-[#2a1a0e] bg-[#120c06]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={LB_MEDIA.firstVarietyMic.src}
+              alt={LB_MEDIA.firstVarietyMic.alt}
+              className="w-full h-auto block max-h-[360px] object-cover object-center"
+            />
           </div>
         </div>
       </section>
@@ -79,16 +82,44 @@ export default function MultilingualComedyPage() {
       <section className="mx-auto max-w-6xl px-5 py-10">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { icon: '🗓', label: 'Wednesday & Thursday', sub: 'Two weekly mics' },
-            { icon: '📍', label: 'Brampton & Toronto', sub: 'Your city, your stage' },
-            { icon: '🌐', label: 'All Languages Welcome', sub: 'Punjabi, Hindi, Urdu, English & more' },
+            { icon: 'calendar' as const, label: 'Wednesday & Thursday', sub: 'Two weekly mics' },
+            { icon: 'location' as const, label: 'Brampton & Toronto', sub: 'Your city, your stage' },
+            { icon: 'languages' as const, label: 'All Languages Welcome', sub: 'Punjabi, Hindi, Urdu, English & more' },
           ].map((fact) => (
             <div key={fact.label} className="rounded-xl border border-[#2a1a0e] bg-[#120c06] px-6 py-5 text-center">
-              <p className="text-3xl mb-2">{fact.icon}</p>
+              <LBIconBadge name={fact.icon} accentColor="#c41e3a" size="md" className="mx-auto mb-3" />
               <p className="text-[#c8a882] font-bold text-sm">{fact.label}</p>
               <p className="text-[#4a3520] text-xs mt-0.5">{fact.sub}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Mic night cards */}
+      <section className="mx-auto max-w-6xl px-5 py-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Link
+            href="/laalbutton/multilingual-comedy/brampton-open-mic"
+            className="group rounded-2xl border border-[#2a1a0e] bg-[#120c06] p-6 hover:border-[#c41e3a]/40 transition-all"
+          >
+            <p className="text-[#c41e3a] text-xs font-bold uppercase tracking-widest mb-2">Every Wednesday</p>
+            <h3 className="text-xl font-black text-[#e8d9c4] group-hover:text-[#f5a623] transition-colors" style={serif}>
+              Brampton Open Mic
+            </h3>
+            <p className="text-[#6b5030] text-sm mt-2">Ryan&apos;s Chai · 7:00 PM</p>
+            <p className="text-[#c41e3a] text-xs font-bold uppercase tracking-widest mt-4">View details →</p>
+          </Link>
+          <Link
+            href="/laalbutton/multilingual-comedy/toronto-open-mic"
+            className="group rounded-2xl border border-[#2a1a0e] bg-[#120c06] p-6 hover:border-[#f5a623]/40 transition-all"
+          >
+            <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest mb-2">Every Thursday</p>
+            <h3 className="text-xl font-black text-[#e8d9c4] group-hover:text-[#f5a623] transition-colors" style={serif}>
+              Toronto Open Mic
+            </h3>
+            <p className="text-[#6b5030] text-sm mt-2">SoCap · Toronto</p>
+            <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest mt-4">View details →</p>
+          </Link>
         </div>
       </section>
 
@@ -108,7 +139,7 @@ export default function MultilingualComedyPage() {
       <section className="mx-auto max-w-6xl px-5 py-10 border-t border-[#2a1a0e]">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="rounded-2xl border border-[#2a1a0e] bg-[#120c06] p-7">
-            <p className="text-2xl mb-3">🎙️</p>
+            <LBIconBadge name="performer" accentColor="#c41e3a" size="md" className="mb-4" />
             <h3 className="font-black text-[#e8d9c4] text-lg mb-2" style={serif}>I want to perform</h3>
             <p className="text-[#6b5030] text-sm leading-relaxed mb-4">
               Sign up as a performer on the app, book your spot, and show up with your material. All experience levels welcome. Show up in your language.
@@ -121,7 +152,7 @@ export default function MultilingualComedyPage() {
             </Link>
           </div>
           <div className="rounded-2xl border border-[#2a1a0e] bg-[#120c06] p-7">
-            <p className="text-2xl mb-3">👏</p>
+            <LBIconBadge name="audience" accentColor="#f5a623" size="md" className="mb-4" />
             <h3 className="font-black text-[#e8d9c4] text-lg mb-2" style={serif}>I want to attend</h3>
             <p className="text-[#6b5030] text-sm leading-relaxed mb-4">
               The best open mics have great audiences. Come out, support the comedians, and be part of something being built from the ground up.

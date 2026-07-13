@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
-import Link from 'next/link'
 import { ConfirmDialogProvider } from '@/components/providers/confirm-dialog-provider'
 import { GlobalAlertsProvider } from '@/components/providers/global-alerts-provider'
 import { AuthBootstrapProvider } from '@/components/providers/auth-bootstrap-provider'
@@ -14,6 +13,7 @@ import { InstallBonusProvider } from '@/components/providers/install-bonus-provi
 import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
 import { ThemeProvider } from '@/components/providers/theme-provider'
 import AppNavigationShell from '@/components/AppNavigationShell'
+import ConditionalAppFooter from '@/components/ConditionalAppFooter'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -87,29 +87,7 @@ export default function RootLayout({
             </main>
 
             {/* Footer */}
-            <footer className="bg-gray-800 text-white py-6 mt-auto pb-28">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                  <p className="text-sm">© 2025 Laal Button. All rights reserved.</p>
-                  <div className="flex gap-6">
-                    <Link href="/contact" className="text-sm hover:text-gray-300">
-                      Contact
-                    </Link>
-                    <Link href="/buy-credits" className="text-sm hover:text-gray-300">
-                      Buy Credits
-                    </Link>
-                    <a 
-                      href="https://laalbutton.com" 
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm hover:text-gray-300"
-                    >
-                      About
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </footer>
+            <ConditionalAppFooter />
             </InstagramUsernamePromptProvider>
           </AuthBootstrapProvider>
         </ConfirmDialogProvider>

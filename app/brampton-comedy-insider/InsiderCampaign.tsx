@@ -124,6 +124,11 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
       .catch(() => {})
   }
 
+  function scrollToForm() {
+    trackInsiderEvent('cta_clicked')
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   // ── Post-activation view ────────────────────────────────────
   if (isActivatedRoute) {
     if (activatedLoading) {
@@ -178,6 +183,21 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
             Be one of the first 500 members and earn a free comedy ticket, exclusive event invites,
             discounted tickets, and priority access to future comedy shows in Brampton.
           </p>
+
+          {step !== 'done' && (
+            <div className="mt-8">
+              <Button
+                type="button"
+                onClick={scrollToForm}
+                className="h-12 px-8 bg-yellow-400 text-base font-bold text-zinc-950 hover:bg-yellow-300 shadow-lg shadow-yellow-400/20"
+              >
+                Add Your Info — Claim Your Spot
+              </Button>
+              <p className="mt-2.5 text-xs text-stone-500">
+                Takes under a minute · ${CREDIT_TOTAL_AVAILABLE} in comedy credits available
+              </p>
+            </div>
+          )}
 
           <ul className="mx-auto mt-7 grid max-w-md grid-cols-1 gap-2 text-left sm:grid-cols-2">
             {BENEFITS.map((b) => (
@@ -263,7 +283,7 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
       </section>
 
       {/* ── FORM ─────────────────────────────────────────────── */}
-      <section ref={formRef} className="scroll-mt-4 px-4 py-8">
+      <section id="signup-form" ref={formRef} className="scroll-mt-6 px-4 py-8">
         <div className="mx-auto max-w-md">
           {step === 'done' ? (
             <Confirmation credits={earned} />

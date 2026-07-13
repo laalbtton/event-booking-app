@@ -1,4 +1,5 @@
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
+import { resolvePublicEventPosterUrl } from '@/lib/eventPosterDefaults'
 import type { ProfileRatingAggregates, ProfileReviewSnippet, ProfileReviewSummary, ProfileReviewSnippetRow } from '@/lib/supabase'
 import { describeRecurrence } from '@/lib/eventSeriesUtils'
 
@@ -193,6 +194,20 @@ function inferCityRegionFromLocation(location: string | null): { city: string; r
 const EVENT_SELECT =
   'id, slug, title, description, date, end_time, status, tickets_enabled, external_event, external_ticket_url, credits_required, location, venue_id, host_user_id, created_at, updated_at, poster_url, event_type, open_mic_type, series_id'
 
+type PublicEventVenue = PublicEventDetails['venue']
+
+function resolveEventImageUrl(args: {
+  posterUrl: string | null | undefined
+  startDate: string
+  locationText: string
+  venue: PublicEventVenue
+  eventType?: string | null
+  openMicType?: string | null
+  title?: string | null
+}): string | null {
+  return resolvePublicEventPosterUrl(args)
+}
+
 export async function getPublicEventByIdentifier(identifier: string): Promise<PublicEventDetails | null> {
   const supabase = getPublicServerClient()
 
@@ -335,7 +350,15 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
     audienceExpectedCount: audienceCountRes.count || 0,
     createdAt: eventData.created_at,
     updatedAt: eventData.updated_at,
-    imageUrl: eventData.poster_url || null,
+    imageUrl: resolveEventImageUrl({
+      posterUrl: eventData.poster_url,
+      startDate: eventData.date,
+      locationText: eventData.location || '',
+      venue,
+      eventType: eventData.event_type,
+      openMicType: eventData.open_mic_type,
+      title: eventData.title,
+    }),
     eventType: eventData.event_type || null,
     openMicType: eventData.open_mic_type || null,
     communityName: communityRow?.name || null,
@@ -352,16 +375,30 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
  * Efficient batch implementation — fetches all events in 5 queries instead of N×7.
  * Replaces the old N+1 pattern that caused timeouts in production.
  */
-export async function listPublicEvents(limit = 100): Promise<PublicEventDetails[]> {
+export type ListPublicEventsOptions = {
+  /** When true, only returns events with start date >= now (avoids past events filling the limit). */
+  upcomingOnly?: boolean
+}
+
+export async function listPublicEvents(
+  limit = 100,
+  options?: ListPublicEventsOptions,
+): Promise<PublicEventDetails[]> {
   const supabase = getPublicServerClient()
 
   // 1. Fetch events with venue and host joined in one shot
-  const { data: events, error: eventsError } = await supabase
+  let eventsQuery = supabase
     .from('events')
     .select(`${EVENT_SELECT}, venues!venue_id(id, name, address, city, region, postal_code, country), profiles!host_user_id(full_name)`)
     .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
     .order('date', { ascending: true })
     .limit(limit)
+
+  if (options?.upcomingOnly) {
+    eventsQuery = eventsQuery.gte('date', new Date().toISOString())
+  }
+
+  const { data: events, error: eventsError } = await eventsQuery
 
   if (eventsError || !events || events.length === 0) return []
 
@@ -482,7 +519,15 @@ export async function listPublicEvents(limit = 100): Promise<PublicEventDetails[
       audienceExpectedCount,
       createdAt: eventData.created_at as string,
       updatedAt: eventData.updated_at as string,
-      imageUrl: (eventData.poster_url as string | null) || null,
+      imageUrl: resolveEventImageUrl({
+        posterUrl: eventData.poster_url as string | null,
+        startDate: eventData.date as string,
+        locationText: (eventData.location as string) || '',
+        venue,
+        eventType: eventData.event_type as string | null,
+        openMicType: eventData.open_mic_type as string | null,
+        title: eventData.title as string,
+      }),
       eventType: (eventData.event_type as string | null) || null,
       openMicType: (eventData.open_mic_type as string | null) || null,
       communityName: communityRow?.name || null,
@@ -590,7 +635,15 @@ export async function fetchEventsByIds(eventIds: string[]): Promise<PublicEventD
       performerLineup, spotsConfirmed,
       audienceExpectedCount: bookings.filter((b) => b.booking_scope === 'audience').length,
       createdAt: eventData.created_at as string, updatedAt: eventData.updated_at as string,
-      imageUrl: (eventData.poster_url as string | null) || null,
+      imageUrl: resolveEventImageUrl({
+        posterUrl: eventData.poster_url as string | null,
+        startDate: eventData.date as string,
+        locationText: (eventData.location as string) || '',
+        venue,
+        eventType: eventData.event_type as string | null,
+        openMicType: eventData.open_mic_type as string | null,
+        title: eventData.title as string,
+      }),
       eventType: (eventData.event_type as string | null) || null,
       openMicType: (eventData.open_mic_type as string | null) || null,
       communityName: communityRow?.name || null, communityId: communityRow?.id || null,

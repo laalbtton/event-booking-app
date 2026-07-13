@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { listPublicEvents } from '@/lib/server/publicContent'
+import { LBIconBadge } from '@/components/laalbutton/LBIcons'
+import { LB_MEDIA } from '@/lib/laalbutton/media'
 
 export const revalidate = 600
 
@@ -76,12 +78,13 @@ export default async function RotiKapdaAurComedyPage() {
             </div>
           </div>
 
-          {/* Placeholder image */}
-          <div className="mt-12 rounded-2xl border border-[#2a1a0e] bg-[#120c06] h-56 md:h-72 flex items-center justify-center">
-            <div className="text-center space-y-2">
-              <p className="text-5xl">🍛</p>
-              <p className="text-[#3a2a18] text-sm">Event photo coming soon</p>
-            </div>
+          <div className="mt-12 overflow-hidden rounded-2xl border border-[#2a1a0e] bg-[#120c06]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={LB_MEDIA.rotiKapdaHero.src}
+              alt={LB_MEDIA.rotiKapdaHero.alt}
+              className="w-full h-auto block max-h-[420px] object-contain bg-[#0d0a07]"
+            />
           </div>
         </div>
       </section>
@@ -104,13 +107,13 @@ export default async function RotiKapdaAurComedyPage() {
           <div className="rounded-2xl border border-[#2a1a0e] bg-[#120c06] p-7 space-y-5">
             <p className="text-[#d97706] text-xs font-bold uppercase tracking-[0.2em]">What to Expect</p>
             {[
-              { e: '🎤', t: 'Curated standup lineup', s: '4–6 headlining comedians' },
-              { e: '🌮', t: 'South Asian food & chai', s: 'Come hungry' },
-              { e: '🎟', t: 'Ticketed event', s: 'Limited seating, book early' },
-              { e: '🤝', t: 'Community first', s: 'A room that feels like home' },
+              { icon: 'mic' as const, t: 'Curated standup lineup', s: '4–6 headlining comedians' },
+              { icon: 'food' as const, t: 'South Asian food & chai', s: 'Come hungry' },
+              { icon: 'ticket' as const, t: 'Ticketed event', s: 'Limited seating, book early' },
+              { icon: 'community' as const, t: 'Community first', s: 'A room that feels like home' },
             ].map((item) => (
               <div key={item.t} className="flex items-center gap-4">
-                <span className="text-2xl">{item.e}</span>
+                <LBIconBadge name={item.icon} accentColor="#d97706" size="sm" />
                 <div>
                   <p className="text-[#c8a882] font-bold text-sm">{item.t}</p>
                   <p className="text-[#4a3520] text-xs">{item.s}</p>
@@ -152,7 +155,7 @@ export default async function RotiKapdaAurComedyPage() {
           </div>
         ) : (
           <div className="rounded-2xl border border-[#2a1a0e] bg-[#120c06] p-10 text-center">
-            <p className="text-3xl mb-3">🍛</p>
+            <LBIconBadge name="roti" accentColor="#d97706" size="lg" className="mx-auto mb-4 opacity-80" />
             <p className="text-[#6b5030] text-sm mb-4">No shows scheduled right now — next one is being planned.</p>
             <Link
               href="/signup"

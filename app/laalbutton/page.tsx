@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { listPublicEvents } from '@/lib/server/publicContent'
+import { LBIcon, LBIconBadge } from '@/components/laalbutton/LBIcons'
+import { LB_MEDIA } from '@/lib/laalbutton/media'
 
 export const revalidate = 300
 
@@ -45,8 +47,8 @@ function EventCard({ event }: { event: Awaited<ReturnType<typeof listPublicEvent
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-5xl opacity-20">🎤</span>
+          <div className="w-full h-full flex items-center justify-center opacity-30">
+            <LBIcon name="stage" accent="#6b5030" size="lg" />
           </div>
         )}
         {/* Date badge */}
@@ -72,10 +74,7 @@ function EventCard({ event }: { event: Awaited<ReturnType<typeof listPublicEvent
           {event.title}
         </h3>
         <div className="flex items-center gap-1.5 text-[11px] text-[#6b5030]">
-          <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
+          <LBIcon name="location" accent="#6b5030" size="sm" className="shrink-0 opacity-70" />
           <span className="truncate">{location}</span>
           <span className="text-[#3a2a18] mx-1">·</span>
           <span className="shrink-0">{time}</span>
@@ -87,29 +86,46 @@ function EventCard({ event }: { event: Awaited<ReturnType<typeof listPublicEvent
 
 // ── Sub-page card ────────────────────────────────────────────────────────────
 const cardClass =
-  'group relative block rounded-2xl border border-[#2a1a0e] bg-[#120c06] hover:border-[#c41e3a]/40 overflow-hidden transition-all duration-200 p-6'
+  'group relative block rounded-2xl border border-[#2a1a0e] bg-[#120c06] hover:border-[#c41e3a]/40 overflow-hidden transition-all duration-200'
 
 function SeriesCardInner({
   title,
   description,
   accentColor,
-  emoji,
+  image,
+  imageAlt,
+  imageFit = 'cover',
   external,
 }: {
   title: string
   description: string
   accentColor: string
-  emoji: string
+  image: string
+  imageAlt: string
+  imageFit?: 'cover' | 'contain'
   external?: boolean
 }) {
   return (
     <>
-      <div
-        className="absolute top-0 left-0 right-0 h-0.5 transition-all duration-300"
-        style={{ background: accentColor, opacity: 0.6 }}
-      />
-      <div className="space-y-3">
-        <div className="text-3xl">{emoji}</div>
+      <div className="relative aspect-[4/3] overflow-hidden bg-[#0d0a07]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={image}
+          alt={imageAlt}
+          className={`h-full w-full transition-transform duration-500 group-hover:scale-105 ${
+            imageFit === 'contain' ? 'object-contain p-3' : 'object-cover'
+          }`}
+        />
+        <div
+          className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[#120c06] to-transparent"
+          aria-hidden
+        />
+        <div
+          className="absolute top-0 left-0 right-0 h-0.5"
+          style={{ background: accentColor, opacity: 0.7 }}
+        />
+      </div>
+      <div className="space-y-2 p-5">
         <h3
           className="text-lg font-bold text-[#e8d9c4] leading-snug group-hover:text-[#f5a623] transition-colors"
           style={serif}
@@ -118,9 +134,9 @@ function SeriesCardInner({
           {external && <span className="ml-1 text-[#6b5030] text-sm font-normal">↗</span>}
         </h3>
         <p className="text-sm text-[#6b5030] leading-relaxed">{description}</p>
-      </div>
-      <div className="mt-4 text-xs font-bold uppercase tracking-widest" style={{ color: accentColor }}>
-        {external ? 'Visit site' : 'Explore →'}
+        <div className="pt-1 text-xs font-bold uppercase tracking-widest" style={{ color: accentColor }}>
+          {external ? 'Visit site' : 'Explore →'}
+        </div>
       </div>
     </>
   )
@@ -132,63 +148,79 @@ function SeriesCard({
   href,
   external,
   accentColor = '#c41e3a',
-  emoji,
+  image,
+  imageAlt,
+  imageFit,
 }: {
   title: string
   description: string
   href: string
   external?: boolean
   accentColor?: string
-  emoji: string
+  image: string
+  imageAlt: string
+  imageFit?: 'cover' | 'contain'
 }) {
   if (external) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className={cardClass}>
-        <SeriesCardInner title={title} description={description} accentColor={accentColor} emoji={emoji} external />
+        <SeriesCardInner
+          title={title}
+          description={description}
+          accentColor={accentColor}
+          image={image}
+          imageAlt={imageAlt}
+          imageFit={imageFit}
+          external
+        />
       </a>
     )
   }
   return (
     <Link href={href} className={cardClass}>
-      <SeriesCardInner title={title} description={description} accentColor={accentColor} emoji={emoji} />
+      <SeriesCardInner
+        title={title}
+        description={description}
+        accentColor={accentColor}
+        image={image}
+        imageAlt={imageAlt}
+        imageFit={imageFit}
+      />
     </Link>
   )
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default async function LaalButtonHome() {
-  const now = new Date()
-  const allEvents = await listPublicEvents(30)
-  const upcomingEvents = allEvents
-    .filter((e) => !e.isCancelled && new Date(e.startDate) >= now)
-    .slice(0, 8)
+  const upcomingEvents = (await listPublicEvents(3, { upcomingOnly: true })).filter(
+    (e) => !e.isCancelled,
+  )
 
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden border-b border-[#2a1a0e]">
-        {/* Crowd photo as hero background */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/images/brampton-comedy-crowd.jpg"
-          alt=""
-          aria-hidden
-          className="absolute inset-0 h-full w-full object-cover"
-          style={{ opacity: 0.12 }}
-        />
-        {/* Dark overlay + radial glow on top of photo */}
-        <div aria-hidden className="absolute inset-0 bg-[#0d0a07]/60" />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(196,30,58,0.18) 0%, transparent 70%)',
-          }}
-        />
+      <section className="relative isolate overflow-hidden border-b border-[#2a1a0e]">
+        {/* Background layers — kept behind content so headline stays crisp */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={LB_MEDIA.homeHero.src}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover object-[center_25%] opacity-70"
+          />
+          {/* Dark scrim — heavier on the left where text sits */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0d0a07] via-[#0d0a07]/85 to-[#0d0a07]/55" />
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(196,30,58,0.15) 0%, transparent 70%)',
+            }}
+          />
+        </div>
 
         {/* Top marquee bar */}
-        <div className="relative overflow-hidden bg-[#c41e3a] py-1.5 text-[11px] font-bold text-white uppercase tracking-widest">
+        <div className="relative z-10 overflow-hidden bg-[#c41e3a] py-1.5 text-[11px] font-bold text-white uppercase tracking-widest">
           <div className="flex whitespace-nowrap animate-[marquee_30s_linear_infinite]">
             {Array.from({ length: 8 }).map((_, i) => (
               <span key={i} className="mx-8">
@@ -198,7 +230,7 @@ export default async function LaalButtonHome() {
           </div>
         </div>
 
-        <div className="mx-auto max-w-6xl px-5 py-20 md:py-28">
+        <div className="relative z-10 mx-auto max-w-6xl px-5 py-20 md:py-28">
           <div className="max-w-3xl">
             {/* Eyebrow */}
             <p className="text-[#c41e3a] text-xs font-bold uppercase tracking-[0.2em] mb-4">
@@ -265,14 +297,14 @@ export default async function LaalButtonHome() {
         </div>
 
         {upcomingEvents.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {upcomingEvents.map((event) => (
               <EventCard key={event.id} event={event} />
             ))}
           </div>
         ) : (
           <div className="rounded-2xl border border-[#2a1a0e] bg-[#120c06] p-12 text-center">
-            <p className="text-3xl mb-3">🎤</p>
+            <LBIconBadge name="mic" accentColor="#c41e3a" size="lg" className="mx-auto mb-4 opacity-80" />
             <p className="text-[#6b5030] text-sm">New events are being scheduled — check back soon.</p>
           </div>
         )}
@@ -287,14 +319,14 @@ export default async function LaalButtonHome() {
         </div>
       </section>
 
-      {/* ── Community Photo ──────────────────────────────────────────────── */}
+      {/* ── Community Vibes ──────────────────────────────────────────────── */}
       <section className="mx-auto max-w-6xl px-5 pb-16">
         <div className="relative overflow-hidden rounded-2xl border border-[#2a1a0e]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/images/brampton-comedy-crowd.jpg"
-            alt="Audience at a comedy show at Ryan's Chai, Brampton"
-            className="w-full object-cover"
+            src={LB_MEDIA.homeVibes.src}
+            alt={LB_MEDIA.homeVibes.alt}
+            className="w-full object-cover object-center"
             style={{ maxHeight: 420 }}
           />
           {/* Caption overlay */}
@@ -303,7 +335,7 @@ export default async function LaalButtonHome() {
               The community is real.
             </p>
             <p className="text-[#8a6a4a] text-sm mt-0.5">
-              A packed show at Ryan&apos;s Chai, Brampton — this is what we&apos;re building.
+              Open mics, showcases, and nights that feel like home — this is what we&apos;re building.
             </p>
           </div>
         </div>
@@ -323,35 +355,49 @@ export default async function LaalButtonHome() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <SeriesCard
             title="Punjabis in Tech"
             description="Where tech professionals meet comedy. Networking events that don't take themselves too seriously."
             href="/laalbutton/punjabis-in-tech"
-            emoji="💻"
+            image={LB_MEDIA.punjabisInTech.src}
+            imageAlt={LB_MEDIA.punjabisInTech.alt}
             accentColor="#f5a623"
           />
           <SeriesCard
             title="Multilingual Comedy Open Mics"
             description="Weekly mics in Brampton and Toronto where comedians perform in Punjabi, Hindi, Urdu, and English."
             href="/laalbutton/multilingual-comedy"
-            emoji="🎤"
+            image={LB_MEDIA.multilingualComedy.src}
+            imageAlt={LB_MEDIA.multilingualComedy.alt}
             accentColor="#c41e3a"
           />
           <SeriesCard
             title="Roti Kapda Aur Comedy"
             description="An evening of South Asian stories, standup, and community. Come for the jokes, stay for the chai."
             href="/laalbutton/roti-kapda-aur-comedy"
-            emoji="🍛"
+            image={LB_MEDIA.rotiKapdaHero.src}
+            imageAlt={LB_MEDIA.rotiKapdaHero.alt}
+            imageFit="contain"
             accentColor="#d97706"
+          />
+          <SeriesCard
+            title="Immigrants With Attitude"
+            description="English-language South Asian comedy with bite — immigrant stories, sharp takes, and big laughs."
+            href="/laalbutton/immigrants-with-attitude"
+            image={LB_MEDIA.immigrantsWithAttitude.src}
+            imageAlt={LB_MEDIA.immigrantsWithAttitude.alt}
+            imageFit="contain"
+            accentColor="#7c3aed"
           />
           <SeriesCard
             title="Satrang"
             description="A platform for South Asian arts and culture in Canada — music, spoken word, and performance."
-            href="https://satrang.ca"
+            href="https://laalbutton.com/satrang"
             external
-            emoji="🎨"
-            accentColor="#7c3aed"
+            image={LB_MEDIA.satrang.src}
+            imageAlt={LB_MEDIA.satrang.alt}
+            accentColor="#a78bfa"
           />
         </div>
       </section>

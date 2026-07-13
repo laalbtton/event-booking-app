@@ -30,6 +30,18 @@ const nextConfig: NextConfig = {
         destination: '/laalbutton',
         permanent: false,
       },
+      {
+        source: '/about',
+        has: [{ type: 'host', value: 'laalbutton.com' }],
+        destination: '/laalbutton/about',
+        permanent: false,
+      },
+      {
+        source: '/about',
+        has: [{ type: 'host', value: 'www.laalbutton.com' }],
+        destination: '/laalbutton/about',
+        permanent: false,
+      },
     ]
   },
 };

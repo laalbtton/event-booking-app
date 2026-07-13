@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { listPublicEvents } from '@/lib/server/publicContent'
+import { LBFeatureRow } from '@/components/laalbutton/LBIcons'
+import { LB_MEDIA } from '@/lib/laalbutton/media'
 
 export const revalidate = 600
 
@@ -79,12 +81,13 @@ export default async function PunjabisInTechPage() {
             </Link>
           </div>
 
-          {/* Placeholder image slot */}
-          <div className="mt-12 rounded-2xl border border-[#2a1a0e] bg-[#120c06] h-64 md:h-80 flex items-center justify-center">
-            <div className="text-center space-y-2">
-              <p className="text-5xl">💻</p>
-              <p className="text-[#3a2a18] text-sm">Event photo coming soon</p>
-            </div>
+          <div className="mt-12 overflow-hidden rounded-2xl border border-[#2a1a0e] bg-[#120c06]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={LB_MEDIA.punjabisInTech.src}
+              alt={LB_MEDIA.punjabisInTech.alt}
+              className="w-full h-auto block"
+            />
           </div>
         </div>
       </section>
@@ -105,17 +108,10 @@ export default async function PunjabisInTechPage() {
             </p>
           </div>
           <div className="space-y-4">
-            {[
-              { icon: '🎤', label: 'Live comedy sets' },
-              { icon: '💬', label: 'Community conversations' },
-              { icon: '🤝', label: 'Genuine networking' },
-              { icon: '🍵', label: 'South Asian food and chai' },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-3 rounded-xl border border-[#2a1a0e] bg-[#120c06] px-5 py-3.5">
-                <span className="text-xl">{item.icon}</span>
-                <span className="text-[#c8a882] font-medium text-sm">{item.label}</span>
-              </div>
-            ))}
+            <LBFeatureRow name="mic" label="Live comedy sets" accentColor="#f5a623" />
+            <LBFeatureRow name="chat" label="Community conversations" accentColor="#f5a623" />
+            <LBFeatureRow name="network" label="Genuine networking" accentColor="#f5a623" />
+            <LBFeatureRow name="chai" label="South Asian food and chai" accentColor="#f5a623" />
           </div>
         </div>
       </section>

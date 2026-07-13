@@ -26,10 +26,36 @@ export function LBFooter() {
             <p className="text-[#c8a882] text-xs font-bold uppercase tracking-widest mb-4">Our Series</p>
             <ul className="space-y-2 text-sm">
               <li><Link href="/laalbutton/punjabis-in-tech" className="hover:text-[#f5a623] transition-colors">Punjabis in Tech</Link></li>
-              <li><Link href="/laalbutton/multilingual-comedy" className="hover:text-[#f5a623] transition-colors">Multilingual Comedy Open Mics</Link></li>
-              <li><Link href="/laalbutton/roti-kapda-aur-comedy" className="hover:text-[#f5a623] transition-colors">Roti Kapda Aur Comedy</Link></li>
               <li>
-                <a href="https://satrang.ca" target="_blank" rel="noopener noreferrer" className="hover:text-[#f5a623] transition-colors">
+                <Link href="/laalbutton/multilingual-comedy" className="hover:text-[#f5a623] transition-colors">
+                  Multilingual Comedy Open Mics
+                </Link>
+              </li>
+              <li className="pl-3 space-y-1.5 border-l border-[#2a1a0e] ml-1">
+                <Link href="/laalbutton/multilingual-comedy/brampton-open-mic" className="block hover:text-[#f5a623] transition-colors text-[#6b5030]">
+                  Brampton Open Mic
+                </Link>
+                <Link href="/laalbutton/multilingual-comedy/toronto-open-mic" className="block hover:text-[#f5a623] transition-colors text-[#6b5030]">
+                  Toronto Open Mic
+                </Link>
+              </li>
+              <li><Link href="/laalbutton/roti-kapda-aur-comedy" className="hover:text-[#f5a623] transition-colors">Roti Kapda Aur Comedy</Link></li>
+              <li><Link href="/laalbutton/immigrants-with-attitude" className="hover:text-[#f5a623] transition-colors">Immigrants With Attitude</Link></li>
+              <li>
+                <Link href="/laalbutton/workshops" className="hover:text-[#f5a623] transition-colors">
+                  Workshops
+                </Link>
+              </li>
+              <li className="pl-3 space-y-1.5 border-l border-[#2a1a0e] ml-1">
+                <Link href="/laalbutton/workshops#creativity-improv" className="block hover:text-[#f5a623] transition-colors text-[#6b5030]">
+                  Creativity Workshops (Improv)
+                </Link>
+                <Link href="/laalbutton/workshops#seniors-standup" className="block hover:text-[#f5a623] transition-colors text-[#6b5030]">
+                  Seniors Stand up Workshops
+                </Link>
+              </li>
+              <li>
+                <a href="https://laalbutton.com/satrang" target="_blank" rel="noopener noreferrer" className="hover:text-[#f5a623] transition-colors">
                   Satrang ↗
                 </a>
               </li>
@@ -40,6 +66,7 @@ export function LBFooter() {
           <div>
             <p className="text-[#c8a882] text-xs font-bold uppercase tracking-widest mb-4">The App</p>
             <ul className="space-y-2 text-sm">
+              <li><Link href="/laalbutton/about" className="hover:text-[#f5a623] transition-colors">About</Link></li>
               <li><Link href="/signup" className="hover:text-[#f5a623] transition-colors">Create Account</Link></li>
               <li><Link href="/login" className="hover:text-[#f5a623] transition-colors">Sign In</Link></li>
               <li><Link href="/events" className="hover:text-[#f5a623] transition-colors">Browse All Events</Link></li>
