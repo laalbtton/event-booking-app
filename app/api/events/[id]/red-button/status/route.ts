@@ -40,7 +40,12 @@ export async function GET(
       .eq('id', eventId)
       .single()
     if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
-    if (event.host_user_id !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const { data: adminRow } = await supabase
+      .from('admin_users')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (event.host_user_id !== userId && !adminRow) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     // Get the most recent session for this event
     const { data: session } = await supabase

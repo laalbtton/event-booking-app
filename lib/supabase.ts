@@ -65,6 +65,25 @@ export type RedButtonResponse = {
   submitted_at: string
 }
 
+export type EventLiveState = {
+  event_id: string
+  live_performer_user_id: string | null
+  updated_by: string | null
+  updated_at: string
+}
+
+export type PerformerVoteColor = 'green' | 'red'
+
+export type EventPerformerVote = {
+  id: string
+  event_id: string
+  voter_user_id: string
+  performer_user_id: string
+  vote: PerformerVoteColor
+  created_at: string
+  updated_at: string
+}
+
 // Public profile (for viewing others)
 export type PublicProfile = {
   id: string

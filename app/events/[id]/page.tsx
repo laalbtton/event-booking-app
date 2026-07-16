@@ -1183,6 +1183,19 @@ export default function EventDetailsPage() {
                     </Link>
                   </Button>
                 )}
+                {(isHost || isEventCreator) && (
+                  <Button asChild variant="outline" className="border-red-400 text-red-700 hover:bg-red-50">
+                    <Link href={`/events/${event.id}/live`}>Live Mode</Link>
+                  </Button>
+                )}
+                {!isHost &&
+                  !isEventCreator &&
+                  !!userBooking &&
+                  userBooking.status === 'confirmed' && (
+                    <Button asChild variant="outline" className="border-red-400 text-red-700 hover:bg-red-50">
+                      <Link href={`/events/${event.id}/live/audience`}>Live Mode</Link>
+                    </Button>
+                  )}
                 {isHost && (
                   <Button asChild variant="outline">
                     <Link href={`/events/${event.id}/hosting-info`}>Hosting info</Link>

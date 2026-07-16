@@ -203,19 +203,6 @@ export default function AttendancePage() {
   const [canManageHost, setCanManageHost] = useState(false)
   const [isHost, setIsHostState] = useState(false)
 
-  // ── Red Button Promo state ───────────────────────────────────────────────
-  const [rbActive, setRbActive] = useState(false)
-  const [rbLoading, setRbLoading] = useState(false)
-  const [rbSessionId, setRbSessionId] = useState<string | null>(null)
-  const [rbCode, setRbCode] = useState<number | null>(null)
-  const [rbResponseCount, setRbResponseCount] = useState(0)
-  const [rbCorrectCount, setRbCorrectCount] = useState(0)
-  const [rbWinnerId, setRbWinnerId] = useState<string | null>(null)
-  const [rbWinnerName, setRbWinnerName] = useState<string | null>(null)
-  const [rbWinnerApproved, setRbWinnerApproved] = useState(false)
-  const [rbApproving, setRbApproving] = useState(false)
-  // ────────────────────────────────────────────────────────────────────────
-
   const [stats, setStats] = useState({
     total: 0,
     confirmed: 0,
@@ -252,15 +239,6 @@ export default function AttendancePage() {
   useEffect(() => {
     checkAuth()
   }, [])
-
-  // Poll Red Button status every 5 s when the user is the host
-  useEffect(() => {
-    if (!isHost || !resolvedId) return
-    rbPollStatus()
-    const interval = setInterval(rbPollStatus, 5000)
-    return () => clearInterval(interval)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHost, resolvedId])
 
   useEffect(() => {
     return () => {
@@ -444,101 +422,6 @@ export default function AttendancePage() {
       setScannerMessage(error?.message || 'Could not start camera scanner. Use manual code entry.')
     }
   }
-
-  // ── Red Button Promo handlers ─────────────────────────────────────────────
-  async function rbPollStatus() {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-    const res = await fetch(`/api/events/${resolvedId}/red-button/status`, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    })
-    if (!res.ok) return
-    const { session: rbSession } = await res.json()
-    if (!rbSession) return
-    setRbSessionId(rbSession.id)
-    setRbActive(rbSession.active)
-    setRbResponseCount(rbSession.responseCount ?? 0)
-    setRbCorrectCount(rbSession.correctCount ?? 0)
-    setRbWinnerId(rbSession.winnerId ?? null)
-    setRbWinnerName(rbSession.winnerName ?? null)
-    setRbWinnerApproved(rbSession.winnerApproved ?? false)
-  }
-
-  async function handleRbActivate() {
-    setRbLoading(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      const res = await fetch(`/api/events/${resolvedId}/red-button/activate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      const data = await res.json()
-      if (!res.ok) { toast.error(data.error || 'Failed to activate'); return }
-      setRbActive(true)
-      setRbSessionId(data.sessionId)
-      setRbCode(data.code)
-      setRbResponseCount(0)
-      setRbCorrectCount(0)
-      setRbWinnerId(null)
-      setRbWinnerName(null)
-      setRbWinnerApproved(false)
-    } catch (e: any) {
-      toast.error(e.message || 'Error')
-    } finally {
-      setRbLoading(false)
-    }
-  }
-
-  async function handleRbDeactivate() {
-    setRbLoading(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      const res = await fetch(`/api/events/${resolvedId}/red-button/deactivate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      const data = await res.json()
-      if (!res.ok) { toast.error(data.error || 'Failed to deactivate'); return }
-      setRbActive(false)
-      setRbCode(null)
-      if (data.winner) {
-        setRbWinnerId(data.winner.id)
-        setRbWinnerName(data.winner.name)
-      }
-    } catch (e: any) {
-      toast.error(e.message || 'Error')
-    } finally {
-      setRbLoading(false)
-    }
-  }
-
-  async function handleRbApproveWinner() {
-    if (!rbSessionId) return
-    setRbApproving(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      const res = await fetch(`/api/events/${resolvedId}/red-button/approve-winner`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ sessionId: rbSessionId }),
-      })
-      const data = await res.json()
-      if (!res.ok) { toast.error(data.error || 'Failed to approve'); return }
-      setRbWinnerApproved(true)
-      toast.success(`Free Chai coupon sent to ${rbWinnerName}!`)
-    } catch (e: any) {
-      toast.error(e.message || 'Error')
-    } finally {
-      setRbApproving(false)
-    }
-  }
-  // ─────────────────────────────────────────────────────────────────────────
 
   async function loadData(userId: string) {
     setLoading(true)
@@ -1722,102 +1605,24 @@ export default function AttendancePage() {
 
       <EventCommunitiesDialog eventId={resolvedId} open={communitiesDialogOpen} onOpenChange={setCommunitiesDialogOpen} />
 
-      {/* ── Red Button Promo (host-only) ─────────────────────────────────── */}
-      {isHost && (
+      {/* Live Mode entry (host / managers) */}
+      {(isHost || canManageHost) && (
         <Card className="border-2 border-red-200 bg-red-50/50">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-red-700 text-base">
-              <span className="text-xl">🔴</span>
-              Red Button Promo
+              Live Mode
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {!rbActive && !rbWinnerId && (
-              <div className="text-center space-y-3">
-                <p className="text-sm text-gray-600">
-                  Activate to send a number-guessing challenge to all confirmed attendees.
-                  Correct answers earn <strong>2 Ryan&apos;s Chai credits</strong>. One lucky draw winner gets a <strong>Free Chai coupon</strong>.
-                </p>
-                <Button
-                  onClick={handleRbActivate}
-                  disabled={rbLoading}
-                  className="bg-red-600 hover:bg-red-700 text-white font-bold px-6"
-                >
-                  {rbLoading ? 'Activating…' : 'Activate Red Button Promo'}
-                </Button>
-              </div>
-            )}
-
-            {rbActive && (
-              <div className="space-y-4">
-                <div className="text-center">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Secret Number — show this to no one</p>
-                  <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-red-600 text-white text-5xl font-black shadow-lg">
-                    {rbCode}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-center">
-                  <div className="rounded-lg bg-white border border-red-200 p-3">
-                    <p className="text-2xl font-bold text-red-700">{rbResponseCount}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Participants</p>
-                  </div>
-                  <div className="rounded-lg bg-white border border-green-200 p-3">
-                    <p className="text-2xl font-bold text-green-600">{rbCorrectCount}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Correct answers</p>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleRbDeactivate}
-                  disabled={rbLoading}
-                  variant="outline"
-                  className="w-full border-red-400 text-red-700 hover:bg-red-50"
-                >
-                  {rbLoading ? 'Stopping…' : 'Stop Promo & Pick Lucky Draw Winner'}
-                </Button>
-              </div>
-            )}
-
-            {!rbActive && rbWinnerId && (
-              <div className="space-y-3">
-                <div className="rounded-lg bg-white border border-yellow-300 p-4 text-center">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Lucky Draw Winner</p>
-                  <p className="text-xl font-bold text-gray-900">{rbWinnerName ?? rbWinnerId}</p>
-                  <div className="grid grid-cols-2 gap-2 mt-3 text-sm text-gray-600">
-                    <span>{rbResponseCount} participant{rbResponseCount !== 1 ? 's' : ''}</span>
-                    <span>{rbCorrectCount} correct</span>
-                  </div>
-                </div>
-
-                {rbWinnerApproved ? (
-                  <div className="rounded-lg bg-green-50 border border-green-300 px-4 py-3 text-center text-sm text-green-800 font-semibold">
-                    ✅ Free Chai coupon sent to {rbWinnerName}!
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={handleRbApproveWinner}
-                      disabled={rbApproving}
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
-                    >
-                      {rbApproving ? 'Sending coupon…' : 'Approve Free Chai Coupon'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => { setRbWinnerId(null); setRbWinnerName(null) }}
-                      className="text-gray-500"
-                    >
-                      Skip
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+          <CardContent className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Activate the Red Button promo, mark who&apos;s live on stage, and see audience green/red votes.
+            </p>
+            <Button asChild className="bg-red-600 hover:bg-red-700 text-white font-bold">
+              <Link href={`/events/${resolvedId}/live`}>Open Live Mode</Link>
+            </Button>
           </CardContent>
         </Card>
       )}
-      {/* ──────────────────────────────────────────────────────────────────── */}
 
       {/* Remove performer spot dialog */}
       <Dialog open={!!cancelDialogBooking} onOpenChange={(open) => { if (!open) { setCancelDialogBooking(null); setCancelNote('') } }}>

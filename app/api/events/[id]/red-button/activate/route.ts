@@ -42,7 +42,12 @@ export async function POST(
       .single()
 
     if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
-    if (event.host_user_id !== userId) {
+    const { data: adminRow } = await supabase
+      .from('admin_users')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (event.host_user_id !== userId && !adminRow) {
       return NextResponse.json({ error: 'Only the event host can activate the Red Button' }, { status: 403 })
     }
 

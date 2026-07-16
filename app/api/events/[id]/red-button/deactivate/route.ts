@@ -44,7 +44,12 @@ export async function POST(
       .single()
 
     if (!session) return NextResponse.json({ error: 'No active session found' }, { status: 404 })
-    if (session.host_user_id !== userId) {
+    const { data: adminRow } = await supabase
+      .from('admin_users')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (session.host_user_id !== userId && !adminRow) {
       return NextResponse.json({ error: 'Only the event host can deactivate the Red Button' }, { status: 403 })
     }
 

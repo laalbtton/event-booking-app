@@ -23,11 +23,12 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone } from 'lucide-react'
+import { ChevronLeft, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 import { SettingsListRow } from '@/components/SettingsListRow'
+import { canShowReferralInvite } from '@/components/ReferralInviteCard'
 
 type PushNotificationPrefs = {
   user_id: string
@@ -541,6 +542,16 @@ export default function SettingsPage() {
               <div className="px-4 py-1">
                 <SettingsListRow href="/settings/communities" icon={Users} title="Communities" description="Your communities & memberships" />
               </div>
+              {canShowReferralInvite(profile?.role) && (
+                <div className="px-4 py-1">
+                  <SettingsListRow
+                    href="/settings/invite"
+                    icon={QrCode}
+                    title="Invite Audience"
+                    description="QR code & link — earn 2 Ryan's Chai credits"
+                  />
+                </div>
+              )}
               {isAdmin && (
                 <div className="px-4 py-1">
                   <SettingsListRow href="/admin" icon={Settings2} title="Admin" description="Manage users, events, requests" />
@@ -885,6 +896,25 @@ export default function SettingsPage() {
             </Button>
           </CardContent>
         </Card>
+
+        {canShowReferralInvite(profile?.role) && (
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <QrCode className="h-5 w-5" />
+                Invite Audience
+              </CardTitle>
+              <CardDescription>
+                Share your QR code or invite link. Earn 2 Ryan&apos;s Chai venue credits when someone joins through you.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/settings/invite">Open invite QR</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {isAdmin && (
           <Card className="shadow-sm border-purple-200">
