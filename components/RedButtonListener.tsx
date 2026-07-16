@@ -61,16 +61,25 @@ export default function RedButtonListener() {
     }
 
     async function handleActiveSession(row: SessionPayload, userId: string) {
-      // Verify current user has a confirmed booking for this event
+      // Only audience bookings get the Red Button / Live Mode nudge (not performers)
       const { data: booking } = await supabase
         .from('bookings')
         .select('id')
         .eq('event_id', row.event_id)
         .eq('user_id', userId)
         .eq('status', 'confirmed')
+        .eq('booking_scope', 'audience')
         .maybeSingle()
 
       if (!booking) return
+
+      const { data: liveState } = await supabase
+        .from('event_live_state')
+        .select('enabled')
+        .eq('event_id', row.event_id)
+        .maybeSingle()
+
+      if (!liveState?.enabled) return
 
       setPromptState({ eventId: row.event_id, sessionId: row.id })
     }

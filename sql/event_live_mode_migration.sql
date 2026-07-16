@@ -7,6 +7,7 @@
 CREATE TABLE IF NOT EXISTS public.event_live_state (
   event_id               UUID PRIMARY KEY REFERENCES public.events(id) ON DELETE CASCADE,
   live_performer_user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  enabled                BOOLEAN NOT NULL DEFAULT FALSE,
   updated_by             UUID REFERENCES public.profiles(id),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -100,5 +101,5 @@ CREATE POLICY "event_performer_votes: attendees read"
     OR EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid())
   );
 
-COMMENT ON TABLE public.event_live_state IS 'Which performer is currently live on stage for an event (at most one).';
+COMMENT ON TABLE public.event_live_state IS 'Live Mode state: enabled for attendees, and which performer is currently live (at most one).';
 COMMENT ON TABLE public.event_performer_votes IS 'Audience green/red reactions for performers during Live Mode.';

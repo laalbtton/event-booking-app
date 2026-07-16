@@ -124,6 +124,7 @@ export default function EventDetailsPage() {
   const [hostProfile, setHostProfile] = useState<{ full_name: string } | null>(null)
   const [isHost, setIsHost] = useState(false)
   const [isEventCreator, setIsEventCreator] = useState(false)
+  const [liveModeEnabled, setLiveModeEnabled] = useState(false)
   const [venue, setVenue] = useState<VenueDetails | null>(null)
   const [venueOpen, setVenueOpen] = useState(false)
   const [eventAutoPostEnabled, setEventAutoPostEnabled] = useState(false)
@@ -558,7 +559,7 @@ export default function EventDetailsPage() {
 
       // User-specific rows — all three only need user.id + resolvedEventId
       if (user) {
-        const [userBookingResult, prefResult, alertResult] = await Promise.all([
+        const [userBookingResult, prefResult, alertResult, liveStateResult] = await Promise.all([
           supabase
             .from('bookings')
             .select('id, status, booking_scope')
@@ -580,10 +581,16 @@ export default function EventDetailsPage() {
             .eq('user_id', user.id)
             .eq('event_id', resolvedEventId)
             .maybeSingle(),
+          supabase
+            .from('event_live_state')
+            .select('enabled')
+            .eq('event_id', resolvedEventId)
+            .maybeSingle(),
         ])
 
         setUserBooking(userBookingResult.data || null)
         setEventAutoPostEnabled(!!prefResult.data?.auto_post_enabled)
+        setLiveModeEnabled(liveStateResult.data?.enabled === true)
 
         if (alertResult.error) {
           const missingTable = alertResult.error.code === '42P01' || alertResult.error.message?.includes('registration_alerts')
@@ -1190,6 +1197,7 @@ export default function EventDetailsPage() {
                 )}
                 {!isHost &&
                   !isEventCreator &&
+                  liveModeEnabled &&
                   !!userBooking &&
                   userBooking.status === 'confirmed' && (
                     <Button asChild variant="outline" className="border-red-400 text-red-700 hover:bg-red-50">

@@ -44,6 +44,7 @@ export default function AudienceLiveModePage() {
   const [rbSessionId, setRbSessionId] = useState<string | null>(null)
   const [rbMySubmitted, setRbMySubmitted] = useState(false)
   const [rbMyCorrect, setRbMyCorrect] = useState<boolean | null>(null)
+  const [canUseRedButton, setCanUseRedButton] = useState(false)
   const [guess, setGuess] = useState('')
   const [submittingGuess, setSubmittingGuess] = useState(false)
   const [votingFor, setVotingFor] = useState<string | null>(null)
@@ -76,6 +77,7 @@ export default function AudienceLiveModePage() {
     setPerformers(data.performers || [])
     setLivePerformerUserId(data.livePerformerUserId ?? null)
     setMyVotes(data.myVotes || {})
+    setCanUseRedButton(data.canUseRedButton === true)
     const rb = data.redButton
     setRbActive(!!rb?.active)
     setRbSessionId(rb?.id ?? null)
@@ -213,11 +215,17 @@ export default function AudienceLiveModePage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base text-red-700 dark:text-red-400">Red Button</CardTitle>
             <CardDescription>
-              When the host activates the promo, enter the number they announce on stage.
+              {canUseRedButton
+                ? 'When the host activates the promo, enter the number they announce on stage.'
+                : 'Red Button credits are for audience attendees only.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!rbActive ? (
+            {!canUseRedButton ? (
+              <p className="text-sm text-muted-foreground text-center py-2">
+                You&apos;re registered as a performer for this event, so Red Button participation is unavailable.
+              </p>
+            ) : !rbActive ? (
               <p className="text-sm text-muted-foreground text-center py-2">
                 Waiting for the host to activate the Red Button…
               </p>

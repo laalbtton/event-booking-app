@@ -44,6 +44,7 @@ export async function loadEventAccess(
       event: { id: string; title: string; host_user_id: string | null }
       isHost: boolean
       hasConfirmedBooking: boolean
+      hasAudienceBooking: boolean
       booking: { id: string; status: string; booking_scope: string | null } | null
     }
 > {
@@ -58,19 +59,23 @@ export async function loadEventAccess(
   const admin = await isAdminUser(supabase, userId)
   const isHost = event.host_user_id === userId || event.created_by === userId || admin
 
-  const { data: booking } = await supabase
+  const { data: bookings } = await supabase
     .from('bookings')
     .select('id, status, booking_scope')
     .eq('event_id', eventId)
     .eq('user_id', userId)
     .eq('status', 'confirmed')
-    .maybeSingle()
 
-  const hasConfirmedBooking = !!booking
+  const hasConfirmedBooking = (bookings?.length ?? 0) > 0
+  const hasAudienceBooking = (bookings || []).some((b) => b.booking_scope === 'audience')
+  const booking =
+    (bookings || []).find((b) => b.booking_scope === 'audience') ||
+    bookings?.[0] ||
+    null
 
   if (!isHost && !hasConfirmedBooking) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
   }
 
-  return { event, isHost, hasConfirmedBooking, booking }
+  return { event, isHost, hasConfirmedBooking, hasAudienceBooking, booking }
 }

@@ -49,6 +49,7 @@ export default function HostLiveModePage() {
   const [title, setTitle] = useState('')
   const [performers, setPerformers] = useState<LivePerformer[]>([])
   const [livePerformerUserId, setLivePerformerUserId] = useState<string | null>(null)
+  const [liveModeEnabled, setLiveModeEnabled] = useState(false)
   const [redButton, setRedButton] = useState<RedButtonState>(null)
   const [rbCode, setRbCode] = useState<number | null>(null)
   const [rbLoading, setRbLoading] = useState(false)
@@ -81,6 +82,7 @@ export default function HostLiveModePage() {
     setTitle(data.title || '')
     setPerformers(data.performers || [])
     setLivePerformerUserId(data.livePerformerUserId ?? null)
+    setLiveModeEnabled(data.liveModeEnabled === true)
     setRedButton(data.redButton ?? null)
     if (data.redButton?.active && typeof data.redButton.code === 'number') {
       setRbCode(data.redButton.code)
@@ -246,6 +248,9 @@ export default function HostLiveModePage() {
           <div className="min-w-0">
             <h1 className="text-2xl font-bold truncate">Live Mode</h1>
             <p className="text-sm text-muted-foreground truncate">{title}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Attendee access: {liveModeEnabled ? 'Enabled' : 'Off — turn on from Manage Attendees'}
+            </p>
           </div>
         </div>
 

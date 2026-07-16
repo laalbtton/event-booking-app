@@ -57,17 +57,21 @@ export async function POST(
     if (session.event_id !== eventId) return NextResponse.json({ error: 'Session does not match event' }, { status: 400 })
     if (!session.active) return NextResponse.json({ error: 'This promo has ended' }, { status: 400 })
 
-    // Verify the caller has a confirmed booking for this event
+    // Verify the caller has a confirmed AUDIENCE booking (performers cannot earn red-button credits)
     const { data: booking } = await supabase
       .from('bookings')
-      .select('id')
+      .select('id, booking_scope')
       .eq('event_id', eventId)
       .eq('user_id', userId)
       .eq('status', 'confirmed')
+      .eq('booking_scope', 'audience')
       .maybeSingle()
 
     if (!booking) {
-      return NextResponse.json({ error: 'You must be a confirmed attendee to participate' }, { status: 403 })
+      return NextResponse.json(
+        { error: 'Only audience attendees can participate in the Red Button promo' },
+        { status: 403 },
+      )
     }
 
     // Check if user already responded

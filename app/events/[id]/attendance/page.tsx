@@ -202,6 +202,8 @@ export default function AttendancePage() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [canManageHost, setCanManageHost] = useState(false)
   const [isHost, setIsHostState] = useState(false)
+  const [liveModeEnabled, setLiveModeEnabled] = useState(false)
+  const [liveModeToggling, setLiveModeToggling] = useState(false)
 
   const [stats, setStats] = useState({
     total: 0,
@@ -508,6 +510,13 @@ export default function AttendancePage() {
       // Creators, admins, current host, and community co-admins can manage host assignments
       setCanManageHost(isEventCreator || isAdmin || isHost || canAccessViaCommunity)
 
+      const { data: liveStateRow } = await supabase
+        .from('event_live_state')
+        .select('enabled')
+        .eq('event_id', resolvedEventId)
+        .maybeSingle()
+      setLiveModeEnabled(liveStateRow?.enabled === true)
+
       setEvent(eventData)
       setChatEnabled(eventData.chat_enabled ?? false)
       setChatMode((eventData.chat_mode as 'open' | 'host_only') ?? 'open')
@@ -695,6 +704,32 @@ export default function AttendancePage() {
       alert('Error loading data: ' + error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function toggleLiveMode(enabled: boolean) {
+    setLiveModeToggling(true)
+    const previous = liveModeEnabled
+    setLiveModeEnabled(enabled)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+      const res = await fetch(`/api/events/${resolvedId}/live/enabled`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ enabled }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to update Live Mode')
+      toast.success(enabled ? 'Live Mode enabled for attendees' : 'Live Mode hidden from attendees')
+    } catch (error: any) {
+      setLiveModeEnabled(previous)
+      toast.error(error?.message || 'Failed to update Live Mode')
+    } finally {
+      setLiveModeToggling(false)
     }
   }
 
@@ -1613,9 +1648,24 @@ export default function AttendancePage() {
               Live Mode
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900">Enable for attendees</p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  When on, confirmed attendees see a Live Mode button and can open the live screen.
+                </p>
+              </div>
+              <Switch
+                checked={liveModeEnabled}
+                disabled={liveModeToggling}
+                onCheckedChange={(checked) => {
+                  void toggleLiveMode(checked)
+                }}
+              />
+            </div>
             <p className="text-sm text-gray-600">
-              Activate the Red Button promo, mark who&apos;s live on stage, and see audience green/red votes.
+              Open Live Mode to activate the Red Button promo, mark who&apos;s on stage, and see green/red votes.
             </p>
             <Button asChild className="bg-red-600 hover:bg-red-700 text-white font-bold">
               <Link href={`/events/${resolvedId}/live`}>Open Live Mode</Link>

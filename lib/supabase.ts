@@ -68,6 +68,7 @@ export type RedButtonResponse = {
 export type EventLiveState = {
   event_id: string
   live_performer_user_id: string | null
+  enabled: boolean
   updated_by: string | null
   updated_at: string
 }

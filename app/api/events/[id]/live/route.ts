@@ -20,7 +20,20 @@ export async function GET(
 
     const access = await loadEventAccess(supabase, eventId, userId)
     if (access.error) return access.error
-    const { event, isHost } = access
+    const { event, isHost, hasAudienceBooking } = access
+
+    const { data: liveState } = await supabase
+      .from('event_live_state')
+      .select('live_performer_user_id, enabled, updated_at')
+      .eq('event_id', eventId)
+      .maybeSingle()
+
+    const liveModeEnabled = liveState?.enabled === true
+
+    // Attendees can only use Live Mode when the host has enabled it
+    if (!isHost && !liveModeEnabled) {
+      return NextResponse.json({ error: 'Live Mode is not enabled for this event' }, { status: 403 })
+    }
 
     const { data: performerBookings } = await supabase
       .from('bookings')
@@ -42,12 +55,6 @@ export async function GET(
       seen.add(p.userId)
       return true
     })
-
-    const { data: liveState } = await supabase
-      .from('event_live_state')
-      .select('live_performer_user_id, updated_at')
-      .eq('event_id', eventId)
-      .maybeSingle()
 
     const { data: votes } = await supabase
       .from('event_performer_votes')
@@ -75,6 +82,8 @@ export async function GET(
       isLive: liveState?.live_performer_user_id === p.userId,
     }))
 
+    const canUseRedButton = hasAudienceBooking
+
     const { data: rbSession } = await supabase
       .from('red_button_sessions')
       .select('id, active, secret_code, winner_user_id, winner_approved, coupon_issued, created_at')
@@ -97,7 +106,7 @@ export async function GET(
         .eq('correct', true)
 
       let myResponse: { correct: boolean; credits_issued: boolean } | null = null
-      if (!isHost) {
+      if (!isHost && canUseRedButton) {
         const { data: resp } = await supabase
           .from('red_button_responses')
           .select('correct, credits_issued')
@@ -141,6 +150,8 @@ export async function GET(
       eventId: event.id,
       title: event.title,
       isHost,
+      liveModeEnabled,
+      canUseRedButton,
       livePerformerUserId: liveState?.live_performer_user_id ?? null,
       performers: performersWithVotes,
       myVotes: isHost ? undefined : myVotes,
