@@ -23,7 +23,7 @@ type ReferralInviteCardProps = {
 }
 
 export function canShowReferralInvite(role: string | null | undefined): boolean {
-  return role === 'performer' || role === 'event_creator'
+  return role === 'performer' || role === 'event_creator' || role === 'audience'
 }
 
 export function getReferralSignupUrl(userId: string, origin?: string): string {
@@ -74,12 +74,12 @@ export function ReferralInviteCard({
             isDark ? 'text-yellow-400' : undefined,
           )}
         >
-          {showGuestActions ? `Join via ${firstName}` : 'Invite audience'}
+          {showGuestActions ? `Join via ${firstName}` : 'Invite friends'}
         </h3>
         <p className={cn('text-sm', isDark ? 'text-stone-400' : 'text-muted-foreground')}>
           {showGuestActions
             ? `${firstName} invited you to One Mic Stand — scan the QR or use the join link below.`
-            : "Share this QR or link. When someone joins through it, you earn 2 Ryan's Chai venue credits."}
+            : 'Share this QR or link. When someone joins through it, you earn 2 Ryan\'s Chai venue credits.'}
         </p>
       </div>
       <div className="flex flex-col items-center gap-4">
@@ -142,7 +142,7 @@ export function ReferralInviteCard({
   return (
     <Card className={className}>
       <CardHeader className={compact ? 'pb-3' : undefined}>
-        <CardTitle className={compact ? 'text-base' : 'text-xl'}>Invite audience</CardTitle>
+        <CardTitle className={compact ? 'text-base' : 'text-xl'}>Invite friends</CardTitle>
         <CardDescription>
           Share this QR or link. When someone joins through it, you earn 2 Ryan&apos;s Chai venue credits.
         </CardDescription>

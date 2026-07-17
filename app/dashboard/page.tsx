@@ -25,7 +25,7 @@ import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { cn } from '@/lib/utils'
 import { NotificationsBellLink } from '@/components/NotificationsBellLink'
-import { ChevronDown, Download, Filter } from 'lucide-react'
+import { ChevronDown, Download, Filter, Gift } from 'lucide-react'
 import { EventCardSkeleton } from '@/components/skeletons/EventCardSkeleton'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
@@ -1777,6 +1777,26 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+          <Button
+            asChild
+            variant="outline"
+            className="w-full justify-between h-auto py-3 px-4 border-yellow-400/40 bg-yellow-400/5 hover:bg-yellow-400/10"
+          >
+            <Link href="/promotions">
+              <span className="flex items-center gap-2.5 min-w-0">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-yellow-400/20">
+                  <Gift className="h-4 w-4 text-yellow-700 dark:text-yellow-400" />
+                </span>
+                <span className="text-left min-w-0">
+                  <span className="block text-sm font-semibold text-foreground">Promotions</span>
+                  <span className="block text-xs text-muted-foreground truncate">
+                    Earn credits with active offers
+                  </span>
+                </span>
+              </span>
+              <ChevronDown className="h-4 w-4 -rotate-90 text-muted-foreground shrink-0" />
+            </Link>
+          </Button>
         </div>
 
 

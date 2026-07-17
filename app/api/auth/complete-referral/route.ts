@@ -2,13 +2,13 @@
  * POST /api/auth/complete-referral
  *
  * Called from the onboarding page after a new user selects their role.
- * If the user arrived via a performer's public profile (?ref=<profileId>),
+ * If the user arrived via a public profile invite (?ref=<profileId>),
  * this route:
- *   1. Verifies the referrer is a performer / event_creator
+ *   1. Verifies the referrer is a performer, event_creator, or audience member
  *   2. Sets profiles.referred_by for the new user (idempotent)
- *   3. Issues 2 Ryan's Chai venue credits to the referring performer
+ *   3. Issues 2 Ryan's Chai venue credits to the referring user
  *   4. Logs the credit transaction
- *   5. Sends the performer an in-app notification + push
+ *   5. Sends the referrer an in-app notification + push
  *
  * Body: { referrerId: string }
  * Auth: Bearer <user JWT>
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, alreadySet: true })
     }
 
-    // Verify the referrer is a performer / event_creator
+    // Verify the referrer can earn invite rewards
     const { data: referrerProfile } = await supabase
       .from('profiles')
       .select('id, full_name, email, role')
@@ -77,8 +77,8 @@ export async function POST(request: NextRequest) {
     if (!referrerProfile) {
       return NextResponse.json({ error: 'Referrer not found' }, { status: 404 })
     }
-    if (!['performer', 'event_creator'].includes(referrerProfile.role)) {
-      return NextResponse.json({ error: 'Referrer is not a performer' }, { status: 400 })
+    if (!['performer', 'event_creator', 'audience'].includes(referrerProfile.role)) {
+      return NextResponse.json({ error: 'Referrer is not eligible for invite rewards' }, { status: 400 })
     }
 
     // Find Ryan's Chai venue id
