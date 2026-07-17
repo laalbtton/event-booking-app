@@ -15,6 +15,7 @@ export const APP_SHELL_ROUTE_PREFIXES = [
   '/events',
   '/settings',
   '/promotions',
+  '/brampton-comedy-insider',
   '/venues',
   '/communities',
 ] as const

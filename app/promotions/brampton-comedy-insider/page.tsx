@@ -10,10 +10,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { supabase } from '@/lib/supabase'
 import {
-  CREDIT_ACCOUNT,
   CREDIT_EMAIL_UPDATES,
   CREDIT_PREFERENCES,
-  CREDIT_TOTAL_AVAILABLE,
+  CREDIT_SURVEY_TOTAL,
   FOUNDING_MEMBER_LIMIT,
 } from '@/lib/foundingMembers'
 import { toast } from 'sonner'
@@ -79,25 +78,25 @@ export default function BramptonComedyInsiderPromotionPage() {
           <CardHeader>
             <CardTitle className="text-xl">Audience promotion</CardTitle>
             <CardDescription>
-              Help build Brampton&apos;s comedy community. Complete the survey and earn redeemable
-              credits toward future shows.
+              Help build Brampton&apos;s comedy community. Complete the preferences survey and earn
+              redeemable credits toward future shows.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             <ul className="space-y-2 list-disc pl-5 text-foreground">
-              <li>Create your account: +{CREDIT_ACCOUNT} credits</li>
               <li>Complete preferences survey: +{CREDIT_PREFERENCES} credits</li>
               <li>Opt in to email updates: +{CREDIT_EMAIL_UPDATES} credits</li>
               <li>
-                Up to ${CREDIT_TOTAL_AVAILABLE} total for founding members (first {FOUNDING_MEMBER_LIMIT})
+                Up to ${CREDIT_SURVEY_TOTAL} in survey credits (first {FOUNDING_MEMBER_LIMIT} founding
+                members)
               </li>
             </ul>
             <p>
-              This promotion is for audience members. You&apos;ll get priority access to Brampton
-              comedy shows and exclusive invites as the community grows.
+              Because you already have an app account, we skip signup and use your existing name and
+              email. No magic link required.
             </p>
             <Button asChild className="bg-yellow-400 text-zinc-950 hover:bg-yellow-300 font-semibold">
-              <Link href="/brampton-comedy-insider">Open survey &amp; join</Link>
+              <Link href="/brampton-comedy-insider">Open survey</Link>
             </Button>
           </CardContent>
         </Card>

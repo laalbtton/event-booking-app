@@ -12,6 +12,7 @@ export default function ConditionalAppFooter() {
   if (pathname?.startsWith('/laalbutton')) return null
   // Public performer profiles use their own chrome; hide marketing footer when in-app
   if (authResolved && user && pathname?.startsWith('/profile/')) return null
+  if (authResolved && user && pathname?.startsWith('/brampton-comedy-insider')) return null
 
   return (
     <footer className="bg-gray-800 text-white py-6 mt-auto pb-28">

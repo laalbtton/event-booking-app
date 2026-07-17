@@ -13,6 +13,9 @@ export const CREDIT_APP = 5
 
 export const CREDIT_TOTAL_AVAILABLE = CREDIT_ACCOUNT + CREDIT_PREFERENCES + CREDIT_EMAIL_UPDATES // $25
 
+/** Credits shown to already-registered app users (no account-creation reward). */
+export const CREDIT_SURVEY_TOTAL = CREDIT_PREFERENCES + CREDIT_EMAIL_UPDATES // $20
+
 export const INSTAGRAM_HANDLE = 'bramptonstandupcomedy'
 export const INSTAGRAM_URL = 'https://instagram.com/bramptonstandupcomedy'
 

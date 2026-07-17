@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import {
   AGE_RANGES,
   CANADA_STATUSES,
@@ -12,6 +14,7 @@ import {
   CREDIT_ACCOUNT,
   CREDIT_EMAIL_UPDATES,
   CREDIT_PREFERENCES,
+  CREDIT_SURVEY_TOTAL,
   CREDIT_TOTAL_AVAILABLE,
   DOWNTOWN_INTEREST,
   INSTAGRAM_HANDLE,
@@ -63,12 +66,16 @@ const BENEFITS = [
 ]
 
 export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Props) {
+  const { authResolved, user } = useAuthBootstrap()
+  const isAppUser = Boolean(authResolved && user)
+
   const [remaining, setRemaining] = useState(initialRemaining)
   const [claimed, setClaimed] = useState(initialClaimed)
   const [step, setStep] = useState<'account' | 'preferences' | 'done'>('account')
   const [member, setMember] = useState<MemberState | null>(null)
   const [magicSent, setMagicSent] = useState(false)
   const [capturedEmail, setCapturedEmail] = useState('')
+  const [appUserReady, setAppUserReady] = useState(false)
 
   // Post-activation state
   const [isActivatedRoute, setIsActivatedRoute] = useState(false)
@@ -76,10 +83,11 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
   const [activatedLoading, setActivatedLoading] = useState(false)
 
   const formRef = useRef<HTMLDivElement>(null)
+  const creditCap = isAppUser ? CREDIT_SURVEY_TOTAL : CREDIT_TOTAL_AVAILABLE
   const earned = member?.totalCredits ?? 0
 
   useEffect(() => {
-    trackInsiderEvent('landing_page_view')
+    trackInsiderEvent('landing_page_view', { app_user: isAppUser })
     if (new URLSearchParams(window.location.search).get('activated') === '1') {
       setIsActivatedRoute(true)
       setActivatedLoading(true)
@@ -94,6 +102,59 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
       })
       .catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Logged-in users: load membership and skip name/email/magic-link
+  useEffect(() => {
+    if (!authResolved || !user) {
+      setAppUserReady(true)
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData?.session?.access_token
+        if (!token || cancelled) return
+
+        const res = await fetch('/api/founding-members/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+
+        if (res.ok && data?.found && data?.member) {
+          const m = data.member as ActivatedMember
+          setCapturedEmail(m.email)
+          setMember({
+            totalCredits: m.total_credits_earned,
+            accountAwarded: m.account_credit_awarded,
+            preferencesAwarded: m.preferences_credit_awarded,
+            emailAwarded: m.email_updates_credit_awarded,
+            signupCompleted: m.signup_completed,
+            preferencesCompleted: m.preferences_completed,
+            emailUpdatesOptIn: m.email_updates_opt_in,
+          })
+          setMagicSent(false)
+          if (m.preferences_completed) {
+            setStep('done')
+            setActivatedMember(m)
+          } else if (m.signup_completed || m.account_credit_awarded) {
+            setStep('preferences')
+            trackInsiderEvent('preferences_started', { app_user: true })
+          }
+        }
+      } catch {
+        // non-critical
+      } finally {
+        if (!cancelled) setAppUserReady(true)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [authResolved, user])
 
   async function loadActivatedMember() {
     setActivatedLoading(true)
@@ -125,7 +186,7 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
   }
 
   function scrollToForm() {
-    trackInsiderEvent('cta_clicked')
+    trackInsiderEvent('cta_clicked', { app_user: isAppUser })
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -142,6 +203,8 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
       return (
         <ActivatedDashboard
           member={activatedMember}
+          showBack={isAppUser}
+          surveyOnly={isAppUser}
           onPreferencesComplete={(totalCredits) => {
             setActivatedMember((prev) =>
               prev
@@ -155,8 +218,40 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
     // Fallback: member record not found — fall through to landing page
   }
 
+  // Logged-in user who already finished — show dashboard with back
+  if (isAppUser && appUserReady && activatedMember?.preferences_completed) {
+    return (
+      <ActivatedDashboard
+        member={activatedMember}
+        showBack
+        surveyOnly
+        onPreferencesComplete={(totalCredits) => {
+          setActivatedMember((prev) =>
+            prev
+              ? { ...prev, preferences_completed: true, total_credits_earned: totalCredits }
+              : prev,
+          )
+        }}
+      />
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-stone-100">
+    <div className={`min-h-screen bg-zinc-950 text-stone-100 ${isAppUser ? 'pb-24' : ''}`}>
+      {isAppUser && (
+        <div className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
+          <div className="mx-auto flex h-14 max-w-2xl items-center gap-2 px-4">
+            <Link
+              href="/promotions/brampton-comedy-insider"
+              className="inline-flex items-center gap-1.5 text-sm text-stone-300 hover:text-yellow-400"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back
+            </Link>
+            <span className="text-sm text-stone-500 truncate">Brampton Comedy Insider</span>
+          </div>
+        </div>
+      )}
 
       {/* ── HERO (full-width, centred) ────────────────────────── */}
       <section className="relative overflow-hidden bg-gradient-to-br from-black via-neutral-950 to-stone-900 px-4 pt-10 pb-12 sm:pt-14 sm:pb-16">
@@ -180,8 +275,9 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
           </h1>
 
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-stone-300 sm:text-lg">
-            Be one of the first 500 members and earn a free comedy ticket, exclusive event invites,
-            discounted tickets, and priority access to future comedy shows in Brampton.
+            {isAppUser
+              ? 'Complete a short comedy preferences survey and earn credits toward future Brampton shows — exclusive invites and priority access included.'
+              : 'Be one of the first 500 members and earn a free comedy ticket, exclusive event invites, discounted tickets, and priority access to future comedy shows in Brampton.'}
           </p>
 
           {step !== 'done' && (
@@ -191,39 +287,45 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
                 onClick={scrollToForm}
                 className="h-12 px-8 bg-yellow-400 text-base font-bold text-zinc-950 hover:bg-yellow-300 shadow-lg shadow-yellow-400/20"
               >
-                Add Your Info — Claim Your Spot
+                {isAppUser ? 'Start Survey — Earn Credits' : 'Add Your Info — Claim Your Spot'}
               </Button>
               <p className="mt-2.5 text-xs text-stone-500">
-                Takes under a minute · ${CREDIT_TOTAL_AVAILABLE} in comedy credits available
+                {isAppUser
+                  ? `Takes under a minute · up to $${CREDIT_SURVEY_TOTAL} in survey credits`
+                  : `Takes under a minute · $${CREDIT_TOTAL_AVAILABLE} in comedy credits available`}
               </p>
             </div>
           )}
 
-          <ul className="mx-auto mt-7 grid max-w-md grid-cols-1 gap-2 text-left sm:grid-cols-2">
-            {BENEFITS.map((b) => (
-              <li key={b} className="flex items-center gap-2 text-sm text-stone-200">
-                <span className="text-yellow-400">✓</span>
-                {b}
-              </li>
-            ))}
-          </ul>
+          {!isAppUser && (
+            <>
+              <ul className="mx-auto mt-7 grid max-w-md grid-cols-1 gap-2 text-left sm:grid-cols-2">
+                {BENEFITS.map((b) => (
+                  <li key={b} className="flex items-center gap-2 text-sm text-stone-200">
+                    <span className="text-yellow-400">✓</span>
+                    {b}
+                  </li>
+                ))}
+              </ul>
 
-          {/* Scarcity counter */}
-          <div className="mx-auto mt-8 max-w-xs rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-stone-400">
-              Founding Members Remaining
-            </p>
-            <p className="mt-1.5 text-3xl font-extrabold text-yellow-400 tabular-nums">
-              {remaining}{' '}
-              <span className="text-lg font-normal text-stone-500">/ {limit} Spots Left</span>
-            </p>
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full rounded-full bg-yellow-400 transition-all duration-700"
-                style={{ width: `${Math.min(100, (claimed / limit) * 100)}%` }}
-              />
-            </div>
-          </div>
+              {/* Scarcity counter */}
+              <div className="mx-auto mt-8 max-w-xs rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-widest text-stone-400">
+                  Founding Members Remaining
+                </p>
+                <p className="mt-1.5 text-3xl font-extrabold text-yellow-400 tabular-nums">
+                  {remaining}{' '}
+                  <span className="text-lg font-normal text-stone-500">/ {limit} Spots Left</span>
+                </p>
+                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-yellow-400 transition-all duration-700"
+                    style={{ width: `${Math.min(100, (claimed / limit) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
@@ -247,19 +349,22 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
       <section className="px-4 pt-12 pb-8">
         <div className="mx-auto max-w-md">
           <h2 className="text-center text-2xl font-bold text-white">
-            Earn Your First Free Comedy Ticket
+            {isAppUser ? 'Earn Survey Credits' : 'Earn Your First Free Comedy Ticket'}
           </h2>
           <p className="mx-auto mt-3 max-w-md text-center text-sm leading-relaxed text-stone-400">
-            Complete 3 simple steps and unlock ${CREDIT_TOTAL_AVAILABLE} in comedy credits that can be
-            redeemed toward future comedy events, subject to ticket availability.
+            {isAppUser
+              ? `Complete the preferences survey and unlock up to $${CREDIT_SURVEY_TOTAL} in comedy credits redeemable toward future events.`
+              : `Complete 3 simple steps and unlock $${CREDIT_TOTAL_AVAILABLE} in comedy credits that can be redeemed toward future comedy events, subject to ticket availability.`}
           </p>
 
           <div className="mt-7 rounded-2xl border border-white/10 bg-white/5 p-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-yellow-300">
-              🎟 Free Ticket Progress
+              {isAppUser ? '🎟 Survey Credit Progress' : '🎟 Free Ticket Progress'}
             </p>
             <div className="mt-4 space-y-3">
-              <ProgressRow label="Create Account" amount={CREDIT_ACCOUNT} done={!!member?.accountAwarded} />
+              {!isAppUser && (
+                <ProgressRow label="Create Account" amount={CREDIT_ACCOUNT} done={!!member?.accountAwarded} />
+              )}
               <ProgressRow label="Complete Preferences" amount={CREDIT_PREFERENCES} done={!!member?.preferencesAwarded} />
               <ProgressRow label="Enable Email Updates" amount={CREDIT_EMAIL_UPDATES} done={!!member?.emailAwarded} />
             </div>
@@ -268,13 +373,13 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
                 <span className="text-sm font-medium text-stone-300">Earned</span>
                 <span className="text-xl font-extrabold text-yellow-400 tabular-nums">
                   ${earned}{' '}
-                  <span className="text-stone-500">/ ${CREDIT_TOTAL_AVAILABLE}</span>
+                  <span className="text-stone-500">/ ${creditCap}</span>
                 </span>
               </div>
               <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
                 <div
                   className="h-full rounded-full bg-yellow-400 transition-all duration-700"
-                  style={{ width: `${Math.min(100, (earned / CREDIT_TOTAL_AVAILABLE) * 100)}%` }}
+                  style={{ width: `${Math.min(100, creditCap > 0 ? (earned / creditCap) * 100 : 0)}%` }}
                 />
               </div>
             </div>
@@ -286,19 +391,32 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
       <section id="signup-form" ref={formRef} className="scroll-mt-6 px-4 py-8">
         <div className="mx-auto max-w-md">
           {step === 'done' ? (
-            <Confirmation credits={earned} />
+            <Confirmation credits={earned} appUser={isAppUser} />
           ) : (
             <div className="rounded-2xl border border-white/10 bg-zinc-900/80 p-6 shadow-xl shadow-black/40 backdrop-blur">
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="text-lg font-bold text-white">
-                  Personalize Your Comedy Experience
+                  {isAppUser ? 'Comedy Preferences Survey' : 'Personalize Your Comedy Experience'}
                 </h2>
-                <span className="shrink-0 text-xs font-medium text-stone-400">
-                  Step {step === 'account' ? '1' : '2'} of 2
-                </span>
+                {!isAppUser && (
+                  <span className="shrink-0 text-xs font-medium text-stone-400">
+                    Step {step === 'account' ? '1' : '2'} of 2
+                  </span>
+                )}
               </div>
 
-              {step === 'account' ? (
+              {isAppUser && step === 'account' ? (
+                <AppUserStartStep
+                  onComplete={(m, email) => {
+                    setMember(m)
+                    setCapturedEmail(email)
+                    setMagicSent(false)
+                    setStep('preferences')
+                    trackInsiderEvent('preferences_started', { app_user: true })
+                    refreshCounter()
+                  }}
+                />
+              ) : step === 'account' ? (
                 <AccountStep
                   onComplete={(m, sent, email) => {
                     setMember(m)
@@ -329,12 +447,12 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
         <div className="mx-auto max-w-md rounded-2xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent p-6">
           <h2 className="text-center text-lg font-bold text-white">How your credits add up</h2>
           <div className="mt-5 space-y-3 text-sm">
-            <RewardRow label="Create Your Account" amount={CREDIT_ACCOUNT} />
+            {!isAppUser && <RewardRow label="Create Your Account" amount={CREDIT_ACCOUNT} />}
             <RewardRow label="Complete Your Preferences" amount={CREDIT_PREFERENCES} />
             <RewardRow label="Enable Email Updates" amount={CREDIT_EMAIL_UPDATES} />
             <div className="flex items-center justify-between border-t border-white/10 pt-3 font-bold text-white">
-              <span>Total Available Immediately</span>
-              <span className="text-yellow-400">${CREDIT_TOTAL_AVAILABLE} Credit</span>
+              <span>Total Available</span>
+              <span className="text-yellow-400">${creditCap} Credit</span>
             </div>
           </div>
         </div>
@@ -362,22 +480,43 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
 function ActivatedDashboard({
   member,
   onPreferencesComplete,
+  showBack = false,
+  surveyOnly = false,
 }: {
   member: ActivatedMember
   onPreferencesComplete: (totalCredits: number) => void
+  showBack?: boolean
+  surveyOnly?: boolean
 }) {
   const firstName = member.first_name || 'there'
   const credits = member.total_credits_earned
   const prefsCompleted = member.preferences_completed
+  const creditCap = surveyOnly ? CREDIT_SURVEY_TOTAL : CREDIT_TOTAL_AVAILABLE
 
   // If preferences aren't done yet, let them complete from here to earn the remaining $15
   const [showPrefs, setShowPrefs] = useState(!prefsCompleted)
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-stone-100">
+    <div className={`min-h-screen bg-zinc-950 text-stone-100 ${showBack ? 'pb-24' : ''}`}>
+      {showBack && (
+        <div className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
+          <div className="mx-auto flex h-14 max-w-xl items-center gap-2 px-4">
+            <Link
+              href="/promotions/brampton-comedy-insider"
+              className="inline-flex items-center gap-1.5 text-sm text-stone-300 hover:text-yellow-400"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header bar */}
       <div className="bg-green-500/15 border-b border-green-500/20 px-4 py-2.5 text-center text-sm font-medium text-green-300">
-        ✓ Account activated — you&apos;re officially a Founding Member
+        {surveyOnly
+          ? '✓ You\'re on the Brampton Comedy Insider list'
+          : '✓ Account activated — you\'re officially a Founding Member'}
       </div>
 
       <div className="mx-auto max-w-xl px-4 py-10 space-y-6">
@@ -404,17 +543,16 @@ function ActivatedDashboard({
             Redeemable toward future Brampton comedy event tickets
           </p>
 
-          {/* Progress toward $25 */}
-          {credits < CREDIT_TOTAL_AVAILABLE && (
+          {credits < creditCap && (
             <div className="mt-4">
               <div className="flex justify-between text-xs text-stone-500 mb-1.5">
                 <span>${credits} earned</span>
-                <span>${CREDIT_TOTAL_AVAILABLE} max</span>
+                <span>${creditCap} max</span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                 <div
                   className="h-full rounded-full bg-yellow-400 transition-all duration-700"
-                  style={{ width: `${Math.min(100, (credits / CREDIT_TOTAL_AVAILABLE) * 100)}%` }}
+                  style={{ width: `${Math.min(100, creditCap > 0 ? (credits / creditCap) * 100 : 0)}%` }}
                 />
               </div>
             </div>
@@ -426,9 +564,11 @@ function ActivatedDashboard({
           <p className="text-xs font-semibold uppercase tracking-widest text-stone-400">
             Your Progress
           </p>
-          <ChecklistRow done={member.account_credit_awarded}  label="Account created"              credit={CREDIT_ACCOUNT} />
-          <ChecklistRow done={member.preferences_credit_awarded} label="Comedy preferences saved"  credit={CREDIT_PREFERENCES} />
-          <ChecklistRow done={member.email_updates_credit_awarded} label="Email updates enabled"   credit={CREDIT_EMAIL_UPDATES} />
+          {!surveyOnly && (
+            <ChecklistRow done={member.account_credit_awarded} label="Account created" credit={CREDIT_ACCOUNT} />
+          )}
+          <ChecklistRow done={member.preferences_credit_awarded} label="Comedy preferences saved" credit={CREDIT_PREFERENCES} />
+          <ChecklistRow done={member.email_updates_credit_awarded} label="Email updates enabled" credit={CREDIT_EMAIL_UPDATES} />
         </div>
 
         {/* Preferences CTA — only if not yet completed */}
@@ -558,6 +698,92 @@ function RewardRow({ label, amount }: { label: string; amount: number }) {
       <span>{label}</span>
       <span className="font-semibold text-yellow-400">→ ${amount} Credit</span>
     </div>
+  )
+}
+
+// ── Step 1 (app users): skip name/email — already on file ────
+
+function AppUserStartStep({
+  onComplete,
+}: {
+  onComplete: (member: MemberState, email: string) => void
+}) {
+  const [optIn, setOptIn] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      if (!token) throw new Error('Please sign in again.')
+
+      const res = await fetch('/api/founding-members/join-existing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ emailUpdatesOptIn: optIn }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || 'Something went wrong. Please try again.')
+
+      if (optIn) trackInsiderEvent('email_opt_in', { app_user: true })
+      if (data.creditsGranted) {
+        trackInsiderEvent('credit_awarded', {
+          reason: 'email_updates',
+          amount: data.creditsGranted,
+          app_user: true,
+        })
+      }
+
+      const email =
+        typeof data.member?.email === 'string'
+          ? data.member.email
+          : sessionData.session?.user?.email || ''
+
+      onComplete(data.member as MemberState, email)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <p className="text-sm text-stone-400">
+        We&apos;ll use the name and email on your One Mic Stand account. No magic link needed —
+        just confirm email updates (optional), then complete the survey.
+      </p>
+
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+        <input
+          type="checkbox"
+          checked={optIn}
+          onChange={(e) => setOptIn(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-yellow-400"
+        />
+        <span className="text-sm text-stone-300">
+          I want email updates about future comedy events, ticket offers, and exclusive invites
+          (+${CREDIT_EMAIL_UPDATES} credits).
+        </span>
+      </label>
+
+      {error && <p className="text-sm text-red-400">{error}</p>}
+
+      <Button
+        type="submit"
+        disabled={loading}
+        className="w-full bg-yellow-400 font-bold text-zinc-950 hover:bg-yellow-300"
+      >
+        {loading ? 'Starting…' : 'Continue to Survey'}
+      </Button>
+    </form>
   )
 }
 
@@ -918,22 +1144,25 @@ function PreferencesStep({
 
 // ── Confirmation ─────────────────────────────────────────────
 
-function Confirmation({ credits }: { credits: number }) {
-  const items = [
-    'Founding Member Status Activated',
-    'Preferences Saved',
-    'Credits Added',
-    'Early Access Enabled',
-  ]
+function Confirmation({ credits, appUser = false }: { credits: number; appUser?: boolean }) {
+  const items = appUser
+    ? ['Preferences Saved', 'Survey Credits Added', 'Insider Access Enabled']
+    : [
+        'Founding Member Status Activated',
+        'Preferences Saved',
+        'Credits Added',
+        'Early Access Enabled',
+      ]
   return (
     <div className="rounded-2xl border border-yellow-400/30 bg-gradient-to-b from-yellow-400/10 to-transparent p-7 text-center shadow-xl shadow-black/40">
       <div className="text-4xl">🎉</div>
       <h2 className="mt-3 text-2xl font-extrabold text-white">
-        You&apos;re Officially a Founding Member
+        {appUser ? 'Survey Complete' : "You're Officially a Founding Member"}
       </h2>
       <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-stone-300">
-        You&apos;re now on the priority list for future comedy events, early access offers, and
-        special ticket deals.
+        {appUser
+          ? "You're on the priority list for future Brampton comedy events, early access offers, and special ticket deals. Credits are already on your account."
+          : "You're now on the priority list for future comedy events, early access offers, and special ticket deals."}
       </p>
 
       <ul className="mx-auto mt-6 max-w-xs space-y-2 text-left">
@@ -951,6 +1180,12 @@ function Confirmation({ credits }: { credits: number }) {
         </p>
         <p className="mt-1 text-3xl font-extrabold text-yellow-400">${credits}</p>
       </div>
+
+      {appUser && (
+        <Button asChild className="mt-6 bg-yellow-400 font-bold text-zinc-950 hover:bg-yellow-300">
+          <Link href="/dashboard">Back to events</Link>
+        </Button>
+      )}
 
       <div className="mt-7">
         <p className="text-sm text-stone-400">Follow us on Instagram</p>

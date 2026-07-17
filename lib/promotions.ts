@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { QrCode, Star } from 'lucide-react'
-import { CREDIT_TOTAL_AVAILABLE } from '@/lib/foundingMembers'
+import { CREDIT_SURVEY_TOTAL } from '@/lib/foundingMembers'
 
 export type PromotionAudience = 'all' | 'audience' | 'performer'
 
@@ -29,7 +29,7 @@ export const ACTIVE_PROMOTIONS: PromotionDef[] = [
     id: 'brampton-comedy-insider',
     href: '/promotions/brampton-comedy-insider',
     title: 'Brampton Comedy Insider',
-    description: `Fill out the survey and earn up to $${CREDIT_TOTAL_AVAILABLE} in credits`,
+    description: `Fill out the survey and earn up to $${CREDIT_SURVEY_TOTAL} in credits`,
     icon: Star,
     audience: 'audience',
     active: true,
