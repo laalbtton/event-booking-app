@@ -11,7 +11,7 @@ import {
   isValidEmail,
   normalizeEmail,
 } from '@/lib/foundingMembers'
-import { syncFoundingMemberCreditsByEmail } from '@/lib/server/syncFoundingMemberCredits'
+import { syncFoundingMemberCreditsByEmail, syncFoundingMemberCreditsToProfile } from '@/lib/server/syncFoundingMemberCredits'
 
 function pickOption<T extends string>(value: unknown, allowed: readonly T[]): T | null {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value)
@@ -28,7 +28,8 @@ function filterMulti<T extends string>(value: unknown, allowed: readonly T[]): T
 /**
  * Step 2 — preferences for the Brampton Comedy Insider campaign.
  * Updates the lead by email, marks preferences complete, and awards the
- * preferences credit ($15) once.
+ * preferences credit ($15) once. Syncs redeemable credits to the profile when
+ * the caller is authenticated (or a matching profile email exists).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -43,6 +44,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'A valid email is required' }, { status: 400 })
     }
     const email = normalizeEmail(emailRaw)
+
+    // Prefer syncing by authenticated user id (existing app users).
+    // Email-only lookup can miss when profiles.email differs from auth email.
+    const authHeader = request.headers.get('authorization') || ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+    let authUserId: string | null = null
+    if (token) {
+      const { data: authData } = await supabase.auth.getUser(token)
+      authUserId = authData.user?.id ?? null
+    }
 
     const { data: existing, error: findError } = await supabase
       .from('founding_members')
@@ -85,6 +96,10 @@ export async function POST(request: NextRequest) {
             ? body.favoriteComedians.trim().slice(0, 2000) || null
             : null,
         preferences_completed: true,
+        // Existing app users are already activated; guests activate via magic link later.
+        ...(authUserId
+          ? { signup_completed: true, app_account_activated: true }
+          : {}),
         total_credits_earned: totalCredits,
         ...flags,
       })
@@ -99,8 +114,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // If the user already activated their account, sync any new credits to their profile.
-    const creditSync = await syncFoundingMemberCreditsByEmail(supabase, email)
+    const creditSync = authUserId
+      ? await syncFoundingMemberCreditsToProfile(supabase, {
+          userId: authUserId,
+          email,
+          memberId: existing.id,
+        })
+      : await syncFoundingMemberCreditsByEmail(supabase, email)
+
+    if (authUserId) {
+      // Best-effort link for future syncs (ignored if column missing).
+      await supabase
+        .from('founding_members')
+        .update({ profile_user_id: authUserId })
+        .eq('id', existing.id)
+    }
+
+    if (!creditSync.synced && !creditSync.alreadySynced) {
+      console.warn('[founding-members/preferences] credit sync did not apply', {
+        email,
+        authUserId,
+        totalCredits: saved.total_credits_earned,
+        creditSync,
+      })
+    }
 
     return NextResponse.json({
       success: true,
@@ -110,6 +147,8 @@ export async function POST(request: NextRequest) {
         signupCompleted: saved.signup_completed,
         creditsSynced: creditSync.synced,
         creditsGranted: creditSync.creditsGranted,
+        newBalance: creditSync.newBalance,
+        syncError: creditSync.error ?? null,
       },
     })
   } catch (error: unknown) {

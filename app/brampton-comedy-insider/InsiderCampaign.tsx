@@ -24,6 +24,7 @@ import {
   trackInsiderEvent,
 } from '@/lib/foundingMembers'
 import { ChevronLeft } from 'lucide-react'
+import { toast } from 'sonner'
 
 const WHATSAPP_URL = 'https://chat.whatsapp.com/JOIfm1ByZfn0HGrEFPpG71'
 
@@ -35,6 +36,8 @@ type MemberState = {
   signupCompleted: boolean
   preferencesCompleted: boolean
   emailUpdatesOptIn: boolean
+  creditsGranted?: number
+  newBalance?: number | null
 }
 
 // Full record fetched after activation
@@ -136,6 +139,15 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
             emailUpdatesOptIn: m.email_updates_opt_in,
           })
           setMagicSent(false)
+          if (typeof data.creditsGranted === 'number' && data.creditsGranted > 0) {
+            // Backfilled unsynced survey credits onto the profile
+            trackInsiderEvent('credit_awarded', {
+              reason: 'sync_repair',
+              amount: data.creditsGranted,
+              app_user: true,
+            })
+            toast.success(`+${data.creditsGranted} Insider credits added to your account`)
+          }
           if (m.preferences_completed) {
             setStep('done')
             setActivatedMember(m)
@@ -433,6 +445,14 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
                   magicSent={magicSent}
                   onComplete={(m) => {
                     setMember((prev) => (prev ? { ...prev, ...m } : prev))
+                    if (m.creditsGranted && m.creditsGranted > 0) {
+                      toast.success(
+                        `+${m.creditsGranted} credits added to your account` +
+                          (m.newBalance != null ? ` (balance: ${m.newBalance})` : ''),
+                      )
+                    } else if (isAppUser) {
+                      toast.message('Survey saved. If credits are missing, open this page again to sync.')
+                    }
                     setStep('done')
                   }}
                 />
@@ -587,6 +607,9 @@ function ActivatedDashboard({
                   magicSent={false}
                   onComplete={(m) => {
                     onPreferencesComplete(m.totalCredits ?? credits + CREDIT_PREFERENCES)
+                    if (m.creditsGranted && m.creditsGranted > 0) {
+                      toast.success(`+${m.creditsGranted} credits added to your account`)
+                    }
                     setShowPrefs(false)
                   }}
                 />
@@ -934,7 +957,12 @@ function PreferencesStep({
 }: {
   email: string
   magicSent: boolean
-  onComplete: (member: Partial<MemberState>) => void
+  onComplete: (
+    member: Partial<MemberState> & {
+      creditsGranted?: number
+      newBalance?: number | null
+    },
+  ) => void
 }) {
   const [qIndex, setQIndex] = useState(0)
   const [answers, setAnswers] = useState<PrefAnswers>({
@@ -975,9 +1003,14 @@ function PreferencesStep({
     setError('')
     setLoading(true)
     try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers.Authorization = `Bearer ${token}`
+
       const res = await fetch('/api/founding-members/preferences', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           email,
           ageRange: answers.ageRange,
@@ -993,9 +1026,37 @@ function PreferencesStep({
       if (!res.ok) throw new Error(data?.error || 'Could not save your preferences.')
 
       trackInsiderEvent('preferences_completed')
-      trackInsiderEvent('credit_awarded', { reason: 'preferences', amount: CREDIT_PREFERENCES })
+      trackInsiderEvent('credit_awarded', {
+        reason: 'preferences',
+        amount: data.member?.creditsGranted ?? CREDIT_PREFERENCES,
+      })
 
-      onComplete({ totalCredits: data.member?.totalCredits ?? 0, preferencesAwarded: true, preferencesCompleted: true })
+      // Belt-and-suspenders: force ledger sync for logged-in users.
+      let creditsGranted = Number(data.member?.creditsGranted || 0)
+      let newBalance = data.member?.newBalance ?? null
+      if (token) {
+        try {
+          const syncRes = await fetch('/api/founding-members/sync-credits', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          const syncData = await syncRes.json().catch(() => ({}))
+          if (syncRes.ok) {
+            creditsGranted = Math.max(creditsGranted, Number(syncData.creditsGranted || 0))
+            if (syncData.newBalance != null) newBalance = syncData.newBalance
+          }
+        } catch {
+          // non-blocking — preferences already saved
+        }
+      }
+
+      onComplete({
+        totalCredits: data.member?.totalCredits ?? 0,
+        preferencesAwarded: true,
+        preferencesCompleted: true,
+        creditsGranted,
+        newBalance,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
     } finally {
@@ -1145,6 +1206,31 @@ function PreferencesStep({
 // ── Confirmation ─────────────────────────────────────────────
 
 function Confirmation({ credits, appUser = false }: { credits: number; appUser?: boolean }) {
+  useEffect(() => {
+    if (!appUser) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData?.session?.access_token
+        if (!token || cancelled) return
+        const res = await fetch('/api/founding-members/sync-credits', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!cancelled && res.ok && Number(data.creditsGranted || 0) > 0) {
+          toast.success(`+${data.creditsGranted} Insider credits added to your account`)
+        }
+      } catch {
+        // non-blocking
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [appUser])
+
   const items = appUser
     ? ['Preferences Saved', 'Survey Credits Added', 'Insider Access Enabled']
     : [

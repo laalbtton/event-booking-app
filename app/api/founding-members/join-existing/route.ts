@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     const totalCredits = computeTotalCredits(flags)
 
-    const payload = {
+    const basePayload = {
       first_name: firstName,
       email,
       email_updates_opt_in: Boolean(existing?.email_updates_opt_in || emailUpdatesOptIn),
@@ -82,13 +82,44 @@ export async function POST(request: NextRequest) {
       ...flags,
     }
 
-    const { data: saved, error: upsertError } = await supabase
-      .from('founding_members')
-      .upsert(payload, { onConflict: 'email' })
-      .select(
-        'id, total_credits_earned, account_credit_awarded, preferences_credit_awarded, email_updates_credit_awarded, signup_completed, preferences_completed, email_updates_opt_in, first_name, email',
-      )
-      .maybeSingle()
+    // Prefer linking to the app user; fall back if profile_user_id column isn't migrated yet.
+    let saved = null as {
+      id: string
+      total_credits_earned: number
+      account_credit_awarded: boolean
+      preferences_credit_awarded: boolean
+      email_updates_credit_awarded: boolean
+      signup_completed: boolean
+      preferences_completed: boolean
+      email_updates_opt_in: boolean
+      first_name: string | null
+      email: string
+    } | null
+    let upsertError: { message?: string } | null = null
+
+    {
+      const attempt = await supabase
+        .from('founding_members')
+        .upsert({ ...basePayload, profile_user_id: userId }, { onConflict: 'email' })
+        .select(
+          'id, total_credits_earned, account_credit_awarded, preferences_credit_awarded, email_updates_credit_awarded, signup_completed, preferences_completed, email_updates_opt_in, first_name, email',
+        )
+        .maybeSingle()
+
+      if (!attempt.error && attempt.data) {
+        saved = attempt.data
+      } else {
+        const fallback = await supabase
+          .from('founding_members')
+          .upsert(basePayload, { onConflict: 'email' })
+          .select(
+            'id, total_credits_earned, account_credit_awarded, preferences_credit_awarded, email_updates_credit_awarded, signup_completed, preferences_completed, email_updates_opt_in, first_name, email',
+          )
+          .maybeSingle()
+        saved = fallback.data
+        upsertError = fallback.error
+      }
+    }
 
     if (upsertError || !saved) {
       return NextResponse.json(
@@ -97,7 +128,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const creditSync = await syncFoundingMemberCreditsToProfile(supabase, { userId, email })
+    const creditSync = await syncFoundingMemberCreditsToProfile(supabase, {
+      userId,
+      email,
+      memberId: saved.id,
+    })
 
     return NextResponse.json({
       success: true,
