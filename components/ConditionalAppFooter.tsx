@@ -2,11 +2,16 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 
 /** Root app footer — hidden on marketing routes that ship their own footer. */
 export default function ConditionalAppFooter() {
   const pathname = usePathname()
+  const { authResolved, user } = useAuthBootstrap()
+
   if (pathname?.startsWith('/laalbutton')) return null
+  // Public performer profiles use their own chrome; hide marketing footer when in-app
+  if (authResolved && user && pathname?.startsWith('/profile/')) return null
 
   return (
     <footer className="bg-gray-800 text-white py-6 mt-auto pb-28">

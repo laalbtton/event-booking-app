@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getPublicPerformerProfile } from '@/lib/server/publicContent'
 import { buildPerformerMetadata } from '@/lib/seo/metadata'
-import { PublicHeader } from '@/components/public/PublicHeader'
+import { PublicProfileChrome } from '@/components/public/PublicProfileChrome'
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
 import PerformanceTabs from '@/components/PerformanceTabs'
 
@@ -45,6 +45,7 @@ type PublicJoke = {
   likeCount: number
   bombCount: number
   killCount: number
+  laughterCount: number
 }
 
 async function getPublicJokes(userId: string): Promise<PublicJoke[]> {
@@ -65,6 +66,7 @@ async function getPublicJokes(userId: string): Promise<PublicJoke[]> {
       likeCount: reactions.filter((r) => r.reaction_type === 'like').length,
       bombCount: reactions.filter((r) => r.reaction_type === 'bomb').length,
       killCount: reactions.filter((r) => r.reaction_type === 'kill').length,
+      laughterCount: reactions.filter((r) => r.reaction_type === 'laughter').length,
     }
   })
 }
@@ -102,9 +104,7 @@ export default async function PublicProfilePage({ params }: Props) {
   const hasProfileReviews = prSummary.count > 0 || profile.recentProfileReviews.length > 0
 
   return (
-    <div className="min-h-screen bg-zinc-950">
-      <PublicHeader />
-
+    <PublicProfileChrome performerId={profile.id} performerName={profile.fullName}>
       <div className="mx-auto max-w-3xl px-4 py-10 space-y-8">
 
         {/* ── Hero: avatar + name + bio ─────────────────────────────── */}
@@ -364,7 +364,7 @@ export default async function PublicProfilePage({ params }: Props) {
                     <time dateTime={joke.created_at}>
                       {new Date(joke.created_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </time>
-                    {(joke.likeCount + joke.bombCount + joke.killCount) > 0 && (
+                    {(joke.likeCount + joke.bombCount + joke.killCount + joke.laughterCount) > 0 && (
                       <span className="flex items-center gap-3">
                         {joke.likeCount > 0 && (
                           <span className="flex items-center gap-1">
@@ -384,6 +384,12 @@ export default async function PublicProfilePage({ params }: Props) {
                             <span>{joke.killCount}</span>
                           </span>
                         )}
+                        {joke.laughterCount > 0 && (
+                          <span className="flex items-center gap-1">
+                            <span>😂</span>
+                            <span>{joke.laughterCount}</span>
+                          </span>
+                        )}
                       </span>
                     )}
                   </div>
@@ -393,53 +399,7 @@ export default async function PublicProfilePage({ params }: Props) {
           </section>
         )}
 
-        {/* ── Join the app CTA (shown only to logged-out visitors) ────── */}
-        <JoinViaReferralCTA performerId={profile.id} performerName={profile.fullName} />
-
       </div>
-    </div>
-  )
-}
-
-/**
- * Server component that checks auth state and conditionally renders
- * a "Join the app" banner for unauthenticated visitors.
- * The ?ref= param is captured on the signup page and used to credit
- * the performer when the new user completes onboarding.
- */
-async function JoinViaReferralCTA({
-  performerId,
-  performerName,
-}: {
-  performerId: string
-  performerName: string
-}) {
-  const supabase = getPublicServerClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (session) return null
-
-  const firstName = performerName.split(' ')[0]
-  const signupHref = `/signup?ref=${performerId}&role=audience`
-
-  return (
-    <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/5 p-6 text-center space-y-3">
-      <p className="text-stone-300 text-sm">
-        {firstName} invited you to One Mic Stand — the comedy community app for Toronto&apos;s best shows.
-      </p>
-      <div className="flex flex-col sm:flex-row gap-3 justify-center">
-        <Link
-          href={signupHref}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-yellow-400 px-5 py-2.5 text-sm font-bold text-zinc-950 hover:bg-yellow-300 transition-colors"
-        >
-          Join the app
-        </Link>
-        <Link
-          href={`/login?ref=${performerId}`}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-600 px-5 py-2.5 text-sm font-medium text-stone-300 hover:border-zinc-400 transition-colors"
-        >
-          Already have an account? Sign in
-        </Link>
-      </div>
-    </div>
+    </PublicProfileChrome>
   )
 }

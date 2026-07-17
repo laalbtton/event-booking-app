@@ -7,14 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { Heart, Bomb, Trash2, Send, RefreshCw } from 'lucide-react'
+import { Heart, Bomb, Trash2, Send, RefreshCw, Laugh, Tag } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
 const MAX_CHARS = 280
+const MAX_TAG_CHARS = 140
+const MAX_TAGS = 5
 const LOAD_LIMIT = 50
 
-type ReactionType = 'like' | 'bomb' | 'kill'
+type ReactionType = 'like' | 'bomb' | 'kill' | 'laughter'
 
 // ── Custom knife SVG icon ────────────────────────────────────────────────────
 function KnifeIcon({ className }: { className?: string }) {
@@ -68,6 +70,15 @@ const REACTIONS = [
       'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-400',
     iconClass: 'text-violet-600 dark:text-violet-400',
   },
+  {
+    type: 'laughter' as ReactionType,
+    Icon: Laugh,
+    label: 'Laughter',
+    tooltip: 'Laughter',
+    activeClass:
+      'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400',
+    iconClass: 'text-emerald-600 dark:text-emerald-400',
+  },
 ] as const
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -75,12 +86,21 @@ const REACTIONS = [
 type Profile = { full_name: string | null; avatar_url: string | null }
 type ProfileMap = Record<string, Profile>
 
+type JokeTag = {
+  id: string
+  user_id: string
+  content: string
+  created_at: string
+  author_name: string | null
+}
+
 type RawJoke = {
   id: string
   user_id: string
   content: string
   created_at: string
   joke_reactions: Array<{ id: string; user_id: string; reaction_type: string }>
+  joke_tags?: Array<{ id: string; user_id: string; content: string; created_at: string }>
 }
 
 type Joke = {
@@ -90,8 +110,9 @@ type Joke = {
   created_at: string
   author_name: string | null
   author_avatar_url: string | null
-  reactions: { like: number; bomb: number; kill: number }
+  reactions: { like: number; bomb: number; kill: number; laughter: number }
   my_reaction: ReactionType | null
+  tags: JokeTag[]
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -101,17 +122,28 @@ function processRow(
   profileMap: ProfileMap,
   currentUserId: string | undefined,
 ): Joke {
-  const reactions = { like: 0, bomb: 0, kill: 0 }
+  const reactions = { like: 0, bomb: 0, kill: 0, laughter: 0 }
   let my_reaction: ReactionType | null = null
   for (const r of row.joke_reactions ?? []) {
     if (r.reaction_type === 'like') reactions.like++
     else if (r.reaction_type === 'bomb') reactions.bomb++
     else if (r.reaction_type === 'kill') reactions.kill++
+    else if (r.reaction_type === 'laughter') reactions.laughter++
     if (currentUserId && r.user_id === currentUserId) {
       my_reaction = r.reaction_type as ReactionType
     }
   }
   const profile = profileMap[row.user_id]
+  const tags: JokeTag[] = (row.joke_tags ?? [])
+    .slice()
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    .map((t) => ({
+      id: t.id,
+      user_id: t.user_id,
+      content: t.content,
+      created_at: t.created_at,
+      author_name: profileMap[t.user_id]?.full_name ?? null,
+    }))
   return {
     id: row.id,
     user_id: row.user_id,
@@ -121,7 +153,13 @@ function processRow(
     author_avatar_url: profile?.avatar_url ?? null,
     reactions,
     my_reaction,
+    tags,
   }
+}
+
+async function getAccessToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.access_token ?? null
 }
 
 function timeAgo(dateStr: string): string {
@@ -200,10 +238,27 @@ export default function JokesPage() {
     el.style.height = `${el.scrollHeight}px`
   }, [draft])
 
-  // Initial loads
+  // Initial loads + clear unread badge when visiting the tab
   useEffect(() => {
     void loadBrowse()
   }, [])
+
+  useEffect(() => {
+    if (!user) return
+    void (async () => {
+      const token = await getAccessToken()
+      if (!token) return
+      try {
+        await fetch('/api/jokes/unread-count', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        window.dispatchEvent(new Event('jokes-unread-cleared'))
+      } catch {
+        // non-fatal
+      }
+    })()
+  }, [user])
 
   useEffect(() => {
     if (activeTab === 'mine' && !myLoaded && user) void loadMine()
@@ -263,14 +318,21 @@ export default function JokesPage() {
     try {
       const { data, error } = await supabase
         .from('jokes')
-        .select('id, user_id, content, created_at, joke_reactions(id, user_id, reaction_type)')
+        .select(
+          'id, user_id, content, created_at, joke_reactions(id, user_id, reaction_type), joke_tags(id, user_id, content, created_at)',
+        )
         .order('created_at', { ascending: false })
         .limit(LOAD_LIMIT)
 
       if (error) throw error
 
       const rows = (data ?? []) as RawJoke[]
-      const uniqueIds = [...new Set(rows.map((r) => r.user_id))]
+      const uniqueIds = [
+        ...new Set([
+          ...rows.map((r) => r.user_id),
+          ...rows.flatMap((r) => (r.joke_tags ?? []).map((t) => t.user_id)),
+        ]),
+      ]
       const profileMap = await fetchProfiles(uniqueIds)
       // Own jokes are shown in "My Jokes" tab only — exclude from browse
       setBrowseJokes(
@@ -296,14 +358,17 @@ export default function JokesPage() {
     try {
       const { data, error } = await supabase
         .from('jokes')
-        .select('id, user_id, content, created_at, joke_reactions(id, user_id, reaction_type)')
+        .select(
+          'id, user_id, content, created_at, joke_reactions(id, user_id, reaction_type), joke_tags(id, user_id, content, created_at)',
+        )
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
       if (error) throw error
 
       const rows = (data ?? []) as RawJoke[]
-      const profileMap = await fetchProfiles([user.id])
+      const tagUserIds = rows.flatMap((r) => (r.joke_tags ?? []).map((t) => t.user_id))
+      const profileMap = await fetchProfiles([...new Set([user.id, ...tagUserIds])])
       setMyJokes(rows.map((r) => processRow(r, profileMap, user.id)))
       setMyLoaded(true)
     } catch {
@@ -322,12 +387,13 @@ export default function JokesPage() {
 
     if (!data) return
 
-    const reactions = { like: 0, bomb: 0, kill: 0 }
+    const reactions = { like: 0, bomb: 0, kill: 0, laughter: 0 }
     let my_reaction: ReactionType | null = null
     for (const r of data as { user_id: string; reaction_type: string }[]) {
       if (r.reaction_type === 'like') reactions.like++
       else if (r.reaction_type === 'bomb') reactions.bomb++
       else if (r.reaction_type === 'kill') reactions.kill++
+      else if (r.reaction_type === 'laughter') reactions.laughter++
       if (user && r.user_id === user.id) my_reaction = r.reaction_type as ReactionType
     }
 
@@ -342,18 +408,36 @@ export default function JokesPage() {
     if (!user || !trimmed || overLimit) return
     setSubmitting(true)
     try {
-      const { data, error } = await supabase
-        .from('jokes')
-        .insert({ user_id: user.id, content: trimmed })
-        .select('id, user_id, content, created_at, joke_reactions(id, user_id, reaction_type)')
-        .single()
+      const token = await getAccessToken()
+      if (!token) throw new Error('Not signed in')
 
-      if (error) throw error
+      const res = await fetch('/api/jokes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: trimmed }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Failed to post')
 
-      const profileMap: ProfileMap = {}
-      const newJoke = processRow(data as unknown as RawJoke, profileMap, user.id)
+      const profileMap: ProfileMap = {
+        [user.id]: {
+          full_name: user.user_metadata?.full_name ?? null,
+          avatar_url: user.user_metadata?.avatar_url ?? null,
+        },
+      }
+      // Prefer profile from bootstrap if we already loaded mine
+      if (myJokes[0]?.author_name) {
+        profileMap[user.id] = {
+          full_name: myJokes[0].author_name,
+          avatar_url: myJokes[0].author_avatar_url,
+        }
+      }
+
+      const newJoke = processRow(payload.joke as RawJoke, profileMap, user.id)
       setDraft('')
-      // New joke goes to My Jokes only; Browse excludes own
       if (myLoaded) setMyJokes((prev) => [newJoke, ...prev])
       toast.success('Joke posted!')
       setActiveTab('mine')
@@ -361,6 +445,52 @@ export default function JokesPage() {
       toast.error((err as { message?: string })?.message ?? 'Failed to post')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleAddTag(joke: Joke, content: string) {
+    if (!user) {
+      toast.error('Sign in to add a tag')
+      return
+    }
+    if (joke.tags.length >= MAX_TAGS) {
+      toast.error(`Maximum of ${MAX_TAGS} tags per joke`)
+      return
+    }
+    const token = await getAccessToken()
+    if (!token) {
+      toast.error('Sign in to add a tag')
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/jokes/${joke.id}/tags`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Failed to add tag')
+
+      const tag: JokeTag = {
+        id: payload.tag.id,
+        user_id: payload.tag.user_id,
+        content: payload.tag.content,
+        created_at: payload.tag.created_at,
+        author_name: payload.tag.author_name ?? null,
+      }
+
+      function patch(list: Joke[]): Joke[] {
+        return list.map((j) => (j.id === joke.id ? { ...j, tags: [...j.tags, tag] } : j))
+      }
+      setBrowseJokes(patch)
+      setMyJokes(patch)
+    } catch (err: unknown) {
+      toast.error((err as { message?: string })?.message ?? 'Failed to add tag')
+      throw err
     }
   }
 
@@ -603,6 +733,7 @@ export default function JokesPage() {
                   currentUserId={user?.id}
                   showAuthor
                   onReact={user ? (type) => void handleReact(joke, type) : undefined}
+                  onAddTag={user ? (content) => handleAddTag(joke, content) : undefined}
                   onDelete={() => void handleDelete(joke)}
                   isReacting={reactingId === joke.id}
                   isDeleting={deletingId === joke.id}
@@ -665,6 +796,7 @@ export default function JokesPage() {
                     currentUserId={user.id}
                     showAuthor={false}
                     onReact={undefined}
+                    onAddTag={(content) => handleAddTag(joke, content)}
                     onDelete={() => void handleDelete(joke)}
                     isReacting={false}
                     isDeleting={deletingId === joke.id}
@@ -723,6 +855,7 @@ function JokeCard({
   currentUserId,
   showAuthor,
   onReact,
+  onAddTag,
   onDelete,
   isReacting,
   isDeleting,
@@ -731,12 +864,31 @@ function JokeCard({
   currentUserId: string | undefined
   showAuthor: boolean
   onReact: ((type: ReactionType) => void) | undefined
+  onAddTag: ((content: string) => Promise<void>) | undefined
   onDelete: () => void
   isReacting: boolean
   isDeleting: boolean
 }) {
   const isOwn = currentUserId === joke.user_id
   const canReact = !!onReact && !!currentUserId && !isOwn
+  const [tagDraft, setTagDraft] = useState('')
+  const [tagSubmitting, setTagSubmitting] = useState(false)
+  const canAddTag = !!onAddTag && !!currentUserId && joke.tags.length < MAX_TAGS
+  const tagTrimmed = tagDraft.trim()
+  const tagOverLimit = tagDraft.length > MAX_TAG_CHARS
+
+  async function submitTag() {
+    if (!canAddTag || !tagTrimmed || tagOverLimit || tagSubmitting) return
+    setTagSubmitting(true)
+    try {
+      await onAddTag(tagTrimmed)
+      setTagDraft('')
+    } catch {
+      // toast handled upstream
+    } finally {
+      setTagSubmitting(false)
+    }
+  }
 
   return (
     <article className="group rounded-2xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
@@ -821,6 +973,67 @@ function JokeCard({
         {isOwn && (
           <span className="ml-auto text-xs italic text-muted-foreground/50">your joke</span>
         )}
+      </div>
+
+      {/* Tags */}
+      <div className="mt-3 space-y-2 border-t border-border/40 pt-3">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <Tag className="h-3.5 w-3.5" />
+          <span>Tags</span>
+          <span className="tabular-nums text-muted-foreground/70">
+            {joke.tags.length}/{MAX_TAGS}
+          </span>
+        </div>
+
+        {joke.tags.length > 0 && (
+          <ul className="space-y-2">
+            {joke.tags.map((tag) => (
+              <li
+                key={tag.id}
+                className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-foreground"
+              >
+                <p className="leading-snug">{tag.content}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {tag.author_name ?? 'Someone'} · {timeAgo(tag.created_at)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {canAddTag ? (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={tagDraft}
+              onChange={(e) => setTagDraft(e.target.value)}
+              placeholder="Add a tag…"
+              maxLength={MAX_TAG_CHARS + 10}
+              disabled={tagSubmitting}
+              className={cn(
+                'min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring',
+                tagOverLimit && 'border-destructive text-destructive',
+              )}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  void submitTag()
+                }
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!tagTrimmed || tagOverLimit || tagSubmitting}
+              onClick={() => void submitTag()}
+            >
+              {tagSubmitting ? '…' : 'Tag'}
+            </Button>
+          </div>
+        ) : joke.tags.length >= MAX_TAGS ? (
+          <p className="text-[11px] text-muted-foreground">Tag limit reached.</p>
+        ) : null}
       </div>
     </article>
   )

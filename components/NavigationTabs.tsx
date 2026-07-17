@@ -186,7 +186,10 @@ export default function NavigationTabs() {
                   : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
               }`}
             >
-              <Pencil className="w-5 h-5" />
+              <span className="relative inline-block">
+                <Pencil className="w-5 h-5" />
+                <JokesUnreadBadge />
+              </span>
               <span className="text-xs font-medium">Jokes</span>
             </Link>
 
@@ -350,5 +353,59 @@ export default function NavigationTabs() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function JokesUnreadBadge() {
+  const { authResolved, user } = useAuthBootstrap()
+  const [count, setCount] = useState(0)
+
+  useEffect(() => {
+    if (!authResolved || !user) {
+      setCount(0)
+      return
+    }
+
+    let cancelled = false
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    async function load() {
+      try {
+        const { data } = await supabase.auth.getSession()
+        const token = data.session?.access_token
+        if (!token) return
+        const res = await fetch('/api/jokes/unread-count', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) return
+        const payload = await res.json()
+        if (!cancelled) setCount(typeof payload.count === 'number' ? payload.count : 0)
+      } catch {
+        // ignore
+      }
+    }
+
+    void load()
+    interval = setInterval(() => void load(), 60_000)
+
+    const onCleared = () => setCount(0)
+    window.addEventListener('jokes-unread-cleared', onCleared)
+
+    return () => {
+      cancelled = true
+      if (interval) clearInterval(interval)
+      window.removeEventListener('jokes-unread-cleared', onCleared)
+    }
+  }, [authResolved, user])
+
+  if (count <= 0) return null
+
+  return (
+    <span
+      className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-yellow-500 px-1 text-[9px] font-bold leading-none text-zinc-950"
+      aria-label={`${count} new jokes`}
+    >
+      {count > 9 ? '9+' : count}
+    </span>
   )
 }

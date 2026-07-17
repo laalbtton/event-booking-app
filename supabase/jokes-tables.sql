@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS joke_reactions (
   id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   joke_id        UUID        NOT NULL REFERENCES jokes(id) ON DELETE CASCADE,
   user_id        UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  reaction_type  TEXT        NOT NULL CHECK (reaction_type IN ('like', 'bomb', 'kill')),
+  reaction_type  TEXT        NOT NULL CHECK (reaction_type IN ('like', 'bomb', 'kill', 'laughter')),
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (joke_id, user_id)   -- one reaction per user per joke; use UPSERT to change type
 );

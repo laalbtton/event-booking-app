@@ -23,7 +23,6 @@ import { useSwipeNavigate } from '@/lib/hooks/useSwipeNavigate'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { QRCodeSVG } from 'qrcode.react'
-import { ReferralInviteCard, canShowReferralInvite } from '@/components/ReferralInviteCard'
 import { getPushClientState, subscribeCurrentUserToPush, unsubscribeCurrentUserFromPush } from '@/lib/pushClient'
 import { toast } from 'sonner'
 import {
@@ -1393,12 +1392,6 @@ export default function ProfilePage() {
           )}
           </CardContent>
         </Card>
-
-        {!isEditing && canShowReferralInvite(profile.role) && (
-          <div className="px-4 sm:px-0 my-4">
-            <ReferralInviteCard userId={profile.id} compact />
-          </div>
-        )}
 
         <Card className="mb-0 shadow-sm rounded-none sm:rounded-lg">
           <CardHeader className="px-6 py-[1.2rem] sm:px-6 sm:py-[1.2rem]">
