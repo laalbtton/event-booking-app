@@ -23,7 +23,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode } from 'lucide-react'
+import { ChevronLeft, ChevronDown, ChevronUp, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { useIsMobile } from '@/hooks/useMediaQuery'
@@ -65,11 +65,15 @@ export default function SettingsPage() {
   const [installActionLoading, setInstallActionLoading] = useState(false)
   const [isStandalone, setIsStandalone] = useState(false)
   const [roleChanging, setRoleChanging] = useState(false)
+  const [rolePanelOpen, setRolePanelOpen] = useState(false)
   const [socapTestEventId, setSocapTestEventId] = useState('')
   const [socapScenario, setSocapScenario] = useState<ThursdaySocapScenario>('registration_open')
   const [socapTestLoading, setSocapTestLoading] = useState(false)
   const [themeMounted, setThemeMounted] = useState(false)
   const { theme, setTheme } = useTheme()
+
+  // Only plain performer/audience can switch — overwriting admin/event_creator locks them out of that access.
+  const canSwitchAppRole = profile?.role === 'performer' || profile?.role === 'audience'
 
   useEffect(() => {
     setThemeMounted(true)
@@ -458,6 +462,16 @@ export default function SettingsPage() {
 
   async function handleRoleChange(newRole: 'performer' | 'audience') {
     if (!profile || profile.role === newRole || roleChanging) return
+    if (profile.role === 'admin' || profile.role === 'event_creator') {
+      toast.error(
+        'Your account role includes creator/admin access. Switching here would remove it with no way to restore it from Settings. Ask another admin if you need a role change.'
+      )
+      return
+    }
+    if (profile.role !== 'performer' && profile.role !== 'audience') {
+      toast.error('This account role cannot be switched from Settings.')
+      return
+    }
     setRoleChanging(true)
     try {
       const { error } = await supabase
@@ -465,13 +479,60 @@ export default function SettingsPage() {
         .update({ role: newRole, updated_at: new Date().toISOString() })
         .eq('id', profile.id)
       if (error) throw error
-      setProfile((prev) => prev ? { ...prev, role: newRole } : prev)
+      setProfile((prev) => (prev ? { ...prev, role: newRole } : prev))
       toast.success(`Role switched to ${newRole === 'performer' ? 'Performer' : 'Audience member'}.`)
     } catch (err: any) {
       toast.error(err?.message || 'Failed to update role')
     } finally {
       setRoleChanging(false)
     }
+  }
+
+  function RoleSwitcherPanel({ compact }: { compact?: boolean }) {
+    if (!profile || !canSwitchAppRole) return null
+    return (
+      <div className={compact ? 'space-y-2' : 'space-y-3'}>
+        <p className={compact ? 'text-xs text-muted-foreground' : 'text-sm text-muted-foreground'}>
+          Current:{' '}
+          <span className="font-semibold text-foreground">
+            {profile.role === 'performer' ? 'Performer' : 'Audience member'}
+          </span>
+        </p>
+        <div className={`flex ${compact ? 'gap-2' : 'gap-3'}`}>
+          <button
+            type="button"
+            disabled={roleChanging || profile.role === 'performer'}
+            onClick={() => handleRoleChange('performer')}
+            className={`flex-1 border rounded-lg text-left transition-colors ${
+              compact ? 'p-3' : 'p-4'
+            } ${
+              profile.role === 'performer'
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-primary/50 hover:bg-muted/40'
+            } ${roleChanging || profile.role === 'performer' ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+          >
+            <p className="font-medium text-sm">Performer</p>
+            <p className="text-xs text-muted-foreground mt-1">Book open mics and manage performance spots.</p>
+          </button>
+          <button
+            type="button"
+            disabled={roleChanging || profile.role === 'audience'}
+            onClick={() => handleRoleChange('audience')}
+            className={`flex-1 border rounded-lg text-left transition-colors ${
+              compact ? 'p-3' : 'p-4'
+            } ${
+              profile.role === 'audience'
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-primary/50 hover:bg-muted/40'
+            } ${roleChanging || profile.role === 'audience' ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+          >
+            <p className="font-medium text-sm">Audience</p>
+            <p className="text-xs text-muted-foreground mt-1">Attend shows and support performers as a guest.</p>
+          </button>
+        </div>
+        {roleChanging && <p className="text-xs text-muted-foreground">Updating role…</p>}
+      </div>
+    )
   }
 
   if (!authResolved || loading) {
@@ -496,32 +557,6 @@ export default function SettingsPage() {
           </div>
           <Card className="shadow-sm overflow-hidden">
             <CardContent className="p-0 divide-y divide-border">
-              {(profile?.role === 'performer' || profile?.role === 'audience') && (
-                <div className="px-4 py-3">
-                  <p className="text-sm font-medium mb-1">Your role</p>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Currently: <span className="font-semibold capitalize">{profile.role === 'performer' ? 'Performer' : 'Audience member'}</span>
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant={profile.role === 'performer' ? 'default' : 'outline'}
-                      disabled={roleChanging || profile.role === 'performer'}
-                      onClick={() => handleRoleChange('performer')}
-                    >
-                      Performer
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={profile.role === 'audience' ? 'default' : 'outline'}
-                      disabled={roleChanging || profile.role === 'audience'}
-                      onClick={() => handleRoleChange('audience')}
-                    >
-                      Audience
-                    </Button>
-                  </div>
-                </div>
-              )}
               {canShowReferralInvite(profile?.role) && (
                 <div className="px-4 py-1">
                   <SettingsListRow
@@ -565,6 +600,35 @@ export default function SettingsPage() {
               {isAdmin && (
                 <div className="px-4 py-1">
                   <SettingsListRow href="/settings/push-broadcast" icon={Megaphone} title="Broadcast push" description="Send a custom notification to all users" />
+                </div>
+              )}
+              {canSwitchAppRole && (
+                <div className="px-4 py-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setRolePanelOpen((open) => !open)}
+                    className="w-full flex items-center gap-3 rounded-lg hover:bg-muted transition-colors py-1 text-left"
+                  >
+                    <div className="flex flex-shrink-0 w-8 h-8 rounded-lg bg-muted items-center justify-center">
+                      <RefreshCw className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground">Switch Performer / Audience</p>
+                      <p className="text-sm text-muted-foreground truncate">
+                        Currently {profile?.role === 'performer' ? 'Performer' : 'Audience'}
+                      </p>
+                    </div>
+                    {rolePanelOpen ? (
+                      <ChevronUp className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    )}
+                  </button>
+                  {rolePanelOpen && (
+                    <div className="mt-3">
+                      <RoleSwitcherPanel compact />
+                    </div>
+                  )}
                 </div>
               )}
               {user?.email && (
@@ -611,58 +675,6 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
-
-        {(profile?.role === 'performer' || profile?.role === 'audience') && (
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-xl">Your Role</CardTitle>
-              <CardDescription>
-                Switch between Performer and Audience if you signed up with the wrong role or want to change how you use the app.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Current role:{' '}
-                <span className="font-semibold text-foreground">
-                  {profile.role === 'performer' ? 'Performer' : 'Audience member'}
-                </span>
-              </p>
-              <div className="flex gap-3">
-                <div
-                  onClick={() => !roleChanging && profile.role !== 'performer' && handleRoleChange('performer')}
-                  className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${
-                    profile.role === 'performer'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50 hover:bg-muted/40'
-                  } ${roleChanging ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <p className="font-medium text-sm">Performer</p>
-                  <p className="text-xs text-muted-foreground mt-1">Sign up for open mics, manage your performance spots.</p>
-                  {profile.role === 'performer' && (
-                    <span className="mt-2 inline-block text-xs text-primary font-semibold">Current role</span>
-                  )}
-                </div>
-                <div
-                  onClick={() => !roleChanging && profile.role !== 'audience' && handleRoleChange('audience')}
-                  className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${
-                    profile.role === 'audience'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50 hover:bg-muted/40'
-                  } ${roleChanging ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <p className="font-medium text-sm">Audience</p>
-                  <p className="text-xs text-muted-foreground mt-1">Attend shows and support performers as a guest.</p>
-                  {profile.role === 'audience' && (
-                    <span className="mt-2 inline-block text-xs text-primary font-semibold">Current role</span>
-                  )}
-                </div>
-              </div>
-              {roleChanging && (
-                <p className="text-xs text-muted-foreground">Updating role…</p>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {canShowReferralInvite(profile?.role) && (
           <Card className="shadow-sm">
@@ -969,6 +981,34 @@ export default function SettingsPage() {
               <Button asChild variant="outline">
                 <Link href="/settings/push-broadcast">Open broadcast tool</Link>
               </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {canSwitchAppRole && (
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xl">App role</CardTitle>
+              <CardDescription>
+                Switch between Performer and Audience if you signed up with the wrong role.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => setRolePanelOpen((open) => !open)}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                {rolePanelOpen ? 'Hide role switcher' : 'Switch Performer / Audience'}
+                {rolePanelOpen ? (
+                  <ChevronUp className="w-4 h-4 ml-2" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 ml-2" />
+                )}
+              </Button>
+              {rolePanelOpen && <RoleSwitcherPanel />}
             </CardContent>
           </Card>
         )}

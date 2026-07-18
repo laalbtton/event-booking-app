@@ -139,7 +139,9 @@ export default function EventDetailsPage() {
   const [ticketQty, setTicketQty] = useState(1)
   const [ticketLoading, setTicketLoading] = useState(false)
   const [ticketSuccess, setTicketSuccess] = useState(false)
+  const [myTicketPurchases, setMyTicketPurchases] = useState<{ id: string; quantity: number; total_cents: number }[]>([])
   const [recurrenceDescription, setRecurrenceDescription] = useState<string | null>(null)
+  const [applyCreditsToTickets, setApplyCreditsToTickets] = useState(true)
 
 
   function copyPublicLink() {
@@ -401,6 +403,7 @@ export default function EventDetailsPage() {
         setUserBooking(null)
         setEventAutoPostEnabled(false)
         setAlertSet(false)
+        setMyTicketPurchases([])
       } else {
         const now = new Date().toISOString()
         const [{ data: profileData }, { data: grantRows }] = await Promise.all([
@@ -559,7 +562,7 @@ export default function EventDetailsPage() {
 
       // User-specific rows — all three only need user.id + resolvedEventId
       if (user) {
-        const [userBookingResult, prefResult, alertResult, liveStateResult] = await Promise.all([
+        const [userBookingResult, prefResult, alertResult, liveStateResult, ticketPurchasesResult] = await Promise.all([
           supabase
             .from('bookings')
             .select('id, status, booking_scope')
@@ -586,11 +589,20 @@ export default function EventDetailsPage() {
             .select('enabled')
             .eq('event_id', resolvedEventId)
             .maybeSingle(),
+          eventData.event_type === 'booked_show'
+            ? supabase
+                .from('ticket_purchases')
+                .select('id, quantity, total_cents')
+                .eq('event_id', resolvedEventId)
+                .eq('user_id', user.id)
+                .eq('status', 'completed')
+            : Promise.resolve({ data: null, error: null }),
         ])
 
         setUserBooking(userBookingResult.data || null)
         setEventAutoPostEnabled(!!prefResult.data?.auto_post_enabled)
         setLiveModeEnabled(liveStateResult.data?.enabled === true)
+        setMyTicketPurchases((ticketPurchasesResult.data || []) as { id: string; quantity: number; total_cents: number }[])
 
         if (alertResult.error) {
           const missingTable = alertResult.error.code === '42P01' || alertResult.error.message?.includes('registration_alerts')
@@ -615,10 +627,27 @@ export default function EventDetailsPage() {
       const response = await fetch('/api/stripe/ticket-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: event.id, quantity: ticketQty }),
+        body: JSON.stringify({
+          eventId: event.id,
+          quantity: ticketQty,
+          userId: currentUser?.id || null,
+          email: profile?.email || currentUser?.email || null,
+          useCredits: applyCreditsToTickets,
+        }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Failed to start checkout')
+
+      if (data.completedWithCredits) {
+        toast.success(
+          `Tickets confirmed using ${data.creditsApplied} credit${data.creditsApplied === 1 ? '' : 's'}! Check your email for details.`
+        )
+        setTicketSuccess(true)
+        setTicketLoading(false)
+        loadEventDetails()
+        return
+      }
+
       window.location.href = data.url
     } catch (err: any) {
       toast.error(err.message || 'Could not start checkout')
@@ -858,6 +887,17 @@ export default function EventDetailsPage() {
       ? Math.max(0, Number(event.spot_fee_credits || 0)) +
         Math.ceil(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100)
       : event.credits_required)
+
+  // Ticket credit breakdown (booked shows) — let logged-in buyers cover part or all of
+  // a ticket purchase with their app credits ($1 = 1 credit) and charge only the remainder.
+  const availableTicketCredits = Math.max(0, Number(profile?.credits || 0))
+  const ticketTotalCents = ticketInfo ? ticketInfo.price_cents * ticketQty : 0
+  const maxApplicableTicketCredits = Math.floor(ticketTotalCents / 100)
+  const ticketCreditsToApply = applyCreditsToTickets
+    ? Math.min(availableTicketCredits, maxApplicableTicketCredits)
+    : 0
+  const ticketCreditsAppliedCents = ticketCreditsToApply * 100
+  const ticketRemainingCents = ticketTotalCents - ticketCreditsAppliedCents
   const canAfford = canAffordWithVenueCredits(
     Number(profile?.credits || 0),
     venueCreditGrants,
@@ -1094,13 +1134,21 @@ export default function EventDetailsPage() {
                   )}
                 </div>
 
+                {event.event_type === 'booked_show' ? (
+                  (ticketInfo || (event.tickets_enabled && !isAudienceUser)) && (
+                    <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
+                      <span className="mr-2">🎟️</span>
+                      {ticketInfo ? (
+                        <span><strong className="font-semibold">Tickets:</strong> ${(ticketInfo.price_cents / 100).toFixed(2)} CAD · {Math.max(0, ticketInfo.quantity - ticketInfo.sold)} remaining</span>
+                      ) : (
+                        <span><strong className="font-semibold">Tickets:</strong> {event.external_event ? 'External' : 'Available'}</span>
+                      )}
+                    </div>
+                  )
+                ) : (
                 <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                   <span className="mr-2">💳</span>
-                  {event.event_type === 'booked_show' && ticketInfo ? (
-                    <span><strong className="font-semibold">Tickets:</strong> ${(ticketInfo.price_cents / 100).toFixed(2)} CAD · {Math.max(0, ticketInfo.quantity - ticketInfo.sold)} remaining</span>
-                  ) : event.event_type === 'booked_show' ? (
-                    <span><strong className="font-semibold">Type:</strong> Invite only</span>
-                  ) : event.tickets_enabled ? (
+                  {event.tickets_enabled ? (
                     <span><strong className="font-semibold">Tickets:</strong> {event.external_event ? 'External' : 'Available'}</span>
                   ) : event.food_coupon_enabled ? (
                     <span>
@@ -1114,6 +1162,7 @@ export default function EventDetailsPage() {
                     <span><strong className="font-semibold">Cost:</strong> {event.credits_required} credit{event.credits_required !== 1 ? 's' : ''}</span>
                   )}
                 </div>
+                )}
 
                 {!isRegistrationOpen && event.registration_opens_at && (
                   <div className="flex items-center text-sm md:text-base text-orange-700 dark:text-orange-400">
@@ -1165,6 +1214,13 @@ export default function EventDetailsPage() {
                   <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                     <span className="mr-2">⏱️</span>
                     <span>Cancel up to {event.cancellation_hours}h before for full refund</span>
+                  </div>
+                )}
+
+                {event.event_type === 'booked_show' && event.tickets_enabled && !event.external_event && (
+                  <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
+                    <span className="mr-2">⏱️</span>
+                    <span>Ticket cancellation: up to {event.cancellation_hours}h before showtime for a full credit refund</span>
                   </div>
                 )}
             </div>
@@ -1220,33 +1276,82 @@ export default function EventDetailsPage() {
                       ✅ Payment confirmed! Check your email for your tickets.
                     </div>
                   )}
+                  {myTicketPurchases.length > 0 && !ticketSuccess && (
+                    <div className="flex flex-col items-end gap-2">
+                      {myTicketPurchases.map((purchase) => (
+                        <div key={purchase.id} className="flex items-center gap-2">
+                          <span className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800 font-medium whitespace-nowrap">
+                            🎟️ {purchase.quantity} ticket{purchase.quantity !== 1 ? 's' : ''}
+                          </span>
+                          <Button asChild size="sm" variant="default">
+                            <Link href={`/tickets/${purchase.id}`}>Go to ticket</Link>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {Math.max(0, ticketInfo.quantity - ticketInfo.sold) > 0 ? (
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm font-medium text-muted-foreground">Qty:</label>
-                      <select
-                        className="h-9 w-16 rounded-md border border-input bg-background px-2 text-sm"
-                        value={ticketQty}
-                        onChange={(e) => setTicketQty(Number(e.target.value))}
-                        disabled={ticketLoading}
-                      >
-                        {Array.from({ length: Math.min(10, Math.max(0, ticketInfo.quantity - ticketInfo.sold)) }, (_, i) => i + 1).map((n) => (
-                          <option key={n} value={n}>{n}</option>
-                        ))}
-                      </select>
-                      <Button
-                        onClick={handleBuyTickets}
-                        disabled={ticketLoading}
-                        className="bg-green-600 hover:bg-green-700 text-white"
-                      >
-                        {ticketLoading ? 'Opening...' : `Buy Tickets · $${((ticketInfo.price_cents * ticketQty) / 100).toFixed(2)}`}
-                      </Button>
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-muted-foreground">Qty:</label>
+                        <select
+                          className="h-9 w-16 rounded-md border border-input bg-background px-2 text-sm"
+                          value={ticketQty}
+                          onChange={(e) => setTicketQty(Number(e.target.value))}
+                          disabled={ticketLoading}
+                        >
+                          {Array.from({ length: Math.min(10, Math.max(0, ticketInfo.quantity - ticketInfo.sold)) }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n}>{n}</option>
+                          ))}
+                        </select>
+                        <Button
+                          onClick={handleBuyTickets}
+                          disabled={ticketLoading}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          {ticketLoading
+                            ? 'Opening...'
+                            : ticketCreditsToApply > 0 && ticketRemainingCents <= 0
+                              ? `Confirm with ${ticketCreditsToApply} credit${ticketCreditsToApply === 1 ? '' : 's'}`
+                              : `Buy Tickets · $${(ticketRemainingCents / 100).toFixed(2)}`}
+                        </Button>
+                      </div>
+                      {availableTicketCredits > 0 && (
+                        <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border border-border">
+                          <label className="flex items-center gap-2 cursor-pointer text-foreground font-medium">
+                            <input
+                              type="checkbox"
+                              checked={applyCreditsToTickets}
+                              onChange={(e) => setApplyCreditsToTickets(e.target.checked)}
+                              disabled={ticketLoading}
+                              className="h-4 w-4 accent-green-600"
+                            />
+                            Use my credits (you have {availableTicketCredits})
+                          </label>
+                          {applyCreditsToTickets && ticketCreditsToApply > 0 && (
+                            <div className="text-right space-y-0.5">
+                              <div>Ticket total: ${(ticketTotalCents / 100).toFixed(2)}</div>
+                              <div className="text-green-700 dark:text-green-400">
+                                Credits applied: -${(ticketCreditsAppliedCents / 100).toFixed(2)} ({ticketCreditsToApply} credit{ticketCreditsToApply === 1 ? '' : 's'})
+                              </div>
+                              {ticketRemainingCents > 0 ? (
+                                <div className="font-semibold text-foreground">Charged to card: ${(ticketRemainingCents / 100).toFixed(2)}</div>
+                              ) : (
+                                <div className="font-semibold text-foreground">Fully covered — no card charge!</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <Badge variant="destructive">Sold Out</Badge>
                   )}
                 </div>
               ) : event.event_type === 'booked_show' ? (
-                <Badge variant="outline">Invite only</Badge>
+                !isAudienceUser && (
+                  <Badge variant="outline">Invite only</Badge>
+                )
               ) : (
               profile && (
                 event.tickets_enabled && event.external_event && event.external_ticket_url ? (
@@ -1297,7 +1402,7 @@ export default function EventDetailsPage() {
         <Card className="mb-6 rounded-none sm:rounded-lg border-x-0 sm:border-x">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="text-lg md:text-xl">
-              Confirmed Attendees ({confirmedBookings.length})
+              {event.event_type === 'booked_show' ? 'Lineup' : 'Confirmed Attendees'} ({confirmedBookings.length})
             </CardTitle>
             <div className="flex items-center gap-2">
               <Button
@@ -1331,7 +1436,9 @@ export default function EventDetailsPage() {
           <CardContent>
 
             {confirmedBookings.length === 0 ? (
-              <p className="text-muted-foreground text-center py-6 text-sm">No confirmed attendees yet</p>
+              <p className="text-muted-foreground text-center py-6 text-sm">
+                {event.event_type === 'booked_show' ? 'Lineup coming soon' : 'No confirmed attendees yet'}
+              </p>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
                 {confirmedBookings.map((booking, index) => (

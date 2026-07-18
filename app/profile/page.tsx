@@ -101,6 +101,7 @@ export default function ProfilePage() {
   const [privateFeedbackLoaded, setPrivateFeedbackLoaded] = useState(false)
   const [privateFeedbackExpanded, setPrivateFeedbackExpanded] = useState(false)
   const [myBookings, setMyBookings] = useState<any[]>([])
+  const [myTickets, setMyTickets] = useState<any[]>([])
   const [myCoupons, setMyCoupons] = useState<MyCoupon[]>([])
   const [eventConfirmedCounts, setEventConfirmedCounts] = useState<Record<string, number>>({})
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -251,7 +252,7 @@ export default function ProfilePage() {
       })
 
       // Load all three booking/invite datasets in parallel — all only need userId
-      const [bookingsResult, bookingsFullResult] = await Promise.all([
+      const [bookingsResult, bookingsFullResult, ticketsResult] = await Promise.all([
         supabase
           .from('bookings')
           .select('id, event_id, credits_used, status, attendance_status, waitlist_position, booked_at, events (id, title, date, location, status)')
@@ -263,6 +264,12 @@ export default function ProfilePage() {
           .select('*, events (*)')
           .eq('user_id', userId)
           .in('status', ['confirmed', 'waitlist', 'cancelled']),
+        supabase
+          .from('ticket_purchases')
+          .select('id, event_id, quantity, total_cents, unit_price_cents, status, created_at, events (*)')
+          .eq('user_id', userId)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false }),
       ])
 
       if (bookingsResult.error) throw bookingsResult.error
@@ -302,6 +309,12 @@ export default function ProfilePage() {
             setEventConfirmedCounts(counts)
           }
         }
+      }
+
+      if (!ticketsResult.error) {
+        setMyTickets(ticketsResult.data || [])
+      } else {
+        setMyTickets([])
       }
 
       // Load coupons, push prefs, poster automation, and private feedback in parallel
@@ -1492,7 +1505,13 @@ export default function ProfilePage() {
                         b.status !== 'cancelled' &&
                         b.events.status !== 'cancelled'
                     )
-                    if (activeUpcomingBookings.length === 0) {
+                    const activeUpcomingTickets = myTickets.filter(
+                      (t) =>
+                        t.events &&
+                        new Date(t.events.date) >= currentTime &&
+                        t.events.status !== 'cancelled'
+                    )
+                    if (activeUpcomingBookings.length === 0 && activeUpcomingTickets.length === 0) {
                       return (
                         <Card>
                           <CardContent className="p-8 text-center text-muted-foreground">
@@ -1503,6 +1522,64 @@ export default function ProfilePage() {
                     }
                     return (
                       <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3 -mx-4 sm:mx-0 px-0">
+                        {activeUpcomingTickets.map((ticket) => {
+                          const event = ticket.events
+                          const eventDate = new Date(event.date)
+                          const diffMs = eventDate.getTime() - currentTime.getTime()
+                          const isPast = diffMs < 0
+                          let timeDisplay = ''
+                          if (!isPast) {
+                            const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+                            const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+                            const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
+                            const parts = []
+                            if (days > 0) parts.push(`${days}d`)
+                            if (hours > 0 || days > 0) parts.push(`${hours}h`)
+                            if (days === 0) parts.push(`${minutes}m`)
+                            timeDisplay = parts.join(' ') || '0m'
+                          }
+                          return (
+                            <Link key={`ticket-${ticket.id}`} href={`/tickets/${ticket.id}`} className="block active:opacity-90">
+                              <Card className="hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40 rounded-none sm:rounded-lg border-x-0 sm:border-x border-l-0 sm:border-l-4 sm:border-l-green-500">
+                                <CardHeader className="pb-3">
+                                  <div className="flex justify-between items-start gap-2">
+                                    <CardTitle className="text-base md:text-lg flex-1">{event.title}</CardTitle>
+                                    {!isPast && (
+                                      <Badge variant="outline" className="text-green-600 border-green-600 ml-2 shrink-0">
+                                        🎟️ {ticket.quantity} ticket{ticket.quantity !== 1 ? 's' : ''}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </CardHeader>
+                                <CardContent className="space-y-2">
+                                  <div className="text-xs text-muted-foreground space-y-2">
+                                    <div className="flex items-center gap-1">
+                                      <span>📅</span>
+                                      <span>{formatDateTime(event.date)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span>📍</span>
+                                      <span>{formatVenueName(event.location)}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs pt-1">
+                                    <span className="text-muted-foreground">
+                                      ${(Number(ticket.total_cents || 0) / 100).toFixed(2)} CAD
+                                    </span>
+                                    {!isPast ? (
+                                      <Badge variant="secondary" className="text-xs">⏰ In {timeDisplay}</Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-xs">✓ Completed</Badge>
+                                    )}
+                                  </div>
+                                  <Button asChild size="sm" className="w-full mt-1">
+                                    <span>Go to ticket</span>
+                                  </Button>
+                                </CardContent>
+                              </Card>
+                            </Link>
+                          )
+                        })}
                         {activeUpcomingBookings.map((booking) => {
                           const eventDate = new Date(booking.events.date)
                           const now = currentTime

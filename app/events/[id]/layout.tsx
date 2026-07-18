@@ -96,10 +96,28 @@ export default async function EventLayout({ children, params }: Props) {
               </div>
             )}
 
-            <div className="space-y-1">
+            <div className="space-y-2">
               <h1 className="text-2xl font-bold tracking-tight text-yellow-400">{event.title}</h1>
               {event.communityName && (
                 <p className="text-sm text-stone-400">{event.communityName}</p>
+              )}
+              {/* Eventbrite-style price chip — the first thing a ticket buyer should see */}
+              {event.eventType === 'booked_show' && (
+                <div>
+                  {event.isFree ? (
+                    <span className="inline-flex items-center rounded-full bg-emerald-400/15 px-3 py-1 text-sm font-bold text-emerald-400">
+                      Free
+                    </span>
+                  ) : event.ticketPriceCents ? (
+                    <span className="inline-flex items-center rounded-full bg-yellow-400/15 px-3 py-1 text-sm font-bold text-yellow-400">
+                      ${(event.ticketPriceCents / 100).toFixed(2)} CAD {event.ticketAvailability === 'SoldOut' ? '· Sold Out' : ''}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-zinc-700 px-3 py-1 text-sm font-medium text-stone-300">
+                      Tickets on sale soon
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
@@ -120,24 +138,24 @@ export default async function EventLayout({ children, params }: Props) {
                   </span>
                 </p>
               )}
-              <p className="flex items-center gap-2">
-                <span>🎤</span>
-                {event.eventType === 'booked_show' ? (
-                  <span>Special Acts</span>
-                ) : (
-                  <span>{event.spotsConfirmed} performer{event.spotsConfirmed !== 1 ? 's' : ''} signed up</span>
-                )}
-              </p>
-              <p className="flex items-center gap-2">
-                <span>{event.isFree ? '🆓' : '🎟️'}</span>
-                <span>
-                  {event.isFree
-                    ? 'Free event'
-                    : event.ticketPriceCents
-                      ? `Tickets from $${(event.ticketPriceCents / 100).toFixed(2)}`
-                      : 'Ticketed event'}
-                </span>
-              </p>
+              {event.eventType !== 'booked_show' && (
+                <>
+                  <p className="flex items-center gap-2">
+                    <span>🎤</span>
+                    <span>{event.spotsConfirmed} performer{event.spotsConfirmed !== 1 ? 's' : ''} signed up</span>
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span>{event.isFree ? '🆓' : '🎟️'}</span>
+                    <span>
+                      {event.isFree
+                        ? 'Free event'
+                        : event.ticketPriceCents
+                          ? `Tickets from $${(event.ticketPriceCents / 100).toFixed(2)}`
+                          : 'Ticketed event'}
+                    </span>
+                  </p>
+                </>
+              )}
             </div>
 
             {event.description && (
@@ -152,7 +170,7 @@ export default async function EventLayout({ children, params }: Props) {
             {event.performerLineup.filter((p) => p.status === 'confirmed').length > 0 && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 mb-3">
-                  {event.eventType === 'booked_show' ? 'Special Acts' : `Lineup (${event.performerLineup.filter((p) => p.status === 'confirmed').length})`}
+                  Lineup ({event.performerLineup.filter((p) => p.status === 'confirmed').length})
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {event.performerLineup
@@ -201,6 +219,13 @@ export default async function EventLayout({ children, params }: Props) {
               eventType={event.eventType}
               isCancelled={event.isCancelled}
               isPast={isPast}
+              ticketsEnabled={event.ticketsEnabled}
+              ticketPriceCents={event.ticketPriceCents}
+              ticketQuantity={event.ticketQuantity}
+              ticketSold={event.ticketSold}
+              ticketUrl={event.ticketUrl}
+              isFree={event.isFree}
+              redeemableCredits={event.redeemableCredits}
             />
 
             {INSTALL_PROMPT_ENABLED && <PublicInstallBanner />}

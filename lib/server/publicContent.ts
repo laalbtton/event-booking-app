@@ -15,6 +15,7 @@ type EventRow = {
   external_event: boolean
   external_ticket_url: string | null
   credits_required: number
+  audience_deposit_credits?: number | null
   location: string | null
   venue_id: string | null
   host_user_id: string | null
@@ -80,6 +81,8 @@ export type PublicEventDetails = {
   ticketQuantity: number | null
   ticketSold: number | null
   ticketAvailability: 'InStock' | 'SoldOut'
+  /** Credits that can redeem toward / with this ticketed event (stored as audience_deposit_credits). */
+  redeemableCredits: number | null
   locationText: string
   venue: {
     name: string
@@ -192,7 +195,14 @@ function inferCityRegionFromLocation(location: string | null): { city: string; r
 }
 
 const EVENT_SELECT =
-  'id, slug, title, description, date, end_time, status, tickets_enabled, external_event, external_ticket_url, credits_required, location, venue_id, host_user_id, created_at, updated_at, poster_url, event_type, open_mic_type, series_id'
+  'id, slug, title, description, date, end_time, status, tickets_enabled, external_event, external_ticket_url, credits_required, audience_deposit_credits, location, venue_id, host_user_id, created_at, updated_at, poster_url, event_type, open_mic_type, series_id'
+
+/** Ticketed events are never advertised as free just because the ticket row failed to load. */
+function computePublicIsFree(ticketsEnabled: boolean, ticket: { price_cents?: number | null } | null): boolean {
+  if (!ticketsEnabled) return true
+  if (!ticket) return false
+  return Number(ticket.price_cents || 0) <= 0
+}
 
 type PublicEventVenue = PublicEventDetails['venue']
 
@@ -320,8 +330,9 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
   const spotsConfirmed = performerLineup.filter((p) => p.status === 'confirmed').length
 
   const ticket = ticketRes.data || null
-  const isFree = !eventData.tickets_enabled || (ticket ? Number(ticket.price_cents || 0) <= 0 : true)
+  const isFree = computePublicIsFree(!!eventData.tickets_enabled, ticket)
   const soldOut = !!ticket && Number(ticket.sold || 0) >= Number(ticket.quantity || 0) && Number(ticket.quantity || 0) > 0
+  const redeemableCredits = Math.max(0, Number(eventData.audience_deposit_credits || 0))
 
   const communityRow = (primaryCommunityRes.data as any)?.communities as { id: string; name: string; slug: string | null } | null | undefined
 
@@ -341,6 +352,7 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
     ticketQuantity: ticket ? Number(ticket.quantity || 0) : null,
     ticketSold: ticket ? Number(ticket.sold || 0) : null,
     ticketAvailability: soldOut ? 'SoldOut' : 'InStock',
+    redeemableCredits: redeemableCredits > 0 ? redeemableCredits : null,
     locationText: eventData.location || '',
     venue,
     organizerName: hostRes.data?.full_name || 'One Mic Stand',
@@ -489,8 +501,9 @@ export async function listPublicEvents(
     const audienceExpectedCount = bookings.filter((b) => b.booking_scope === 'audience').length
 
     const ticket = ticketByEvent.get(eventData.id) || null
-    const isFree = !eventData.tickets_enabled || (ticket ? Number(ticket.price_cents || 0) <= 0 : true)
+    const isFree = computePublicIsFree(!!eventData.tickets_enabled, ticket)
     const soldOut = !!ticket && Number(ticket.sold || 0) >= Number(ticket.quantity || 0) && Number(ticket.quantity || 0) > 0
+    const redeemableCredits = Math.max(0, Number(eventData.audience_deposit_credits || 0))
 
     const communityRow = communityByEvent.get(eventData.id) || null
 
@@ -510,6 +523,7 @@ export async function listPublicEvents(
       ticketQuantity: ticket ? Number(ticket.quantity || 0) : null,
       ticketSold: ticket ? Number(ticket.sold || 0) : null,
       ticketAvailability: soldOut ? 'SoldOut' : 'InStock',
+      redeemableCredits: redeemableCredits > 0 ? redeemableCredits : null,
       locationText: (eventData.location as string) || '',
       venue,
       organizerName: hostRaw?.full_name || 'One Mic Stand',
@@ -614,8 +628,9 @@ export async function fetchEventsByIds(eventIds: string[]): Promise<PublicEventD
       }))
     const spotsConfirmed = performerLineup.filter((p) => p.status === 'confirmed').length
     const ticket = ticketByEvent.get(eventData.id) || null
-    const isFree = !eventData.tickets_enabled || (ticket ? Number(ticket.price_cents || 0) <= 0 : true)
+    const isFree = computePublicIsFree(!!eventData.tickets_enabled, ticket)
     const soldOut = !!ticket && Number(ticket.sold || 0) >= Number(ticket.quantity || 0) && Number(ticket.quantity || 0) > 0
+    const redeemableCredits = Math.max(0, Number(eventData.audience_deposit_credits || 0))
     const communityRow = communityByEvent.get(eventData.id) || null
     return {
       id: eventData.id as string, slug: (eventData.slug as string | null) || null,
@@ -628,7 +643,8 @@ export async function fetchEventsByIds(eventIds: string[]): Promise<PublicEventD
       ticketPriceCents: ticket ? Number(ticket.price_cents || 0) : null,
       ticketQuantity: ticket ? Number(ticket.quantity || 0) : null,
       ticketSold: ticket ? Number(ticket.sold || 0) : null,
-      ticketAvailability: soldOut ? 'SoldOut' : 'InStock',
+      ticketAvailability: (soldOut ? 'SoldOut' : 'InStock') as 'InStock' | 'SoldOut',
+      redeemableCredits: redeemableCredits > 0 ? redeemableCredits : null,
       locationText: (eventData.location as string) || '', venue,
       organizerName: hostRaw?.full_name || 'One Mic Stand',
       organizerId: (eventData.host_user_id as string | null) || null,

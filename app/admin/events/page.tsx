@@ -457,7 +457,8 @@ export default function AdminEventsPage() {
         food_coupon_value_cents: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_value_cents || '0') : 0,
         food_coupon_expires_hours: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_expires_hours || '24') : 24,
         max_attendees: formData.max_attendees ? parseInt(formData.max_attendees) : null,
-        cancellation_hours: isBookedShow ? 0 : parseInt(formData.cancellation_hours),
+        // Open mics: spot cancellation policy. Booked shows: ticket cancellation policy (defaults to 24h).
+        cancellation_hours: parseInt(formData.cancellation_hours) || (isBookedShow ? 24 : 4),
         registration_opens_at: formData.open_registration_now 
           ? null 
           : formData.registration_opens_at 
@@ -486,13 +487,17 @@ export default function AdminEventsPage() {
       if (formData.tickets_enabled && !formData.external_event) {
         const ticketPrice = Math.round(parseFloat(formData.ticket_price) * 100)
         const ticketQuantity = parseInt(formData.ticket_quantity)
-        await supabase.from('event_tickets').insert({
+        const { error: ticketError } = await supabase.from('event_tickets').insert({
           event_id: data.id,
           name: 'General Admission',
           price_cents: ticketPrice,
           quantity: ticketQuantity,
           sold: 0,
         })
+        if (ticketError) {
+          console.error('Error saving ticket price:', ticketError)
+          throw ticketError
+        }
       }
 
       toast.success('Event created successfully!')
@@ -680,7 +685,8 @@ export default function AdminEventsPage() {
         food_coupon_value_cents: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_value_cents || '0') : 0,
         food_coupon_expires_hours: !isBookedShow && !isTicketed && formData.food_coupon_enabled ? parseInt(formData.food_coupon_expires_hours || '24') : 24,
         max_attendees: nextMax,
-        cancellation_hours: isBookedShow ? 0 : parseInt(formData.cancellation_hours),
+        // Open mics: spot cancellation policy. Booked shows: ticket cancellation policy (defaults to 24h).
+        cancellation_hours: parseInt(formData.cancellation_hours) || (isBookedShow ? 24 : 4),
         registration_opens_at: formData.open_registration_now 
           ? null 
           : formData.registration_opens_at 
@@ -707,12 +713,19 @@ export default function AdminEventsPage() {
       if (formData.tickets_enabled && !formData.external_event) {
         const ticketPrice = Math.round(parseFloat(formData.ticket_price) * 100)
         const ticketQuantity = parseInt(formData.ticket_quantity)
-        await supabase.from('event_tickets').upsert({
-          event_id: editingEvent.id,
-          name: 'General Admission',
-          price_cents: ticketPrice,
-          quantity: ticketQuantity,
-        })
+        const { error: ticketError } = await supabase.from('event_tickets').upsert(
+          {
+            event_id: editingEvent.id,
+            name: 'General Admission',
+            price_cents: ticketPrice,
+            quantity: ticketQuantity,
+          },
+          { onConflict: 'event_id' }
+        )
+        if (ticketError) {
+          console.error('Error saving ticket price:', ticketError)
+          throw ticketError
+        }
       }
 
       const isVarietyForPromotions =
@@ -1021,7 +1034,9 @@ export default function AdminEventsPage() {
                   <p>{event.credits_required} credits</p>
                 )}
                 {event.max_attendees && <p>Max {event.max_attendees} attendees</p>}
-                {event.event_type !== 'booked_show' && (
+                {event.event_type === 'booked_show' ? (
+                  <p>Ticket cancellation: up to {event.cancellation_hours || 24} hours before showtime</p>
+                ) : (
                   <p>Cancel up to {event.cancellation_hours || 4} hours before</p>
                 )}
             </div>
@@ -1245,7 +1260,7 @@ export default function AdminEventsPage() {
                             open_mic_type: nextType === 'open_mic' ? (formData.open_mic_type || 'comedy_open_mic') : null as any,
                             variety_use_max_attendees: nextType === 'open_mic' ? formData.variety_use_max_attendees : false,
                             credits_required: nextType === 'booked_show' ? '0' : formData.credits_required || '5',
-                            cancellation_hours: nextType === 'booked_show' ? '0' : formData.cancellation_hours || '4',
+                            cancellation_hours: nextType === 'booked_show' ? '24' : formData.cancellation_hours || '4',
                           })
                         }}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500"
@@ -1431,22 +1446,24 @@ export default function AdminEventsPage() {
               </div>
 
               <div>
-                <Label htmlFor="edit-cancel">Cancel Hours *</Label>
+                <Label htmlFor="edit-cancel">
+                  {formData.event_type === 'booked_show' ? 'Ticket Cancellation Hours *' : 'Cancel Hours *'}
+                </Label>
                 <Input
                   id="edit-cancel"
                   type="number"
                   value={formData.cancellation_hours}
                   onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
                   min="0"
-                disabled={formData.event_type === 'booked_show'}
+                disabled={formData.event_type !== 'booked_show' && formData.tickets_enabled}
                   required
                 />
                 <p className="text-xs text-muted-foreground mt-1">
                   {formData.event_type === 'booked_show'
-                    ? 'Not applicable for booked shows'
+                    ? 'Hours before showtime that ticket buyers can cancel for a full credit refund (ticket cancellation policy)'
                     : formData.tickets_enabled
                       ? 'Not applicable for ticketed events'
-                      : 'Hours before event to allow cancellation with refund'}
+                      : 'Hours before event to allow spot cancellation with refund'}
                 </p>
               </div>
             </div>
@@ -1870,7 +1887,7 @@ export default function AdminEventsPage() {
                             open_mic_type: nextType === 'open_mic' ? (formData.open_mic_type || 'comedy_open_mic') : null as any,
                             variety_use_max_attendees: nextType === 'open_mic' ? formData.variety_use_max_attendees : false,
                             credits_required: nextType === 'booked_show' ? '0' : formData.credits_required || '5',
-                            cancellation_hours: nextType === 'booked_show' ? '0' : formData.cancellation_hours || '4',
+                            cancellation_hours: nextType === 'booked_show' ? '24' : formData.cancellation_hours || '4',
                           })
                         }}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500"
@@ -2047,22 +2064,24 @@ export default function AdminEventsPage() {
                 </div>
 
                 <div>
-                <Label htmlFor="create-cancel">Cancel Hours *</Label>
+                <Label htmlFor="create-cancel">
+                  {formData.event_type === 'booked_show' ? 'Ticket Cancellation Hours *' : 'Cancel Hours *'}
+                </Label>
                 <Input
                   id="create-cancel"
                     type="number"
                     value={formData.cancellation_hours}
                     onChange={(e) => setFormData({ ...formData, cancellation_hours: e.target.value })}
                     min="0"
-                disabled={formData.event_type === 'booked_show'}
+                disabled={formData.event_type !== 'booked_show' && formData.tickets_enabled}
                     required
                   />
                 <p className="text-xs text-muted-foreground mt-1">
                   {formData.event_type === 'booked_show'
-                    ? 'Not applicable for booked shows'
+                    ? 'Hours before showtime that ticket buyers can cancel for a full credit refund (ticket cancellation policy)'
                     : formData.tickets_enabled
                       ? 'Not applicable for ticketed events'
-                      : 'Hours before event to allow cancellation with refund'}
+                      : 'Hours before event to allow spot cancellation with refund'}
                 </p>
                 </div>
               </div>

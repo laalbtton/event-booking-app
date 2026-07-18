@@ -1023,9 +1023,18 @@ export function getTicketPurchaseEmail(data: {
   unitPriceCents: number
   totalCents: number
   eventUrl: string
+  creditsAppliedCents?: number
 }): string {
   const total = (data.totalCents / 100).toFixed(2)
   const unit = (data.unitPriceCents / 100).toFixed(2)
+  const creditsAppliedCents = data.creditsAppliedCents || 0
+  const chargedCents = Math.max(0, data.totalCents - creditsAppliedCents)
+  const breakdownRows = creditsAppliedCents > 0
+    ? `
+              <p style="margin: 6px 0; font-size: 14px;"><strong>Ticket value:</strong> $${total} CAD</p>
+              <p style="margin: 6px 0; font-size: 14px; color: #059669;"><strong>Credits applied:</strong> -$${(creditsAppliedCents / 100).toFixed(2)} CAD</p>
+              <p style="margin: 6px 0; font-size: 14px;"><strong>Charged to card:</strong> $${(chargedCents / 100).toFixed(2)} CAD</p>`
+    : `<p style="margin: 6px 0; font-size: 14px;"><strong>Total paid:</strong> $${total} CAD</p>`
   return `
     <!DOCTYPE html><html>
       <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -1045,7 +1054,7 @@ export function getTicketPurchaseEmail(data: {
             ${data.venueName ? `<div style="font-size: 14px; color: #374151; margin-bottom: 20px;">📍 ${data.venueName}</div>` : ''}
             <div style="border-top: 1px solid #bfdbfe; padding-top: 16px; margin-top: 16px;">
               <p style="margin: 6px 0; font-size: 14px;"><strong>Tickets:</strong> ${data.quantity} × $${unit} CAD</p>
-              <p style="margin: 6px 0; font-size: 14px;"><strong>Total paid:</strong> $${total} CAD</p>
+              ${breakdownRows}
             </div>
             <div style="text-align: center; margin-top: 20px;">
               <a href="${data.eventUrl}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">View Event Details →</a>
@@ -1053,6 +1062,56 @@ export function getTicketPurchaseEmail(data: {
           </div>
           <p style="font-size: 14px; color: #6b7280; margin: 0;">
             Please bring this email or your payment confirmation to the event. See you there! 🎤
+          </p>
+        </div>
+        <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
+          <p style="margin: 0;">© 2025 One Mic Stand. All rights reserved.</p>
+        </div>
+      </body>
+    </html>`
+}
+
+export function getTicketRefundEmail(data: {
+  buyerName: string
+  eventTitle: string
+  eventDate: string
+  venueName: string | null
+  quantity: number
+  totalCents: number
+  creditsRefunded: number
+  newCreditBalance: number
+  eventUrl: string
+}): string {
+  const total = (data.totalCents / 100).toFixed(2)
+  return `
+    <!DOCTYPE html><html>
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f3f4f6;">
+        <div style="background: linear-gradient(135deg, #64748b 0%, #334155 100%); padding: 32px 30px; text-align: center; border-radius: 12px 12px 0 0;">
+          <p style="color: rgba(255,255,255,0.8); font-size: 13px; margin: 0 0 6px 0; letter-spacing: 1px; text-transform: uppercase;">One Mic Stand</p>
+          <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">🔁 Tickets cancelled &amp; refunded</h1>
+        </div>
+        <div style="background: #ffffff; padding: 28px 30px; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb; border-top: none;">
+          <p style="font-size: 16px; margin: 0 0 16px 0;">Hi ${data.buyerName || 'there'},</p>
+          <p style="font-size: 15px; color: #374151; margin: 0 0 24px 0; line-height: 1.7;">
+            Your tickets for the show below have been cancelled. We've added the full value back to your account as app credits — no card refund needed, and no waiting.
+          </p>
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px 24px; margin: 0 0 24px 0;">
+            <h2 style="font-size: 20px; font-weight: 700; color: #1f2937; margin: 0 0 12px 0;">${data.eventTitle}</h2>
+            <div style="font-size: 14px; color: #374151; margin-bottom: 6px;">📅 ${data.eventDate}</div>
+            ${data.venueName ? `<div style="font-size: 14px; color: #374151; margin-bottom: 20px;">📍 ${data.venueName}</div>` : ''}
+            <div style="border-top: 1px solid #bbf7d0; padding-top: 16px; margin-top: 16px;">
+              <p style="margin: 6px 0; font-size: 14px;"><strong>Tickets cancelled:</strong> ${data.quantity}</p>
+              <p style="margin: 6px 0; font-size: 14px;"><strong>Ticket value:</strong> $${total} CAD</p>
+              <p style="margin: 6px 0; font-size: 14px; color: #059669;"><strong>Credits refunded:</strong> +${data.creditsRefunded} credit${data.creditsRefunded === 1 ? '' : 's'}</p>
+              <p style="margin: 6px 0; font-size: 14px;"><strong>New credit balance:</strong> ${data.newCreditBalance} credits</p>
+            </div>
+            <div style="text-align: center; margin-top: 20px;">
+              <a href="${data.eventUrl}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">View Event Details →</a>
+            </div>
+          </div>
+          <p style="font-size: 14px; color: #6b7280; margin: 0;">
+            Your credits are ready to use on any upcoming show. Hope to see you at one soon! 🎤
           </p>
         </div>
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">

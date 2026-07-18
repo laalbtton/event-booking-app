@@ -5,6 +5,7 @@ import type Stripe from 'stripe'
 import { sendEmail, getCreditPurchaseEmail, getTicketPurchaseEmail } from '@/lib/email'
 import { formatDateTimeEastern } from '@/lib/dateUtils'
 import { buildEventUrl, getSiteUrl } from '@/lib/server/emailUrl'
+import { splitDeduction } from '@/lib/creditLedger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -160,10 +161,20 @@ async function handleTicketPurchase(session: Stripe.Checkout.Session): Promise<N
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { eventId, ticketId, quantity: qtyStr, unitPriceCents: unitStr } = session.metadata!
+  const {
+    eventId,
+    ticketId,
+    quantity: qtyStr,
+    unitPriceCents: unitStr,
+    totalCents: totalStr,
+    creditsAppliedCents: creditsAppliedStr,
+    userId: metadataUserId,
+  } = session.metadata!
   const quantity = Number(qtyStr || 1)
   const unitPriceCents = Number(unitStr || 0)
-  const totalCents = session.amount_total || unitPriceCents * quantity
+  const creditsAppliedCents = Number(creditsAppliedStr || 0)
+  // totalCents is the full ticket value; the Stripe charge only covers the remainder after credits.
+  const totalCents = Number(totalStr || 0) || (session.amount_total || 0) + creditsAppliedCents || unitPriceCents * quantity
   const stripeSessionId = session.id
   const paymentIntentId = session.payment_intent as string | null
 
@@ -182,9 +193,11 @@ async function handleTicketPurchase(session: Stripe.Checkout.Session): Promise<N
   const buyerEmail = session.customer_details?.email || null
   const buyerName = session.customer_details?.name || null
 
-  // Look up user by email (optional link)
-  let userId: string | null = null
-  if (buyerEmail) {
+  // Prefer the authenticated user id passed at checkout creation time — reliable even
+  // if the buyer's Stripe checkout email differs from their account email. Fall back
+  // to an email match for true guest checkouts.
+  let userId: string | null = metadataUserId || null
+  if (!userId && buyerEmail) {
     const { data: profile } = await serviceClient
       .from('profiles')
       .select('id')
@@ -194,19 +207,62 @@ async function handleTicketPurchase(session: Stripe.Checkout.Session): Promise<N
   }
 
   // Insert ticket_purchases record
-  await serviceClient.from('ticket_purchases').insert({
-    event_id: eventId,
-    stripe_session_id: stripeSessionId,
-    stripe_payment_intent: paymentIntentId,
-    user_id: userId,
-    buyer_name: buyerName,
-    buyer_email: buyerEmail,
-    quantity,
-    unit_price_cents: unitPriceCents,
-    total_cents: totalCents,
-    currency: session.currency || 'cad',
-    status: 'completed',
-  })
+  const { data: insertedPurchase } = await serviceClient
+    .from('ticket_purchases')
+    .insert({
+      event_id: eventId,
+      stripe_session_id: stripeSessionId,
+      stripe_payment_intent: paymentIntentId,
+      user_id: userId,
+      buyer_name: buyerName,
+      buyer_email: buyerEmail,
+      quantity,
+      unit_price_cents: unitPriceCents,
+      total_cents: totalCents,
+      credits_applied_cents: creditsAppliedCents,
+      currency: session.currency || 'cad',
+      status: 'completed',
+    })
+    .select('id')
+    .maybeSingle()
+
+  // Debit the credits the buyer chose to apply toward this purchase. This only happens now
+  // (payment confirmed) rather than at checkout creation, so abandoned Stripe sessions never
+  // cost the buyer any credits.
+  if (creditsAppliedCents > 0 && userId) {
+    const creditsToApply = Math.round(creditsAppliedCents / 100)
+    const { data: buyerProfile } = await serviceClient
+      .from('profiles')
+      .select('credits, credits_purchased, credits_complimentary')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (buyerProfile) {
+      const purchased = buyerProfile.credits_purchased ?? 0
+      const complimentary = buyerProfile.credits_complimentary ?? 0
+      const split = splitDeduction(purchased, complimentary, creditsToApply)
+
+      await serviceClient
+        .from('profiles')
+        .update({
+          credits: Math.max(0, Number(buyerProfile.credits || 0) - creditsToApply),
+          credits_purchased: Math.max(0, purchased - split.purchasedUsed),
+          credits_complimentary: Math.max(0, complimentary - split.complimentaryUsed),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId)
+
+      await serviceClient.from('credit_transactions').insert({
+        user_id: userId,
+        amount: -creditsToApply,
+        transaction_type: 'ticket_purchase',
+        reference_id: insertedPurchase?.id || null,
+        notes: `Tickets purchased with credits: event ${eventId}`,
+      })
+    } else {
+      console.error('Could not find profile to debit ticket credits for user:', userId)
+    }
+  }
 
   // Increment sold count on event_tickets
   const { data: ticketRow } = await serviceClient
@@ -236,6 +292,7 @@ async function handleTicketPurchase(session: Stripe.Checkout.Session): Promise<N
       const origin = getSiteUrl()
       const html = getTicketPurchaseEmail({
         buyerName: buyerName || 'there',
+        creditsAppliedCents,
         eventTitle: eventRow.title as string,
         eventDate,
         venueName,

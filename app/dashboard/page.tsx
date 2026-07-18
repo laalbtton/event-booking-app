@@ -115,6 +115,10 @@ export default function Dashboard() {
   const [events, setEvents] = useState<Event[]>([])
   /** Venue rows keyed by id — used for city / name on Perform tab filters */
   const [venueById, setVenueById] = useState<Record<string, { name: string; city: string | null }>>({})
+  /** Ticket price/availability for booked/ticketed shows, keyed by event id — used for Attend cards */
+  const [ticketByEvent, setTicketByEvent] = useState<Record<string, { price_cents: number; quantity: number; sold: number }>>({})
+  /** User's completed ticket purchases keyed by event id — used to show Go to ticket on Attend cards */
+  const [myTicketsByEvent, setMyTicketsByEvent] = useState<Record<string, { id: string; quantity: number }>>({})
   /** Perform-tab-only filters (dashboard Available Events → Perform); empty array = no filter on that dimension */
   const [performFilterKinds, setPerformFilterKinds] = useState<PerformKindFilter[]>([])
   const [performFilterCities, setPerformFilterCities] = useState<string[]>([])
@@ -1028,6 +1032,27 @@ export default function Dashboard() {
           } else {
             setVenueById({})
           }
+
+          const ticketedEventIds = eventsData
+            .filter((e: Event) => !!e.tickets_enabled)
+            .map((e: Event) => e.id)
+          if (ticketedEventIds.length > 0) {
+            const { data: ticketRows } = await supabase
+              .from('event_tickets')
+              .select('event_id, price_cents, quantity, sold')
+              .in('event_id', ticketedEventIds)
+            const ticketMap: Record<string, { price_cents: number; quantity: number; sold: number }> = {}
+            for (const row of ticketRows || []) {
+              ticketMap[row.event_id as string] = {
+                price_cents: Number(row.price_cents || 0),
+                quantity: Number(row.quantity || 0),
+                sold: Number(row.sold || 0),
+              }
+            }
+            setTicketByEvent(ticketMap)
+          } else {
+            setTicketByEvent({})
+          }
         }
       }
 
@@ -1051,7 +1076,7 @@ export default function Dashboard() {
       }
 
       // Load user-specific data in parallel — all need userId
-      const [bookingsResult, inviteResult, pendingInvitesResult, alertsResult, pushPrefsResult] = await Promise.all([
+      const [bookingsResult, inviteResult, pendingInvitesResult, alertsResult, pushPrefsResult, ticketsResult] = await Promise.all([
         supabase
           .from('bookings')
           .select('*, events (*)')
@@ -1077,10 +1102,31 @@ export default function Dashboard() {
           .select('*')
           .eq('user_id', userId)
           .maybeSingle(),
+        supabase
+          .from('ticket_purchases')
+          .select('id, event_id, quantity, created_at')
+          .eq('user_id', userId)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false }),
       ])
 
       if (bookingsResult.error) throw bookingsResult.error
       setMyBookings(bookingsResult.data || [])
+
+      if (!ticketsResult.error && ticketsResult.data) {
+        const ticketMap: Record<string, { id: string; quantity: number }> = {}
+        for (const row of ticketsResult.data) {
+          const eventId = row.event_id as string
+          if (!ticketMap[eventId]) {
+            ticketMap[eventId] = { id: row.id as string, quantity: Number(row.quantity || 0) }
+          } else {
+            ticketMap[eventId].quantity += Number(row.quantity || 0)
+          }
+        }
+        setMyTicketsByEvent(ticketMap)
+      } else {
+        setMyTicketsByEvent({})
+      }
 
       if (!inviteResult.error && inviteResult.data) {
         setInvitedEventIds(new Set(inviteResult.data.map((invite: any) => invite.event_id)))
@@ -1894,33 +1940,49 @@ export default function Dashboard() {
           {(() => {
             const isAudienceUser = userRole === 'audience'
             const now = new Date()
-            // Perform: open mics only (booked shows are invite-only, performers are notified separately)
-            // Attend: ticketed events + booked shows not already in the invites section
-            const filteredEvents = events.filter((event) =>
-              isAudienceUser
-                ? event.event_type === 'open_mic'
-                : eventTab === 'perform'
-                ? event.event_type === 'open_mic'
-                : event.event_type === 'booked_show'
-                  ? !invitedEventIds.has(event.id)
-                  : event.tickets_enabled && event.event_type !== 'open_mic'
-            )
+            const isAttendView = isAudienceUser || eventTab === 'attend'
+            const isBookedOrTicketedShow = (event: Event) =>
+              event.event_type === 'booked_show' ||
+              (!!event.tickets_enabled && event.event_type !== 'open_mic')
+
+            // Perform: open mics only. Attend: booked/ticketed shows + open mics.
+            const filteredEvents = isAudienceUser
+              ? events.filter(
+                  (event) =>
+                    event.event_type === 'open_mic' || isBookedOrTicketedShow(event),
+                )
+              : eventTab === 'perform'
+                ? events.filter((event) => event.event_type === 'open_mic')
+                : events.filter((event) => {
+                    if (event.event_type === 'booked_show') return !invitedEventIds.has(event.id)
+                    return !!event.tickets_enabled && event.event_type !== 'open_mic'
+                  })
 
             const displayEvents =
               !isAudienceUser && eventTab === 'perform'
                 ? filteredEvents.filter(eventMatchesPerformFilters)
                 : filteredEvents
 
-            const eventsByBucket = {
-              this_week: displayEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'this_week'),
-              next_week: displayEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'next_week'),
-              later: displayEvents.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'later'),
-            }
             const bucketOrder: Array<{ key: 'this_week' | 'next_week' | 'later'; label: string }> = [
               { key: 'this_week', label: 'This week' },
               { key: 'next_week', label: 'Next week' },
               { key: 'later', label: 'Later' },
             ]
+
+            const sections = isAttendView
+              ? [
+                  {
+                    key: 'shows',
+                    label: 'Booked shows',
+                    events: displayEvents.filter(isBookedOrTicketedShow),
+                  },
+                  {
+                    key: 'mics',
+                    label: 'Open mics',
+                    events: displayEvents.filter((e) => !isBookedOrTicketedShow(e)),
+                  },
+                ]
+              : [{ key: 'all', label: null as string | null, events: displayEvents }]
 
             const hiddenByPerformFilter =
               userRole !== 'audience' &&
@@ -1984,11 +2046,33 @@ export default function Dashboard() {
 
             return (
               <div className="space-y-4 -mx-4 sm:mx-0 px-0">
+                {sections.map((section, sectionIndex) => {
+                  if (section.events.length === 0) return null
+                  const eventsByBucket = {
+                    this_week: section.events.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'this_week'),
+                    next_week: section.events.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'next_week'),
+                    later: section.events.filter((e) => getEventTimeBucket(new Date(e.date), now) === 'later'),
+                  }
+                  const showSectionDivider =
+                    isAttendView &&
+                    sectionIndex > 0 &&
+                    sections.slice(0, sectionIndex).some((s) => s.events.length > 0)
+
+                  return (
+                    <div key={section.key} className="space-y-3">
+                      {showSectionDivider && (
+                        <div className="mx-4 border-t border-border" aria-hidden />
+                      )}
+                      {section.label && (
+                        <div className="pl-4 text-base font-bold tracking-tight text-foreground">
+                          {section.label}
+                        </div>
+                      )}
                 {bucketOrder.map(({ key, label }) => {
                   const bucketEvents = eventsByBucket[key]
                   if (bucketEvents.length === 0) return null
                   return (
-                    <div key={key} className="space-y-1.5">
+                    <div key={`${section.key}-${key}`} className="space-y-1.5">
                       <div className="pt-1 first:pt-0 pl-4 text-sm font-semibold text-muted-foreground">
                         {label}
                       </div>
@@ -2232,43 +2316,85 @@ export default function Dashboard() {
                             </div>
                           )}
 
-                          {(event.event_type === 'booked_show' || (event.tickets_enabled && event.event_type !== 'open_mic')) && (
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t">
-                              {event.poster_url && (
-                                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-border bg-muted">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={event.poster_url}
-                                    alt=""
-                                    className="w-full h-full object-cover"
-                                  />
+                          {(event.event_type === 'booked_show' || (event.tickets_enabled && event.event_type !== 'open_mic')) && (() => {
+                            const ticket = ticketByEvent[event.id]
+                            const remaining = ticket ? Math.max(0, ticket.quantity - ticket.sold) : null
+                            const soldOut = ticket != null && remaining === 0
+                            const myTicket = myTicketsByEvent[event.id]
+                            return (
+                              <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                                <div className="text-xs text-muted-foreground">
+                                  {myTicket ? (
+                                    <span className="font-semibold text-sm text-foreground">
+                                      🎟️ {myTicket.quantity} ticket{myTicket.quantity !== 1 ? 's' : ''}
+                                    </span>
+                                  ) : ticket ? (
+                                    <span className="font-semibold text-sm text-foreground">
+                                      ${(ticket.price_cents / 100).toFixed(2)} CAD
+                                    </span>
+                                  ) : event.tickets_enabled ? (
+                                    <span>Tickets available</span>
+                                  ) : (
+                                    <span>Invite only</span>
+                                  )}
+                                  {!myTicket && ticket && remaining != null && remaining > 0 && remaining <= 10 && (
+                                    <span className="ml-1.5 text-orange-600">· {remaining} left</span>
+                                  )}
                                 </div>
-                              )}
-                              {event.tickets_enabled && event.external_event && event.external_ticket_url ? (
-                                <a
-                                  href={event.external_ticket_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Button size="sm" variant="outline" className="text-xs">
-                                    Buy Tickets
-                                  </Button>
-                                </a>
-                              ) : event.tickets_enabled ? (
-                                <Badge variant="outline">Tickets available</Badge>
-                              ) : (
-                                <Badge variant="outline">Invite only</Badge>
-                              )}
-                            </div>
-                          )}
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {event.poster_url && (
+                                    <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-border bg-muted">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={event.poster_url}
+                                        alt=""
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                  )}
+                                  {myTicket ? (
+                                    <Button asChild size="sm" className="text-xs">
+                                      <Link
+                                        href={`/tickets/${myTicket.id}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        Go to ticket
+                                      </Link>
+                                    </Button>
+                                  ) : event.tickets_enabled && event.external_event && event.external_ticket_url ? (
+                                    <a
+                                      href={event.external_ticket_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Button size="sm" variant="outline" className="text-xs">
+                                        Buy Tickets
+                                      </Button>
+                                    </a>
+                                  ) : soldOut ? (
+                                    <Badge variant="destructive">Sold Out</Badge>
+                                  ) : event.tickets_enabled ? (
+                                    <Button size="sm" className="text-xs">
+                                      Get Tickets
+                                    </Button>
+                                  ) : (
+                                    isAudienceUser ? null : <Badge variant="outline">Invite only</Badge>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })()}
                         </CardContent>
                       </Card>
                     </Link>
                   )
                 })}
                       </div>
+                    </div>
+                  )
+                })}
                     </div>
                   )
                 })}
