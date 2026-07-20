@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { CHAI_PROMO_VOUCHER_TYPE } from '@/lib/chaiPromo'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     const { data: voucher, error: voucherError } = await supabase
       .from('booking_vouchers')
-      .select('id, event_id, user_id, code, value_cents, status, expires_at')
+      .select('id, event_id, user_id, venue_id, code, value_cents, voucher_type, status, expires_at')
       .eq('code', code.trim().toUpperCase())
       .single()
 
@@ -54,29 +55,52 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Voucher has expired' }, { status: 400 })
     }
 
-    const { data: event, error: eventError } = await supabase
-      .from('events')
-      .select('id, created_by, host_user_id, venue_id, date, end_time')
-      .eq('id', voucher.event_id)
-      .single()
+    const voucherType = (voucher as { voucher_type?: string }).voucher_type || 'food_coupon'
+    const isPromoChai = voucherType === CHAI_PROMO_VOUCHER_TYPE
+    const isLuckyDraw = voucherType === 'lucky_draw'
+    const isStandaloneVenueVoucher = isPromoChai || (isLuckyDraw && !voucher.event_id)
 
-    if (eventError || !event) {
-      return NextResponse.json({ error: 'Event not found' }, { status: 404 })
-    }
+    let event: {
+      id: string
+      created_by: string | null
+      host_user_id: string | null
+      venue_id: string | null
+      date: string | null
+      end_time: string | null
+    } | null = null
 
-    // Block redemption if the event ended more than 6 hours ago.
-    // This prevents accidental bulk redemption after an event has closed.
-    const REDEMPTION_CUTOFF_HOURS = 24
-    const eventEndRaw = (event as any).end_time || (event as any).date
-    if (eventEndRaw) {
-      const eventEnd = new Date(eventEndRaw)
-      const cutoff = new Date(eventEnd.getTime() + REDEMPTION_CUTOFF_HOURS * 60 * 60 * 1000)
-      if (new Date() > cutoff) {
-        return NextResponse.json(
-          { error: `Coupon redemption window has closed. Vouchers for this event can only be redeemed within ${REDEMPTION_CUTOFF_HOURS} hours of the event ending.` },
-          { status: 400 }
-        )
+    if (voucher.event_id) {
+      const { data: eventRow, error: eventError } = await supabase
+        .from('events')
+        .select('id, created_by, host_user_id, venue_id, date, end_time')
+        .eq('id', voucher.event_id)
+        .single()
+
+      if (eventError || !eventRow) {
+        return NextResponse.json({ error: 'Event not found' }, { status: 404 })
       }
+      event = eventRow
+
+      // Event-tied food coupons: block redemption if the event ended more than 24h ago.
+      // Standalone promo/lucky-draw vouchers are not subject to this cutoff.
+      if (!isPromoChai && !isLuckyDraw) {
+        const REDEMPTION_CUTOFF_HOURS = 24
+        const eventEndRaw = event.end_time || event.date
+        if (eventEndRaw) {
+          const eventEnd = new Date(eventEndRaw)
+          const cutoff = new Date(eventEnd.getTime() + REDEMPTION_CUTOFF_HOURS * 60 * 60 * 1000)
+          if (new Date() > cutoff) {
+            return NextResponse.json(
+              {
+                error: `Coupon redemption window has closed. Vouchers for this event can only be redeemed within ${REDEMPTION_CUTOFF_HOURS} hours of the event ending.`,
+              },
+              { status: 400 }
+            )
+          }
+        }
+      }
+    } else if (!isStandaloneVenueVoucher && !isPromoChai) {
+      return NextResponse.json({ error: 'Voucher is missing event information' }, { status: 400 })
     }
 
     const { data: profile } = await supabase
@@ -92,16 +116,22 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     const isAdmin = profile?.role === 'admin' || !!adminRow
-    const isEventManager = event.created_by === authData.user.id || event.host_user_id === authData.user.id
-    const { data: venueStaffRow } = await supabase
-      .from('venue_staff')
-      .select('id')
-      .eq('user_id', authData.user.id)
-      .eq('venue_id', event.venue_id)
-      .eq('active', true)
-      .maybeSingle()
+    const isEventManager =
+      !!event && (event.created_by === authData.user.id || event.host_user_id === authData.user.id)
 
-    const isVenueStaff = !!venueStaffRow
+    const venueIdForStaff = voucher.venue_id || event?.venue_id || null
+    let isVenueStaff = false
+    if (venueIdForStaff) {
+      const { data: venueStaffRow } = await supabase
+        .from('venue_staff')
+        .select('id')
+        .eq('user_id', authData.user.id)
+        .eq('venue_id', venueIdForStaff)
+        .eq('active', true)
+        .maybeSingle()
+      isVenueStaff = !!venueStaffRow
+    }
+
     if (!isAdmin && !isEventManager && !isVenueStaff) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -138,37 +168,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: auditError.message }, { status: 500 })
     }
 
-    const { data: attendeeProfile, error: attendeeProfileError } = await supabase
-      .from('profiles')
-      .select('credits, credits_complimentary')
-      .eq('id', voucher.user_id)
-      .single()
-
-    if (attendeeProfileError || !attendeeProfile) {
-      return NextResponse.json(
-        { error: attendeeProfileError?.message || 'Failed to load attendee profile for credit return' },
-        { status: 500 }
-      )
-    }
-
-    const redeemedCredits = Math.max(0, Math.ceil(Number(voucher.value_cents || 0) / 100))
-    if (redeemedCredits > 0) {
-      const { error: creditUpdateError } = await supabase
+    // Food coupons return credits on redeem (booking economics). Promo chai is paid up front —
+    // redeeming it only marks the coupon used; do not credit the buyer back.
+    let redeemedCredits = 0
+    if (!isPromoChai && !isLuckyDraw) {
+      const { data: attendeeProfile, error: attendeeProfileError } = await supabase
         .from('profiles')
-        .update({
-          credits: Number(attendeeProfile.credits || 0) + redeemedCredits,
-          credits_complimentary: (attendeeProfile.credits_complimentary ?? 0) + redeemedCredits,
-          updated_at: new Date().toISOString(),
-        })
+        .select('credits, credits_complimentary')
         .eq('id', voucher.user_id)
+        .single()
 
-      if (creditUpdateError) {
-        return NextResponse.json({ error: creditUpdateError.message }, { status: 500 })
+      if (attendeeProfileError || !attendeeProfile) {
+        return NextResponse.json(
+          { error: attendeeProfileError?.message || 'Failed to load attendee profile for credit return' },
+          { status: 500 }
+        )
       }
 
-      const { error: txError } = await supabase
-        .from('credit_transactions')
-        .insert({
+      redeemedCredits = Math.max(0, Math.ceil(Number(voucher.value_cents || 0) / 100))
+      if (redeemedCredits > 0) {
+        const { error: creditUpdateError } = await supabase
+          .from('profiles')
+          .update({
+            credits: Number(attendeeProfile.credits || 0) + redeemedCredits,
+            credits_complimentary: (attendeeProfile.credits_complimentary ?? 0) + redeemedCredits,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', voucher.user_id)
+
+        if (creditUpdateError) {
+          return NextResponse.json({ error: creditUpdateError.message }, { status: 500 })
+        }
+
+        const { error: txError } = await supabase.from('credit_transactions').insert({
           user_id: voucher.user_id,
           amount: redeemedCredits,
           transaction_type: 'food_coupon_redeemed_credit',
@@ -177,8 +209,9 @@ export async function POST(request: NextRequest) {
           created_by: authData.user.id,
         })
 
-      if (txError) {
-        return NextResponse.json({ error: txError.message }, { status: 500 })
+        if (txError) {
+          return NextResponse.json({ error: txError.message }, { status: 500 })
+        }
       }
     }
 
@@ -188,6 +221,7 @@ export async function POST(request: NextRequest) {
       discountCents: updatedVoucher.value_cents,
       redeemedCredits,
       status: updatedVoucher.status,
+      voucherType,
     })
   } catch (error: unknown) {
     console.error('Error redeeming voucher:', error)
@@ -195,4 +229,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
-

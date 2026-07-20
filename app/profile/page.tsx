@@ -107,6 +107,7 @@ export default function ProfilePage() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [showRedeemedCoupons, setShowRedeemedCoupons] = useState(false)
   const [bookingsTab, setBookingsTab] = useState<'bookings' | 'coupons'>('bookings')
+  const [couponsUnreadCount, setCouponsUnreadCount] = useState(0)
   const [cancellingBooking, setCancellingBooking] = useState<string | null>(null)
   const [expandedPosterActions, setExpandedPosterActions] = useState<Set<string>>(new Set())
   const [profileDetailsExpanded, setProfileDetailsExpanded] = useState(false)
@@ -152,6 +153,28 @@ export default function ProfilePage() {
     setLoading(true)
     void loadProfile(user.id)
   }, [authResolved, user, router])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const tab = new URLSearchParams(window.location.search).get('tab')
+    if (tab === 'coupons') setBookingsTab('coupons')
+  }, [])
+
+  useEffect(() => {
+    if (!authResolved || !user) {
+      setCouponsUnreadCount(0)
+      return
+    }
+    void loadCouponsUnreadCount()
+    const onChanged = () => void loadCouponsUnreadCount()
+    window.addEventListener('coupons-unread-changed', onChanged)
+    return () => window.removeEventListener('coupons-unread-changed', onChanged)
+  }, [authResolved, user])
+
+  useEffect(() => {
+    if (bookingsTab !== 'coupons' || !user) return
+    void markCouponsViewed()
+  }, [bookingsTab, user])
 
   useEffect(() => {
     const state = getPushClientState()
@@ -381,6 +404,44 @@ export default function ProfilePage() {
     )
   }
 
+  async function loadCouponsUnreadCount() {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) {
+        setCouponsUnreadCount(0)
+        return
+      }
+      const response = await fetch('/api/vouchers/unread-count', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!response.ok) {
+        setCouponsUnreadCount(0)
+        return
+      }
+      const result = await response.json()
+      setCouponsUnreadCount(typeof result.count === 'number' ? result.count : 0)
+    } catch {
+      setCouponsUnreadCount(0)
+    }
+  }
+
+  async function markCouponsViewed() {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) return
+      await fetch('/api/vouchers/mark-viewed', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      setCouponsUnreadCount(0)
+      window.dispatchEvent(new Event('coupons-unread-cleared'))
+    } catch {
+      // ignore
+    }
+  }
+
   function formatLocationValue(value: unknown): string {
     if (!value) return 'TBD'
     if (typeof value === 'string') return value
@@ -454,7 +515,12 @@ export default function ProfilePage() {
 
   function renderCouponCard(coupon: MyCoupon) {
     const isLuckyDraw = coupon.voucherType === 'lucky_draw'
-    const borderColor = isLuckyDraw ? 'sm:border-l-yellow-500' : 'sm:border-l-blue-500'
+    const isPromoChai = coupon.voucherType === 'promo_chai'
+    const borderColor = isLuckyDraw
+      ? 'sm:border-l-yellow-500'
+      : isPromoChai
+        ? 'sm:border-l-amber-500'
+        : 'sm:border-l-blue-500'
     return (
       <Card key={coupon.id} className={`rounded-none sm:rounded-lg border-x-0 sm:border-x border-l-0 sm:border-l-4 ${borderColor}`}>
         <CardHeader className="pb-3">
@@ -464,6 +530,11 @@ export default function ProfilePage() {
               {isLuckyDraw && (
                 <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-400 text-xs font-semibold">
                   🎉 Lucky Draw Winner
+                </Badge>
+              )}
+              {isPromoChai && (
+                <Badge className="bg-amber-100 text-amber-900 border border-amber-400 text-xs font-semibold">
+                  $1 Chai Promo
                 </Badge>
               )}
             </div>
@@ -484,6 +555,10 @@ export default function ProfilePage() {
           {isLuckyDraw ? (
             <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2 text-sm text-yellow-800">
               🍵 Show this coupon at Ryan&apos;s Chai for your free Chai!
+            </div>
+          ) : isPromoChai ? (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900">
+              🍵 Show this coupon at Ryan&apos;s Chai to get a chai for only $1.
             </div>
           ) : (
             <div className="text-sm text-muted-foreground">
@@ -507,7 +582,7 @@ export default function ProfilePage() {
           </div>
           {!isLuckyDraw && (
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Value</span>
+              <span className="text-muted-foreground">{isPromoChai ? 'Chai price' : 'Value'}</span>
               <span className="font-medium">${(coupon.valueCents / 100).toFixed(2)}</span>
             </div>
           )}
@@ -1492,10 +1567,22 @@ export default function ProfilePage() {
         {/* My Bookings - always visible, no dropdown, full-bleed on mobile */}
         <Card className="shadow-sm rounded-none sm:rounded-lg">
           <CardContent className="p-4 sm:p-6">
-            <Tabs value={bookingsTab} onValueChange={(v) => setBookingsTab(v as typeof bookingsTab)} className="w-full">
+            <Tabs
+              value={bookingsTab}
+              onValueChange={(v) => setBookingsTab(v as typeof bookingsTab)}
+              className="w-full"
+            >
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="bookings">Bookings</TabsTrigger>
-                <TabsTrigger value="coupons">Coupons</TabsTrigger>
+                <TabsTrigger value="coupons" className="relative">
+                  Coupons
+                  {couponsUnreadCount > 0 && (
+                    <span
+                      className="absolute top-1.5 right-2 h-2 w-2 rounded-full bg-red-500"
+                      aria-label="New coupons"
+                    />
+                  )}
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="bookings" className="pt-4">
                   {(() => {

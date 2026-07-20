@@ -162,7 +162,10 @@ export default function NavigationTabs() {
                   : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
               }`}
             >
-              <Home className="w-5 h-5" />
+              <span className="relative inline-block">
+                <Home className="w-5 h-5" />
+                <CouponsUnreadBadge />
+              </span>
               <span className="text-xs font-medium">Home</span>
             </Link>
 
@@ -407,5 +410,60 @@ function JokesUnreadBadge() {
     >
       {count > 9 ? '9+' : count}
     </span>
+  )
+}
+
+function CouponsUnreadBadge() {
+  const { authResolved, user } = useAuthBootstrap()
+  const [count, setCount] = useState(0)
+
+  useEffect(() => {
+    if (!authResolved || !user) {
+      setCount(0)
+      return
+    }
+
+    let cancelled = false
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    async function load() {
+      try {
+        const { data } = await supabase.auth.getSession()
+        const token = data.session?.access_token
+        if (!token) return
+        const res = await fetch('/api/vouchers/unread-count', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) return
+        const payload = await res.json()
+        if (!cancelled) setCount(typeof payload.count === 'number' ? payload.count : 0)
+      } catch {
+        // ignore
+      }
+    }
+
+    void load()
+    interval = setInterval(() => void load(), 60_000)
+
+    const onCleared = () => setCount(0)
+    const onChanged = () => void load()
+    window.addEventListener('coupons-unread-cleared', onCleared)
+    window.addEventListener('coupons-unread-changed', onChanged)
+
+    return () => {
+      cancelled = true
+      if (interval) clearInterval(interval)
+      window.removeEventListener('coupons-unread-cleared', onCleared)
+      window.removeEventListener('coupons-unread-changed', onChanged)
+    }
+  }, [authResolved, user])
+
+  if (count <= 0) return null
+
+  return (
+    <span
+      className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-zinc-900"
+      aria-label="New coupons available"
+    />
   )
 }

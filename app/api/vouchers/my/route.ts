@@ -56,11 +56,16 @@ export async function GET(request: NextRequest) {
     const payload = (vouchers || []).map((voucher) => {
       const voucherType: string = (voucher as any).voucher_type ?? 'food_coupon'
       const isLuckyDraw = voucherType === 'lucky_draw'
+      const isPromoChai = voucherType === 'promo_chai'
       const eventInfo = voucher.event_id ? eventMap.get(voucher.event_id) : null
       return {
         id: voucher.id,
         eventId: voucher.event_id ?? null,
-        eventTitle: isLuckyDraw ? "Free Chai at Ryan's Chai" : (eventInfo?.title ?? 'Event'),
+        eventTitle: isLuckyDraw
+          ? "Free Chai at Ryan's Chai"
+          : isPromoChai
+            ? "$1 Chai at Ryan's Chai"
+            : (eventInfo?.title ?? 'Event'),
         eventDate: eventInfo?.date ?? null,
         code: voucher.code,
         valueCents: voucher.value_cents,

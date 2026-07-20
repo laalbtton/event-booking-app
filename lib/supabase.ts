@@ -295,14 +295,17 @@ export type AppInviteCreditGrant = {
 
 export type BookingVoucherStatus = 'issued' | 'redeemed' | 'cancelled' | 'expired'
 
+export type BookingVoucherType = 'food_coupon' | 'lucky_draw' | 'promo_chai'
+
 export type BookingVoucher = {
   id: string
-  booking_id: string
-  event_id: string
+  booking_id: string | null
+  event_id: string | null
   user_id: string
   venue_id: string | null
   code: string
   value_cents: number
+  voucher_type?: BookingVoucherType
   status: BookingVoucherStatus
   expires_at: string | null
   redeemed_at: string | null
@@ -315,7 +318,7 @@ export type BookingVoucher = {
 export type VoucherRedemption = {
   id: string
   voucher_id: string
-  event_id: string
+  event_id: string | null
   user_id: string
   redeemed_by: string | null
   discount_cents: number

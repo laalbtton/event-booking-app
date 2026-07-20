@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronLeft, Star } from 'lucide-react'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { SettingsSkeleton } from '@/components/skeletons/SettingsSkeleton'
+import { PublicHeader } from '@/components/public/PublicHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { supabase } from '@/lib/supabase'
@@ -17,16 +18,20 @@ import {
 } from '@/lib/foundingMembers'
 import { toast } from 'sonner'
 
+const RETURN_TO = '/promotions/brampton-comedy-insider'
+
 export default function BramptonComedyInsiderPromotionPage() {
   const { authResolved, user } = useAuthBootstrap()
   const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const [role, setRole] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authResolved) return
+
     if (!user) {
+      setRole(null)
       setLoading(false)
-      router.push('/login')
       return
     }
 
@@ -37,6 +42,7 @@ export default function BramptonComedyInsiderPromotionPage() {
         const { data, error } = await supabase.from('profiles').select('role').eq('id', user.id).single()
         if (error) throw error
         if (cancelled) return
+        setRole(data?.role ?? null)
         if (data?.role !== 'audience') {
           router.replace('/promotions')
         }
@@ -57,8 +63,16 @@ export default function BramptonComedyInsiderPromotionPage() {
     return <SettingsSkeleton />
   }
 
+  if (user && role !== null && role !== 'audience') {
+    return null
+  }
+
+  const loginHref = `/login?returnTo=${encodeURIComponent(RETURN_TO)}`
+  const signupHref = `/signup?returnTo=${encodeURIComponent(RETURN_TO)}&role=audience`
+
   return (
     <div className="min-h-screen bg-background pb-20">
+      {!user && <PublicHeader />}
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8 space-y-6">
         <div className="flex items-center gap-2">
           <Link
@@ -91,13 +105,34 @@ export default function BramptonComedyInsiderPromotionPage() {
                 members)
               </li>
             </ul>
-            <p>
-              Because you already have an app account, we skip signup and use your existing name and
-              email. No magic link required.
-            </p>
-            <Button asChild className="bg-yellow-400 text-zinc-950 hover:bg-yellow-300 font-semibold">
-              <Link href="/brampton-comedy-insider">Open survey</Link>
-            </Button>
+
+            {!user ? (
+              <>
+                <p>
+                  Create a free audience account to take the survey and claim your credits. Takes about
+                  a minute.
+                </p>
+                <Button
+                  asChild
+                  className="bg-yellow-400 text-zinc-950 hover:bg-yellow-300 font-semibold"
+                >
+                  <Link href={signupHref}>Create free account</Link>
+                </Button>
+                <Button asChild variant="outline" className="w-full sm:w-auto">
+                  <Link href={loginHref}>Already have an account? Log in</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <p>
+                  Because you already have an app account, we skip signup and use your existing name and
+                  email. No magic link required.
+                </p>
+                <Button asChild className="bg-yellow-400 text-zinc-950 hover:bg-yellow-300 font-semibold">
+                  <Link href="/brampton-comedy-insider">Open survey</Link>
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

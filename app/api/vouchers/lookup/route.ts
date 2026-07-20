@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { CHAI_PROMO_TITLE, CHAI_PROMO_VOUCHER_TYPE } from '@/lib/chaiPromo'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     const { data: voucher, error: voucherError } = await supabase
       .from('booking_vouchers')
-      .select('id, event_id, user_id, code, value_cents, status, expires_at, venue_id')
+      .select('id, event_id, user_id, code, value_cents, voucher_type, status, expires_at, venue_id')
       .eq('code', code)
       .single()
 
@@ -44,18 +45,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Voucher not found' }, { status: 404 })
     }
 
-    if (eventId && voucher.event_id !== eventId) {
+    if (eventId && voucher.event_id && voucher.event_id !== eventId) {
       return NextResponse.json({ error: 'Coupon does not belong to this event' }, { status: 400 })
     }
 
-    const { data: event, error: eventError } = await supabase
-      .from('events')
-      .select('id, title, date, created_by, host_user_id, venue_id')
-      .eq('id', voucher.event_id)
-      .single()
+    const voucherType = (voucher as { voucher_type?: string }).voucher_type || 'food_coupon'
+    const isPromoChai = voucherType === CHAI_PROMO_VOUCHER_TYPE
+    const isLuckyDraw = voucherType === 'lucky_draw'
 
-    if (eventError || !event) {
-      return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+    let event: {
+      id: string
+      title: string
+      date: string
+      created_by: string | null
+      host_user_id: string | null
+      venue_id: string | null
+    } | null = null
+
+    if (voucher.event_id) {
+      const { data: eventRow, error: eventError } = await supabase
+        .from('events')
+        .select('id, title, date, created_by, host_user_id, venue_id')
+        .eq('id', voucher.event_id)
+        .single()
+
+      if (eventError || !eventRow) {
+        return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+      }
+      event = eventRow
     }
 
     const { data: profile } = await supabase
@@ -71,16 +88,22 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     const isAdmin = profile?.role === 'admin' || !!adminRow
-    const isEventManager = event.created_by === authData.user.id || event.host_user_id === authData.user.id
-    const { data: venueStaffRow } = await supabase
-      .from('venue_staff')
-      .select('id')
-      .eq('user_id', authData.user.id)
-      .eq('venue_id', event.venue_id)
-      .eq('active', true)
-      .maybeSingle()
+    const isEventManager =
+      !!event && (event.created_by === authData.user.id || event.host_user_id === authData.user.id)
 
-    const isVenueStaff = !!venueStaffRow
+    const venueIdForStaff = voucher.venue_id || event?.venue_id || null
+    let isVenueStaff = false
+    if (venueIdForStaff) {
+      const { data: venueStaffRow } = await supabase
+        .from('venue_staff')
+        .select('id')
+        .eq('user_id', authData.user.id)
+        .eq('venue_id', venueIdForStaff)
+        .eq('active', true)
+        .maybeSingle()
+      isVenueStaff = !!venueStaffRow
+    }
+
     if (!isAdmin && !isEventManager && !isVenueStaff) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -94,17 +117,24 @@ export async function GET(request: NextRequest) {
     const isExpired = !!voucher.expires_at && new Date(voucher.expires_at) < new Date()
     const canRedeem = voucher.status === 'issued' && !isExpired
 
+    const eventTitle = isLuckyDraw
+      ? "Free Chai at Ryan's Chai"
+      : isPromoChai
+        ? CHAI_PROMO_TITLE
+        : event?.title || 'Coupon'
+
     return NextResponse.json({
       voucher: {
         id: voucher.id,
         code: voucher.code,
         eventId: voucher.event_id,
-        eventTitle: event.title,
-        eventDate: event.date,
+        eventTitle,
+        eventDate: event?.date || null,
         userId: voucher.user_id,
         attendeeName: attendeeProfile?.full_name || attendeeProfile?.email || 'Attendee',
         attendeeEmail: attendeeProfile?.email || null,
         valueCents: Number(voucher.value_cents || 0),
+        voucherType,
         status: isExpired && voucher.status === 'issued' ? 'expired' : voucher.status,
         expiresAt: voucher.expires_at,
         canRedeem,
@@ -116,4 +146,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
-

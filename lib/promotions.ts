@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
-import { QrCode, Star } from 'lucide-react'
+import { Coffee, QrCode, Star } from 'lucide-react'
 import { CREDIT_SURVEY_TOTAL, CREDIT_TOTAL_AVAILABLE } from '@/lib/foundingMembers'
+import { CHAI_PROMO_DESCRIPTION, CHAI_PROMO_TITLE } from '@/lib/chaiPromo'
 
 export type PromotionAudience = 'all' | 'audience' | 'performer'
 
@@ -109,21 +110,38 @@ export const ACTIVE_PROMOTIONS: PromotionDef[] = [
     audience: 'audience',
     active: true,
   },
+  {
+    id: 'ryans-chai-1-dollar',
+    href: '/promotions/ryans-chai',
+    title: CHAI_PROMO_TITLE,
+    description: CHAI_PROMO_DESCRIPTION,
+    icon: Coffee,
+    audience: 'audience',
+    active: true,
+  },
 ]
 
 export function canSeePromotion(
   promo: PromotionDef,
   role: string | null | undefined,
+  options?: { guest?: boolean },
 ): boolean {
   if (!promo.active) return false
+  // Public / logged-out visitors browse audience-facing promos (plus "all").
+  if (options?.guest) {
+    return promo.audience === 'all' || promo.audience === 'audience'
+  }
   if (promo.audience === 'all') return true
-  if (promo.audience === 'audience') return role === 'audience'
+  if (promo.audience === 'audience') return role === 'audience' || role === 'admin'
   if (promo.audience === 'performer') {
     return role === 'performer' || role === 'event_creator'
   }
   return false
 }
 
-export function getVisiblePromotions(role: string | null | undefined): PromotionDef[] {
-  return ACTIVE_PROMOTIONS.filter((p) => canSeePromotion(p, role))
+export function getVisiblePromotions(
+  role: string | null | undefined,
+  options?: { guest?: boolean },
+): PromotionDef[] {
+  return ACTIVE_PROMOTIONS.filter((p) => canSeePromotion(p, role, options))
 }
