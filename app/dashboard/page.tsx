@@ -42,11 +42,18 @@ import {
   type InstallPlatform,
 } from '@/lib/installPromptClient'
 import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
+import { getSpendableRegularCredits } from '@/lib/creditLedger'
 import {
   canAffordWithVenueCredits,
   venueCreditsForEvent,
   type VenueCreditGrant,
 } from '@/lib/venueCredits'
+import {
+  bookingMatchesUserIntent,
+  confirmAndCancelCrossScopeBooking,
+  findActiveBookingForEvent,
+  isAudienceBookingScope,
+} from '@/lib/bookingScopeUtils'
 
 type PushNotificationPrefs = {
   user_id: string
@@ -203,7 +210,7 @@ export default function Dashboard() {
   }
 
   function getEffectiveCreditsRequired(event: Event): number {
-    if (!event.food_coupon_enabled) return event.credits_required
+    if (!event.food_coupon_enabled) return Math.max(0, Number(event.credits_required ?? 0))
     const spotFee = Math.max(0, Number(event.spot_fee_credits || 0))
     const couponCredits = Math.ceil(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100)
     return spotFee + couponCredits
@@ -1166,7 +1173,7 @@ export default function Dashboard() {
         if (
           !profile ||
           !canAffordWithVenueCredits(
-            profile.credits ?? 0,
+            getSpendableRegularCredits(profile),
             venueCreditGrants,
             invite.events.venue_id,
             creditsRequired,
@@ -1296,12 +1303,26 @@ export default function Dashboard() {
         }
       }
 
-      // Check if already booked (confirmed or waitlist)
-      const alreadyBooked = myBookings.some(
-        b => b.event_id === event.id && (b.status === 'confirmed' || b.status === 'waitlist')
-      )
-      if (alreadyBooked) {
-        throw new Error('You have already booked this event')
+      // Check if already booked for the intended scope (or handle cross-scope switch)
+      const existingActiveBooking = findActiveBookingForEvent(myBookings, event.id)
+      if (existingActiveBooking) {
+        if (bookingMatchesUserIntent(existingActiveBooking.booking_scope, userRole)) {
+          throw new Error('You have already booked this event')
+        }
+
+        const { data: sessionDataForCancel } = await supabase.auth.getSession()
+        const cancelToken = sessionDataForCancel.session?.access_token
+        if (!cancelToken) throw new Error('Not authenticated')
+
+        const proceedWithSwitch = await confirmAndCancelCrossScopeBooking({
+          existingBooking: existingActiveBooking,
+          userRole,
+          confirm,
+          accessToken: cancelToken,
+        })
+        if (!proceedWithSwitch) return
+
+        setMyBookings((prev) => prev.filter((b) => b.id !== existingActiveBooking.id))
       }
 
       const now = new Date()
@@ -1351,7 +1372,7 @@ export default function Dashboard() {
         : getEffectiveCreditsRequired(event)
       if (
         !canAffordWithVenueCredits(
-          profile.credits,
+          getSpendableRegularCredits(profile),
           venueCreditGrants,
           event.venue_id,
           effectiveCreditsRequired,
@@ -2079,14 +2100,12 @@ export default function Dashboard() {
                       <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {bucketEvents.map((event) => {
                   const isAudienceUser = userRole === 'audience'
-                  const activeBooking = myBookings.find((b) => {
-                    if (b.event_id !== event.id) return false
-                    if (b.status !== 'confirmed' && b.status !== 'waitlist') return false
-                    if (isAudienceUser) return b.booking_scope === 'audience'
-                    if (eventTab === 'perform') return b.booking_scope !== 'audience'
-                    return b.booking_scope === 'audience'
-                  })
-                  const isBooked = !!activeBooking || optimisticBookings.has(event.id)
+                  const activeBooking = findActiveBookingForEvent(myBookings, event.id)
+                  const hasMatchingScopeBooking =
+                    !!activeBooking && bookingMatchesUserIntent(activeBooking.booking_scope, userRole)
+                  const hasCrossScopeBooking =
+                    !!activeBooking && !bookingMatchesUserIntent(activeBooking.booking_scope, userRole)
+                  const isBooked = hasMatchingScopeBooking || optimisticBookings.has(event.id)
                   const effectiveCreditsRequired = getEffectiveCreditsRequired(event)
                   const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 0))
                   const audienceTicketCredits = Math.max(0, Number(event.credits_required || 0))
@@ -2102,7 +2121,7 @@ export default function Dashboard() {
                   const showRedeemableHelpDot = hasRedeemableCredits && isAudienceUser
                   const languageSummary = formatEventLanguages(event)
                   const canAfford = canAffordWithVenueCredits(
-                    profile?.credits || 0,
+                    profile ? getSpendableRegularCredits(profile) : 0,
                     venueCreditGrants,
                     event.venue_id,
                     creditsRequiredForCard,
@@ -2240,7 +2259,7 @@ export default function Dashboard() {
                                     />
                                   </div>
                                 )}
-                                {isBooked && activeBooking?.id ? (
+                                {hasMatchingScopeBooking && activeBooking?.id ? (
                                   <Button asChild size="sm" className="text-xs shrink-0">
                                     <Link
                                       href={`/bookings/${activeBooking.id}`}
@@ -2249,6 +2268,48 @@ export default function Dashboard() {
                                       Go to booking
                                     </Link>
                                   </Button>
+                                ) : hasCrossScopeBooking && activeBooking?.id ? (
+                                  <div
+                                    className="flex items-center gap-2 shrink-0"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Button asChild size="sm" variant="outline" className="text-xs shrink-0">
+                                      <Link href={`/bookings/${activeBooking.id}`}>
+                                        View {isAudienceBookingScope(activeBooking.booking_scope) ? 'audience' : 'performer'} booking
+                                      </Link>
+                                    </Button>
+                                    {!isRegistrationOpen ? null : !canAfford ? (
+                                      <Link href="/buy-credits">
+                                        <Button size="sm" className="text-xs">Buy Credits</Button>
+                                      </Link>
+                                    ) : (
+                                      <Button
+                                        onClick={async (e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          setOptimisticBookings(prev => new Set(prev).add(event.id))
+                                          try {
+                                            await handleBookEvent(event)
+                                          } catch {
+                                            setOptimisticBookings(prev => {
+                                              const s = new Set(prev)
+                                              s.delete(event.id)
+                                              return s
+                                            })
+                                          }
+                                        }}
+                                        disabled={isBooking}
+                                        size="sm"
+                                        className="text-xs"
+                                      >
+                                        {isBooking
+                                          ? 'Booking...'
+                                          : isFull
+                                            ? 'Join Waitlist'
+                                            : isAudienceUser ? 'Reserve Spot' : 'Book Event'}
+                                      </Button>
+                                    )}
+                                  </div>
                                 ) : event.status === 'cancelled' ? (
                                   <Badge variant="destructive">Cancelled</Badge>
                                 ) : !isRegistrationOpen ? (

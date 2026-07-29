@@ -17,12 +17,19 @@ import {
   canAffordWithVenueCredits,
   type VenueCreditGrant,
 } from '@/lib/venueCredits'
+import { getSpendableRegularCredits } from '@/lib/creditLedger'
+import {
+  bookingMatchesUserIntent,
+  confirmAndCancelCrossScopeBooking,
+  isAudienceBookingScope,
+} from '@/lib/bookingScopeUtils'
 import { venuePublicPath } from '@/lib/venuePaths'
 import { Bell, BellOff, ChevronLeft, ChevronDown, ChevronUp, Copy, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import EventChat from '@/components/EventChat'
+import { AddToCalendarButtons } from '@/components/AddToCalendarButtons'
 
 
 type EventDetails = {
@@ -716,7 +723,23 @@ export default function EventDetailsPage() {
       }
 
       if (userBooking) {
-        throw new Error('You have already booked this event')
+        if (bookingMatchesUserIntent(userBooking.booking_scope, profile.role)) {
+          throw new Error('You have already booked this event')
+        }
+
+        const { data: sessionDataForCancel } = await supabase.auth.getSession()
+        const cancelToken = sessionDataForCancel.session?.access_token
+        if (!cancelToken) throw new Error('Not authenticated')
+
+        const proceedWithSwitch = await confirmAndCancelCrossScopeBooking({
+          existingBooking: userBooking,
+          userRole: profile.role,
+          confirm,
+          accessToken: cancelToken,
+        })
+        if (!proceedWithSwitch) return
+
+        setUserBooking(null)
       }
 
       if (
@@ -788,7 +811,7 @@ export default function EventDetailsPage() {
 
       if (
         !canAffordWithVenueCredits(
-          Number(profile.credits || 0),
+          profile ? getSpendableRegularCredits(profile) : 0,
           venueCreditGrants,
           eventData.venue_id,
           effectiveCreditsRequired,
@@ -877,7 +900,13 @@ export default function EventDetailsPage() {
   const isRegistrationOpen = !event.registration_opens_at || new Date() >= new Date(event.registration_opens_at)
   const isFull = event.max_attendees !== null && confirmedBookings.length >= event.max_attendees
   const isAlreadyBooked =
-    !!userBooking && (userBooking.status === 'confirmed' || userBooking.status === 'waitlist')
+    !!userBooking &&
+    (userBooking.status === 'confirmed' || userBooking.status === 'waitlist') &&
+    bookingMatchesUserIntent(userBooking.booking_scope, profile?.role)
+  const hasCrossScopeBooking =
+    !!userBooking &&
+    (userBooking.status === 'confirmed' || userBooking.status === 'waitlist') &&
+    !bookingMatchesUserIntent(userBooking.booking_scope, profile?.role)
   const isAudienceUser = profile?.role === 'audience'
   const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 1))
   const audienceHasFreePass = Number(profile?.audience_free_passes_remaining || 0) > 0
@@ -899,7 +928,7 @@ export default function EventDetailsPage() {
   const ticketCreditsAppliedCents = ticketCreditsToApply * 100
   const ticketRemainingCents = ticketTotalCents - ticketCreditsAppliedCents
   const canAfford = canAffordWithVenueCredits(
-    Number(profile?.credits || 0),
+    profile ? getSpendableRegularCredits(profile) : 0,
     venueCreditGrants,
     event?.venue_id,
     creditsRequiredForButton,
@@ -911,6 +940,7 @@ export default function EventDetailsPage() {
     ? new Date(event.end_time)
     : new Date(new Date(event.date).getTime() + 2 * 60 * 60 * 1000)
   const isInProgress = startTime <= now && now < endTime
+  const isPast = endTime <= now
   const useGlobalVarietyCapacity =
     event.event_type === 'open_mic' &&
     (event as any).open_mic_type === 'variety_arts_open_mic' &&
@@ -1288,7 +1318,13 @@ export default function EventDetailsPage() {
                           </Button>
                         </div>
                       ))}
+                      {!isPast && event.status !== 'cancelled' && (
+                        <AddToCalendarButtons event={event} layout="row" />
+                      )}
                     </div>
+                  )}
+                  {ticketSuccess && !isPast && event.status !== 'cancelled' && (
+                    <AddToCalendarButtons event={event} layout="row" />
                   )}
                   {Math.max(0, ticketInfo.quantity - ticketInfo.sold) > 0 ? (
                     <div className="flex flex-col items-end gap-2">
@@ -1373,9 +1409,38 @@ export default function EventDetailsPage() {
                     </Button>
                   </div>
                 ) : isAlreadyBooked && userBooking?.id ? (
-                  <Button asChild size="sm" variant="default">
-                    <Link href={`/bookings/${userBooking.id}`}>Go to booking</Link>
-                  </Button>
+                  <div className="flex flex-col items-end gap-2">
+                    <Button asChild size="sm" variant="default">
+                      <Link href={`/bookings/${userBooking.id}`}>Go to booking</Link>
+                    </Button>
+                    {!isPast && event.status !== 'cancelled' && (
+                      <AddToCalendarButtons event={event} layout="row" />
+                    )}
+                  </div>
+                ) : hasCrossScopeBooking && userBooking?.id ? (
+                  <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/bookings/${userBooking.id}`}>
+                        View {isAudienceBookingScope(userBooking.booking_scope) ? 'audience' : 'performer'} booking
+                      </Link>
+                    </Button>
+                    {!isPast && event.status !== 'cancelled' && (
+                      <AddToCalendarButtons event={event} layout="row" />
+                    )}
+                    {!canAfford ? (
+                      <Link href="/buy-credits">
+                        <Button size="sm">Buy Credits</Button>
+                      </Link>
+                    ) : (
+                      <Button
+                        onClick={() => handleBookEvent(event)}
+                        disabled={bookingLoading}
+                        size="sm"
+                      >
+                        {bookingLoading ? 'Booking...' : bookingLabel}
+                      </Button>
+                    )}
+                  </div>
                 ) : !canAfford ? (
                   <Link href="/buy-credits">
                     <Button size="sm">Buy Credits</Button>

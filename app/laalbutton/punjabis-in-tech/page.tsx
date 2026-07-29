@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { listPublicEvents } from '@/lib/server/publicContent'
+import { listUpcomingSeriesEvents } from '@/lib/laalbutton/seriesEventLookup'
 import { LBFeatureRow } from '@/components/laalbutton/LBIcons'
 import { LB_MEDIA } from '@/lib/laalbutton/media'
 
@@ -35,14 +35,7 @@ const TIMELINE = [
 ]
 
 export default async function PunjabisInTechPage() {
-  const now = new Date()
-  const allEvents = await listPublicEvents(30)
-  const pitEvents = allEvents.filter(
-    (e) =>
-      !e.isCancelled &&
-      new Date(e.startDate) >= now &&
-      e.title.toLowerCase().includes('punjabi'),
-  )
+  const pitEvents = await listUpcomingSeriesEvents('punjabis-in-tech')
 
   return (
     <>

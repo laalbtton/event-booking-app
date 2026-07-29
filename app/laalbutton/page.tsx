@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { listPublicEvents } from '@/lib/server/publicContent'
+import { listPublicEvents, sortPublicEventsForListing } from '@/lib/server/publicContent'
 import { LBIcon, LBIconBadge } from '@/components/laalbutton/LBIcons'
 import { LB_MEDIA } from '@/lib/laalbutton/media'
 
@@ -192,9 +192,9 @@ function SeriesCard({
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default async function LaalButtonHome() {
-  const upcomingEvents = (await listPublicEvents(3, { upcomingOnly: true })).filter(
-    (e) => !e.isCancelled,
-  )
+  const upcomingEvents = sortPublicEventsForListing(
+    (await listPublicEvents(30, { upcomingOnly: true })).filter((e) => !e.isCancelled),
+  ).slice(0, 3)
 
   return (
     <>

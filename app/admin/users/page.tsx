@@ -325,10 +325,18 @@ export default function AdminUsersPage() {
                         onChange={async (e) => {
                           try {
                             const newRole = e.target.value as 'performer' | 'audience' | 'event_creator' | 'admin'
-                            const { error } = await supabase
-                              .from('profiles')
-                              .update({ role: newRole, updated_at: new Date().toISOString() })
-                              .eq('id', user.id)
+                            if (newRole === user.role) return
+
+                            const { data: { user: adminUser } } = await supabase.auth.getUser()
+                            if (!adminUser) throw new Error('Not authenticated')
+
+                            const { error } = await supabase.rpc('apply_profile_role_change', {
+                              p_user_id: user.id,
+                              p_new_role: newRole,
+                              p_source: 'admin',
+                              p_changed_by: adminUser.id,
+                              p_notes: 'Admin user management',
+                            })
 
                             if (error) throw error
                             loadUsers()

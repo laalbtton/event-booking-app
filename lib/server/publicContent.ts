@@ -392,6 +392,21 @@ export type ListPublicEventsOptions = {
   upcomingOnly?: boolean
 }
 
+/** Ticketed/paid events for marketing listings (excludes free-entry / open mic style events). */
+export function isTicketedListingEvent(event: PublicEventDetails): boolean {
+  return event.ticketsEnabled && !event.isFree
+}
+
+/** Ticketed events first, then free/open mic; soonest date first within each group. */
+export function sortPublicEventsForListing(events: PublicEventDetails[]): PublicEventDetails[] {
+  return [...events].sort((a, b) => {
+    const aGroup = isTicketedListingEvent(a) ? 0 : 1
+    const bGroup = isTicketedListingEvent(b) ? 0 : 1
+    if (aGroup !== bGroup) return aGroup - bGroup
+    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+  })
+}
+
 export async function listPublicEvents(
   limit = 100,
   options?: ListPublicEventsOptions,

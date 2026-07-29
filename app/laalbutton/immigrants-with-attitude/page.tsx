@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { listPublicEvents } from '@/lib/server/publicContent'
+import { listUpcomingSeriesEvents } from '@/lib/laalbutton/seriesEventLookup'
 import { LB_MEDIA } from '@/lib/laalbutton/media'
 
 export const revalidate = 600
@@ -22,17 +22,7 @@ const serif = { fontFamily: "'DM Serif Display', Georgia, serif" } as const
 const ACCENT = '#7c3aed'
 
 export default async function ImmigrantsWithAttitudePage() {
-  const now = new Date()
-  const allEvents = await listPublicEvents(30)
-
-  const iwaEvents = allEvents.filter(
-    (e) =>
-      !e.isCancelled &&
-      new Date(e.startDate) >= now &&
-      (e.title.toLowerCase().includes('immigrant') ||
-        e.title.toLowerCase().includes('attitude') ||
-        e.title.toLowerCase().includes('iwa')),
-  )
+  const iwaEvents = await listUpcomingSeriesEvents('immigrants-with-attitude')
 
   return (
     <>

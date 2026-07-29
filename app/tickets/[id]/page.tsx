@@ -14,6 +14,7 @@ import { ChevronLeft } from 'lucide-react'
 import { formatDateTime } from '@/lib/dateUtils'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { AddToCalendarButtons } from '@/components/AddToCalendarButtons'
 
 type TicketPurchaseWithEvent = {
   id: string
@@ -28,6 +29,7 @@ type TicketPurchaseWithEvent = {
     title: string
     description: string
     date: string
+    end_time?: string | null
     location: unknown
     event_type: string
     cancellation_hours: number
@@ -85,6 +87,7 @@ export default function TicketDetailsPage() {
             title,
             description,
             date,
+            end_time,
             location,
             event_type,
             cancellation_hours,
@@ -284,6 +287,13 @@ export default function TicketDetailsPage() {
                 <Badge variant="outline">✓ Completed</Badge>
               )}
             </div>
+
+            {!isPast && !isEventCancelled && !isRefunded && (
+              <div className="pt-4 border-t">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Add to calendar</p>
+                <AddToCalendarButtons event={event} />
+              </div>
+            )}
 
             <div className="pt-4">
               <Button asChild variant="outline" size="sm" className="w-full">

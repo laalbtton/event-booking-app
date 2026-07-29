@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { hasEnoughCredits, splitDeduction } from '@/lib/creditLedger'
+import { hasEnoughCredits, splitDeduction, getEffectiveCreditBalances, getSpendableRegularCredits } from '@/lib/creditLedger'
 import { applyVenueCreditGrants } from '@/lib/server/venueCreditGrants'
 import { canAffordWithVenueCredits, venueCreditsForEvent } from '@/lib/venueCredits'
 
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
         const grants = (grantRows || []) as { venue_id: string; credits_remaining: number }[]
         if (
           !canAffordWithVenueCredits(
-            profile.credits ?? 0,
+            getSpendableRegularCredits(profile),
             grants,
             event.venue_id,
             creditsRequired,
@@ -130,8 +130,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Insufficient credits' }, { status: 400 })
         }
 
-        const purchased = profile.credits_purchased ?? 0
-        const complimentary = profile.credits_complimentary ?? 0
+        const { purchased, complimentary } = getEffectiveCreditBalances(profile)
         const regularNeeded = Math.max(
           0,
           creditsRequired - venueCreditsForEvent(grants, event.venue_id),
@@ -178,15 +177,15 @@ export async function POST(request: NextRequest) {
           .eq('id', authData.user.id)
           .single()
 
-        const purchased = profile?.credits_purchased ?? 0
-        const complimentary = profile?.credits_complimentary ?? 0
+        const { purchased: currentPurchased, complimentary: currentComplimentary } =
+          getEffectiveCreditBalances(profile ?? {})
 
         const { error: creditUpdateError } = await supabase
           .from('profiles')
           .update({
             credits: (profile?.credits ?? 0) - creditsToDebit,
-            credits_purchased: purchased - creditSplit.purchasedUsed,
-            credits_complimentary: complimentary - creditSplit.complimentaryUsed,
+            credits_purchased: currentPurchased - creditSplit.purchasedUsed,
+            credits_complimentary: currentComplimentary - creditSplit.complimentaryUsed,
             updated_at: new Date().toISOString(),
           })
           .eq('id', authData.user.id)

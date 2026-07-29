@@ -14,6 +14,7 @@ import { ChevronLeft } from 'lucide-react'
 import { formatDateTime } from '@/lib/dateUtils'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { AddToCalendarButtons } from '@/components/AddToCalendarButtons'
 
 type BookingWithEvent = {
   id: string
@@ -28,6 +29,7 @@ type BookingWithEvent = {
     title: string
     description: string
     date: string
+    end_time?: string | null
     location: unknown
     theme: string | null
     rating: string | null
@@ -375,6 +377,13 @@ export default function BookingDetailsPage() {
             {isAudienceBooking && booking.audience_checkin_code && (
               <div className="text-sm rounded-md border bg-muted/30 px-3 py-2">
                 Check-in code: <span className="font-medium">{booking.audience_checkin_code}</span>
+              </div>
+            )}
+
+            {!isPast && !isEventCancelled && (
+              <div className="pt-4 border-t">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Add to calendar</p>
+                <AddToCalendarButtons event={event} />
               </div>
             )}
 

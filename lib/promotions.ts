@@ -103,7 +103,7 @@ export const ACTIVE_PROMOTIONS: PromotionDef[] = [
   },
   {
     id: 'brampton-comedy-insider',
-    href: '/promotions/brampton-comedy-insider',
+    href: '/brampton-comedy-insider',
     title: 'Brampton Comedy Insider',
     description: `Fill out the survey and earn up to $${CREDIT_SURVEY_TOTAL} in credits`,
     icon: Star,

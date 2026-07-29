@@ -254,7 +254,7 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
         <div className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-2xl items-center gap-2 px-4">
             <Link
-              href="/promotions/brampton-comedy-insider"
+              href="/promotions"
               className="inline-flex items-center gap-1.5 text-sm text-stone-300 hover:text-yellow-400"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -522,7 +522,7 @@ function ActivatedDashboard({
         <div className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-xl items-center gap-2 px-4">
             <Link
-              href="/promotions/brampton-comedy-insider"
+              href="/promotions"
               className="inline-flex items-center gap-1.5 text-sm text-stone-300 hover:text-yellow-400"
             >
               <ChevronLeft className="h-4 w-4" />

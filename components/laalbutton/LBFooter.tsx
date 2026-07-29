@@ -67,6 +67,7 @@ export function LBFooter() {
             <p className="text-[#c8a882] text-xs font-bold uppercase tracking-widest mb-4">The App</p>
             <ul className="space-y-2 text-sm">
               <li><Link href="/laalbutton/about" className="hover:text-[#f5a623] transition-colors">About</Link></li>
+              <li><Link href="/promotions" className="hover:text-[#f5a623] transition-colors">Promotions</Link></li>
               <li><Link href="/signup" className="hover:text-[#f5a623] transition-colors">Create Account</Link></li>
               <li><Link href="/login" className="hover:text-[#f5a623] transition-colors">Sign In</Link></li>
               <li><Link href="/events" className="hover:text-[#f5a623] transition-colors">Browse All Events</Link></li>

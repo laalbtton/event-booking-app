@@ -164,6 +164,8 @@ export async function POST(request: NextRequest) {
         if (hasLedgerSplit) {
           profilePatch.credits_purchased = (profile.credits_purchased ?? 0) + purchasedUsed
           profilePatch.credits_complimentary = (profile.credits_complimentary ?? 0) + complimentaryUsed
+        } else {
+          profilePatch.credits_complimentary = (profile.credits_complimentary ?? 0) + refundedCredits
         }
       }
       if (restoredFreePass) {

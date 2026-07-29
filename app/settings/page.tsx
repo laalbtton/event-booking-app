@@ -26,6 +26,7 @@ import {
 import { ChevronLeft, ChevronDown, ChevronUp, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
+import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 import { SettingsListRow } from '@/components/SettingsListRow'
 import { canShowReferralInvite } from '@/components/ReferralInviteCard'
@@ -46,6 +47,7 @@ type ThursdaySocapScenario = 'registration_open' | 'seventy_five_full'
 
 export default function SettingsPage() {
   const { authResolved, user } = useAuthBootstrap()
+  const { confirm } = useConfirmDialog()
   const router = useRouter()
   const isMobile = useIsMobile()
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -472,15 +474,33 @@ export default function SettingsPage() {
       toast.error('This account role cannot be switched from Settings.')
       return
     }
+
+    const currentLabel = profile.role === 'performer' ? 'Performer' : 'Audience member'
+    const newLabel = newRole === 'performer' ? 'Performer' : 'Audience member'
+    const shouldProceed = await confirm({
+      title: `Switch to ${newLabel}?`,
+      message:
+        `You are about to switch from ${currentLabel} to ${newLabel}.\n\n` +
+        `Your dashboard and booking options will change. Existing bookings stay active—you can still cancel them from Profile or booking details regardless of your current role.\n\n` +
+        `Continue?`,
+      confirmText: `Switch to ${newLabel}`,
+      cancelText: 'Cancel',
+      variant: 'destructive',
+    })
+    if (!shouldProceed) return
+
     setRoleChanging(true)
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ role: newRole, updated_at: new Date().toISOString() })
-        .eq('id', profile.id)
+      const { error } = await supabase.rpc('apply_profile_role_change', {
+        p_user_id: profile.id,
+        p_new_role: newRole,
+        p_source: 'settings',
+        p_changed_by: profile.id,
+        p_notes: null,
+      })
       if (error) throw error
       setProfile((prev) => (prev ? { ...prev, role: newRole } : prev))
-      toast.success(`Role switched to ${newRole === 'performer' ? 'Performer' : 'Audience member'}.`)
+      toast.success(`Role switched to ${newLabel}.`)
     } catch (err: any) {
       toast.error(err?.message || 'Failed to update role')
     } finally {

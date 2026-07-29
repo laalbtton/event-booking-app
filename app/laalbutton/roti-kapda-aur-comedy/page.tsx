@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { listPublicEvents } from '@/lib/server/publicContent'
+import { listUpcomingSeriesEvents } from '@/lib/laalbutton/seriesEventLookup'
 import { LBIconBadge } from '@/components/laalbutton/LBIcons'
 import { LB_MEDIA } from '@/lib/laalbutton/media'
 
@@ -20,18 +20,7 @@ export const metadata: Metadata = {
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" } as const
 
 export default async function RotiKapdaAurComedyPage() {
-  const now = new Date()
-  const allEvents = await listPublicEvents(30)
-
-  // Filter events related to this series
-  const rkacEvents = allEvents.filter(
-    (e) =>
-      !e.isCancelled &&
-      new Date(e.startDate) >= now &&
-      (e.title.toLowerCase().includes('roti') ||
-        e.title.toLowerCase().includes('kapda') ||
-        e.title.toLowerCase().includes('rkac')),
-  )
+  const rkacEvents = await listUpcomingSeriesEvents('roti-kapda-aur-comedy')
 
   return (
     <>

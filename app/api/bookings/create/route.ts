@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendPushToAllUsers } from '@/lib/server/push'
-import { splitDeduction, hasEnoughCredits } from '@/lib/creditLedger'
+import { splitDeduction, hasEnoughCredits, getEffectiveCreditBalances } from '@/lib/creditLedger'
 import { applyVenueCreditGrants } from '@/lib/server/venueCreditGrants'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -147,8 +147,7 @@ export async function POST(request: NextRequest) {
       creditsToDebit = venueApply.creditsToDebit
     }
 
-    const purchased = profile.credits_purchased ?? 0
-    const complimentary = profile.credits_complimentary ?? 0
+    const { purchased, complimentary } = getEffectiveCreditBalances(profile)
     if (!hasEnoughCredits(purchased, complimentary, creditsToDebit)) {
       return NextResponse.json({ error: 'Insufficient credits' }, { status: 400 })
     }

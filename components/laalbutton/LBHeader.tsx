@@ -355,6 +355,13 @@ export function LBHeader() {
             pathname={pathname}
             active={false}
           />
+
+          <Link
+            href="/promotions"
+            className={`px-3 py-1.5 text-sm font-medium transition-colors rounded-md ${linkClass(pathname.startsWith('/promotions'))}`}
+          >
+            Promotions
+          </Link>
         </nav>
 
         <div className="flex items-center gap-3">
@@ -510,6 +517,14 @@ export function LBHeader() {
               />
             )}
           </div>
+
+          <Link
+            href="/promotions"
+            onClick={() => setMenuOpen(false)}
+            className={`block px-3 py-2 text-sm font-medium transition-colors rounded-md ${linkClass(pathname.startsWith('/promotions'))}`}
+          >
+            Promotions
+          </Link>
 
           <div className="pt-3 border-t border-[#2a1a0e]">
             <Link

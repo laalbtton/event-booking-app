@@ -16,6 +16,19 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // User roles
 export type UserRole = 'performer' | 'audience' | 'event_creator' | 'admin'
 
+export type ProfileRoleChangeSource = 'settings' | 'admin' | 'system'
+
+export type ProfileRoleHistory = {
+  id: string
+  user_id: string
+  from_role: UserRole
+  to_role: UserRole
+  changed_at: string
+  changed_by: string | null
+  source: ProfileRoleChangeSource
+  notes: string | null
+}
+
 // Full profile (for own profile)
 export type Profile = {
   id: string

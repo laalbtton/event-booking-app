@@ -150,6 +150,8 @@ export async function POST(request: NextRequest) {
       if (hasLedgerSplit) {
         profilePatch.credits_purchased = (attendeeProfile.credits_purchased ?? 0) + purchasedUsed
         profilePatch.credits_complimentary = (attendeeProfile.credits_complimentary ?? 0) + complimentaryUsed
+      } else {
+        profilePatch.credits_complimentary = (attendeeProfile.credits_complimentary ?? 0) + refundedCredits
       }
 
       const { error: creditError } = await supabase
