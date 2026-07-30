@@ -13,7 +13,7 @@ import { getWeeklyDigestEmail, getBroadcastWeeklyDigestEmail, type DigestCommuni
 import { getEmailTemplate, interpolate, TEMPLATE_KEYS } from '@/lib/server/emailTemplates'
 import { addCalendarDaysToYmd, getEasternCalendarDateString } from '@/lib/dateUtils'
 import { getSiteUrl, buildEventUrl, validateBaseUrl } from '@/lib/server/emailUrl'
-import { sendBroadcast } from '@/lib/server/resendAudience'
+import { sendBroadcast, getMissingBroadcastConfig } from '@/lib/server/resendAudience'
 
 function getAdminSupabase() {
   return createClient(
@@ -408,6 +408,13 @@ async function fetchUpcomingEvents(): Promise<DigestEvent[] | null> {
  * One call — no per-user loop — bypasses the transactional 100 emails/day cap.
  */
 export async function sendBroadcastWeeklyDigest(): Promise<BroadcastDigestResult> {
+  const missingConfig = getMissingBroadcastConfig()
+  if (missingConfig.length > 0) {
+    const error = `Missing required env var(s): ${missingConfig.join(', ')}. Set these in Vercel and redeploy.`
+    console.error(`[weeklyDigest/broadcast] Aborting: ${error}`)
+    return { broadcastId: null, eventCount: 0, skipped: true, error }
+  }
+
   const siteUrl = getSiteUrl()
 
   const baseCheck = await validateBaseUrl()
@@ -426,14 +433,19 @@ export async function sendBroadcastWeeklyDigest(): Promise<BroadcastDigestResult
 
   const tmpl = await getEmailTemplate(TEMPLATE_KEYS.WEEKLY_DIGEST)
   const weekKey = getEasternCalendarDateString(new Date())
-  const subject = interpolate(tmpl.subject, { user_name: '{{{contact.first_name|there}}}' })
+  const subject = interpolate(tmpl.subject, { user_name: '{{{FIRST_NAME|there}}}' })
 
   const html = getBroadcastWeeklyDigestEmail({ events, siteUrl })
 
   const broadcastId = await sendBroadcast({ subject, html })
 
   if (!broadcastId) {
-    return { broadcastId: null, eventCount: events.length, skipped: false, error: 'Broadcast API call failed' }
+    return {
+      broadcastId: null,
+      eventCount: events.length,
+      skipped: false,
+      error: 'Broadcast API call failed — check server logs for [resendAudience] sendBroadcast for the specific reason.',
+    }
   }
 
   console.info(`[weeklyDigest/broadcast] Broadcast ${broadcastId} sent (${events.length} events, week ${weekKey}).`)

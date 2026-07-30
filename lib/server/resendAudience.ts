@@ -5,93 +5,146 @@
  * RESEND_SEGMENT_ID and represents the "One Mic Stand — All Users" segment.
  *
  * Required env vars:
- *   RESEND_API_KEY        – existing Resend key
- *   RESEND_SEGMENT_ID     – segment ID from the Resend dashboard
+ *   RESEND_API_KEY        – existing Resend key (also used for transactional email)
+ *   RESEND_SEGMENT_ID     – segment ID from the Resend dashboard (Contacts → Segments)
+ *   RESEND_FROM_EMAIL     – optional, defaults to noreply@laalbutton.com
+ *
+ * IMPORTANT: RESEND_SEGMENT_ID is a NEW requirement introduced when the weekly
+ * digest moved from per-user transactional sends to a single Resend Broadcast.
+ * If it is not set in Vercel, every broadcast send fails at the config check
+ * below — this previously threw deep inside the call stack with no clear log,
+ * making the weekly digest silently stop working. All helpers now fail loudly
+ * with a specific, greppable error instead.
  */
 
 import { Resend } from 'resend'
 
-function getResend() {
+/** Returns a list of missing env var names required to send/manage the Resend audience. */
+export function getMissingBroadcastConfig(): string[] {
+  const missing: string[] = []
+  if (!process.env.RESEND_API_KEY) missing.push('RESEND_API_KEY')
+  if (!process.env.RESEND_SEGMENT_ID) missing.push('RESEND_SEGMENT_ID')
+  return missing
+}
+
+function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY
-  if (!key) throw new Error('RESEND_API_KEY is not set')
+  if (!key) return null
   return new Resend(key)
 }
 
-function getSegmentId() {
-  const id = process.env.RESEND_SEGMENT_ID
-  if (!id) throw new Error('RESEND_SEGMENT_ID is not set')
-  return id
+function getSegmentId(): string | null {
+  return process.env.RESEND_SEGMENT_ID || null
 }
 
 /**
  * Add or update a contact in the Resend segment.
  * Safe to call on every signup — Resend upserts by email.
+ * Never throws — a Resend outage or missing config must never block signups.
  */
 export async function upsertContact(
   email: string,
   firstName?: string | null,
 ): Promise<void> {
-  const resend = getResend()
-  const segmentId = getSegmentId()
+  try {
+    const missing = getMissingBroadcastConfig()
+    if (missing.length > 0) {
+      console.error(`[resendAudience] upsertContact skipped — missing env var(s): ${missing.join(', ')}`)
+      return
+    }
+    const resend = getResend()!
+    const segmentId = getSegmentId()!
 
-  const { error } = await resend.contacts.create({
-    email,
-    firstName: firstName ?? undefined,
-    unsubscribed: false,
-    segments: [{ id: segmentId }],
-  })
+    const { error } = await resend.contacts.create({
+      email,
+      firstName: firstName ?? undefined,
+      unsubscribed: false,
+      segments: [{ id: segmentId }],
+    })
 
-  if (error) {
-    // Non-fatal — log but don't throw so a Resend outage never blocks signups.
-    console.error('[resendAudience] upsertContact failed:', error)
+    if (error) {
+      console.error('[resendAudience] upsertContact failed:', error)
+    }
+  } catch (err) {
+    console.error('[resendAudience] upsertContact threw:', err)
   }
 }
 
 /**
  * Remove a contact from the segment (e.g. on account deletion).
+ * Never throws, for the same reason as upsertContact.
  */
 export async function removeContact(email: string): Promise<void> {
-  const resend = getResend()
-  const segmentId = getSegmentId()
+  try {
+    const missing = getMissingBroadcastConfig()
+    if (missing.length > 0) {
+      console.error(`[resendAudience] removeContact skipped — missing env var(s): ${missing.join(', ')}`)
+      return
+    }
+    const resend = getResend()!
+    const segmentId = getSegmentId()!
 
-  // The v6 SDK still accepts audienceId for the remove endpoint.
-  const { error } = await resend.contacts.remove({
-    audienceId: segmentId,
-    email,
-  })
+    // The v6 SDK still accepts audienceId for the remove endpoint.
+    const { error } = await resend.contacts.remove({
+      audienceId: segmentId,
+      email,
+    })
 
-  if (error) {
-    console.error('[resendAudience] removeContact failed:', error)
+    if (error) {
+      console.error('[resendAudience] removeContact failed:', error)
+    }
+  } catch (err) {
+    console.error('[resendAudience] removeContact threw:', err)
   }
 }
 
 /**
  * Create and immediately send a broadcast to the entire segment.
- * Returns the broadcast ID on success.
+ * Returns the broadcast ID on success, or null on any failure (config,
+ * API error, or thrown exception) — always logs a specific, actionable reason.
  */
 export async function sendBroadcast(opts: {
   subject: string
   html: string
   fromName?: string
 }): Promise<string | null> {
-  const resend = getResend()
-  const segmentId = getSegmentId()
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@laalbutton.com'
-  const fromName = opts.fromName || 'One Mic Stand'
-  const from = `${fromName} <${fromEmail}>`
-
-  const { data, error } = await resend.broadcasts.create({
-    segmentId,
-    from,
-    subject: opts.subject,
-    html: opts.html,
-    send: true,
-  })
-
-  if (error) {
-    console.error('[resendAudience] sendBroadcast failed:', error)
+  const missing = getMissingBroadcastConfig()
+  if (missing.length > 0) {
+    console.error(
+      `[resendAudience] sendBroadcast aborted — missing env var(s): ${missing.join(', ')}. ` +
+        'Set these in Vercel (Project → Settings → Environment Variables), then redeploy.',
+    )
     return null
   }
 
-  return data?.id ?? null
+  try {
+    const resend = getResend()!
+    const segmentId = getSegmentId()!
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@laalbutton.com'
+    const fromName = opts.fromName || 'One Mic Stand'
+    const from = `${fromName} <${fromEmail}>`
+
+    const { data, error } = await resend.broadcasts.create({
+      segmentId,
+      from,
+      subject: opts.subject,
+      html: opts.html,
+      send: true,
+    })
+
+    if (error) {
+      console.error('[resendAudience] sendBroadcast failed:', error)
+      return null
+    }
+
+    if (!data?.id) {
+      console.error('[resendAudience] sendBroadcast returned no broadcast id — treating as failure.')
+      return null
+    }
+
+    return data.id
+  } catch (err) {
+    console.error('[resendAudience] sendBroadcast threw:', err)
+    return null
+  }
 }

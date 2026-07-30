@@ -963,7 +963,7 @@ export function getBroadcastWeeklyDigestEmail(data: {
           <!-- Greeting -->
           <tr>
             <td style="padding:0 0 28px 0;">
-              <p style="margin:0 0 12px 0; font-size:16px; color:#f5f5f4;">Hi {{{contact.first_name|there}}},</p>
+              <p style="margin:0 0 12px 0; font-size:16px; color:#f5f5f4;">Hi {{{FIRST_NAME|there}}},</p>
               <p style="margin:0; font-size:15px; color:#a8a29e; line-height:1.7;">
                 Here&rsquo;s what&rsquo;s coming up on One Mic Stand. Grab your spot before it fills up!
               </p>
