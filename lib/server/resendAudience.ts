@@ -99,7 +99,11 @@ export async function removeContact(email: string): Promise<void> {
 }
 
 /**
- * Create and immediately send a broadcast to the entire segment.
+ * Create a broadcast (as a draft — does NOT send) and then send it in a
+ * separate call. Split into two steps (rather than `create({ send: true })`)
+ * so failures are attributable to a specific stage:
+ *   - create failing   → problem with subject/html content or segment id
+ *   - send failing     → problem sending to the segment (e.g. domain/quota)
  * Returns the broadcast ID on success, or null on any failure (config,
  * API error, or thrown exception) — always logs a specific, actionable reason.
  */
@@ -117,34 +121,50 @@ export async function sendBroadcast(opts: {
     return null
   }
 
-  try {
-    const resend = getResend()!
-    const segmentId = getSegmentId()!
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@laalbutton.com'
-    const fromName = opts.fromName || 'One Mic Stand'
-    const from = `${fromName} <${fromEmail}>`
+  const resend = getResend()!
+  const segmentId = getSegmentId()!
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@laalbutton.com'
+  const fromName = opts.fromName || 'One Mic Stand'
+  const from = `${fromName} <${fromEmail}>`
 
+  let broadcastId: string | null = null
+
+  try {
     const { data, error } = await resend.broadcasts.create({
       segmentId,
       from,
       subject: opts.subject,
       html: opts.html,
-      send: true,
     })
 
     if (error) {
-      console.error('[resendAudience] sendBroadcast failed:', error)
+      console.error('[resendAudience] sendBroadcast: CREATE step failed:', error)
       return null
     }
 
     if (!data?.id) {
-      console.error('[resendAudience] sendBroadcast returned no broadcast id — treating as failure.')
+      console.error('[resendAudience] sendBroadcast: CREATE step returned no broadcast id.')
       return null
     }
 
-    return data.id
+    broadcastId = data.id
+    console.info(`[resendAudience] sendBroadcast: draft created (${broadcastId}), sending...`)
   } catch (err) {
-    console.error('[resendAudience] sendBroadcast threw:', err)
+    console.error('[resendAudience] sendBroadcast: CREATE step threw:', err)
+    return null
+  }
+
+  try {
+    const { error } = await resend.broadcasts.send(broadcastId)
+
+    if (error) {
+      console.error(`[resendAudience] sendBroadcast: SEND step failed for draft ${broadcastId}:`, error)
+      return null
+    }
+
+    return broadcastId
+  } catch (err) {
+    console.error(`[resendAudience] sendBroadcast: SEND step threw for draft ${broadcastId}:`, err)
     return null
   }
 }
