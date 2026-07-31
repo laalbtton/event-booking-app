@@ -34,7 +34,19 @@ function getResend(): Resend | null {
 }
 
 function getSegmentId(): string | null {
-  return process.env.RESEND_SEGMENT_ID || null
+  const raw = process.env.RESEND_SEGMENT_ID
+  if (!raw) return null
+  // Defensively strip accidental wrapping quotes/whitespace — a common
+  // copy-paste mistake when setting env vars in Vercel that produces an
+  // ID Resend's API doesn't recognize (often surfacing as a generic 500).
+  const cleaned = raw.trim().replace(/^['"]|['"]$/g, '').trim()
+  return cleaned || null
+}
+
+/** Masks a segment/audience id for safe logging (not a secret, but keep logs tidy). */
+function maskId(id: string): string {
+  if (id.length <= 10) return id
+  return `${id.slice(0, 6)}…${id.slice(-4)} (len=${id.length})`
 }
 
 /**
@@ -127,11 +139,17 @@ export async function sendBroadcast(opts: {
   const fromName = opts.fromName || 'One Mic Stand'
   const from = `${fromName} <${fromEmail}>`
 
+  console.info(`[resendAudience] sendBroadcast: using segmentId ${maskId(segmentId)}, from="${from}"`)
+
   let broadcastId: string | null = null
 
   try {
     const { data, error } = await resend.broadcasts.create({
+      // Send both — some Resend accounts/backends still key off the older
+      // `audienceId` name even though the SDK types prefer `segmentId`.
+      // Passing both is harmless and hedges against a server-side mismatch.
       segmentId,
+      audienceId: segmentId,
       from,
       subject: opts.subject,
       html: opts.html,
