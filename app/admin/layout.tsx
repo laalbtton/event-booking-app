@@ -83,6 +83,7 @@ export default function AdminLayout({
     { href: '/admin/communities',      label: 'Communities',     icon: Globe,         exact: false },
     { href: '/admin/email-templates',  label: 'Email Templates', icon: Mail,          exact: false },
     { href: '/admin/founding-members', label: 'Insider Members', icon: Star,          exact: false },
+    { href: '/admin/resend-tools',     label: 'Resend Tools',    icon: Mail,          exact: false },
   ]
 
   return (
