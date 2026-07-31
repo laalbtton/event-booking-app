@@ -160,11 +160,10 @@ export async function sendBroadcast(opts: {
 
   try {
     const { data, error } = await resend.broadcasts.create({
-      // Send both — some Resend accounts/backends still key off the older
-      // `audienceId` name even though the SDK types prefer `segmentId`.
-      // Passing both is harmless and hedges against a server-side mismatch.
+      // Resend rejects the request if both segmentId and audienceId are set
+      // ("Either `segment_id` or `audience_id` may be provided, but not
+      // both."), so segmentId alone is correct for this account.
       segmentId,
-      audienceId: segmentId,
       from,
       subject: opts.subject,
       html: opts.html,
