@@ -64,20 +64,29 @@ function maskId(id: string): string {
   return `${id.slice(0, 6)}…${id.slice(-4)} (len=${id.length})`
 }
 
+/** Result of an upsertContact call — callers (e.g. the backfill job) need this
+ * to accurately count successes/failures instead of assuming every call
+ * succeeded just because it didn't throw. */
+export type UpsertContactResult = { success: true } | { success: false; error: string }
+
 /**
  * Add or update a contact in the Resend segment.
  * Safe to call on every signup — Resend upserts by email.
  * Never throws — a Resend outage or missing config must never block signups.
+ * Callers that need to know whether the contact actually landed in Resend
+ * (e.g. the backfill admin route) should check the returned result rather
+ * than assuming success from the absence of a thrown error.
  */
 export async function upsertContact(
   email: string,
   firstName?: string | null,
-): Promise<void> {
+): Promise<UpsertContactResult> {
   try {
     const missing = getMissingBroadcastConfig()
     if (missing.length > 0) {
-      console.error(`[resendAudience] upsertContact skipped — missing env var(s): ${missing.join(', ')}`)
-      return
+      const error = `missing env var(s): ${missing.join(', ')}`
+      console.error(`[resendAudience] upsertContact skipped — ${error}`)
+      return { success: false, error }
     }
     const resend = getResend()!
     const segmentId = getSegmentId()!
@@ -91,9 +100,12 @@ export async function upsertContact(
 
     if (error) {
       console.error('[resendAudience] upsertContact failed:', error)
+      return { success: false, error: error.message || error.name || 'Unknown Resend error' }
     }
+    return { success: true }
   } catch (err) {
     console.error('[resendAudience] upsertContact threw:', err)
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
   }
 }
 

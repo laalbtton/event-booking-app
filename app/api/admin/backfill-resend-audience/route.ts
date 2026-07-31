@@ -6,11 +6,22 @@
  * app admin's session token — useful when CRON_SECRET isn't easily copyable
  * (e.g. marked sensitive in Vercel). See app/admin/resend-tools/page.tsx.
  *
- * Iterates profiles in pages of 100 to stay within API call limits.
- * Safe to run multiple times — upsertContact is idempotent.
+ * IMPORTANT — this endpoint is CHUNKED/RESUMABLE, not one-shot:
+ *   - It previously fired all 100 contacts in a page at Resend concurrently,
+ *     which blew past Resend's per-second rate limit. Most requests got
+ *     silently 429'd, but the loop counted `added++` as soon as
+ *     `upsertContact` resolved (it never throws by design, so a Resend
+ *     outage can never block real user signups) — so the reported count
+ *     looked fine (e.g. "171 added") even though only ~10 contacts actually
+ *     landed in Resend.
+ *   - Fix: process a small CHUNK per call, sequentially with a short delay
+ *     between each contact (safe rate), and count based on upsertContact's
+ *     *actual* returned result. The caller (see app/admin/resend-tools)
+ *     loops this endpoint with `offset`/`nextOffset` until `done: true`,
+ *     which also sidesteps Vercel's function timeout for large user bases.
  *
- * Usage:
- *   curl -X POST https://app.laalbutton.com/api/admin/backfill-resend-audience \
+ * Usage (single chunk):
+ *   curl -X POST "https://app.laalbutton.com/api/admin/backfill-resend-audience?offset=0" \
  *     -H "Authorization: Bearer YOUR_CRON_SECRET"
  */
 
@@ -26,7 +37,15 @@ async function isAdmin(supabase: any, userId: string): Promise<boolean> {
   return !!adminFallback
 }
 
-const PAGE_SIZE = 100
+// Small chunk processed sequentially per call, well within Vercel's default
+// function timeout even on the Hobby plan, and safely under Resend's rate
+// limit (a per-contact delay is applied below).
+const CHUNK_SIZE = 25
+const DELAY_BETWEEN_CONTACTS_MS = 150
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 export async function POST(request: Request) {
   const supabase = getAdminClient()
@@ -49,48 +68,60 @@ export async function POST(request: Request) {
     }
   }
 
-  let added = 0
-  let failed = 0
-  let page = 0
+  const { searchParams } = new URL(request.url)
+  const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0)
 
-  while (true) {
-    const from = page * PAGE_SIZE
-    const to = from + PAGE_SIZE - 1
+  const { count: total } = await supabase
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .not('email', 'is', null)
 
-    const { data: profiles, error } = await supabase
-      .from('profiles')
-      .select('email, full_name')
-      .not('email', 'is', null)
-      .range(from, to)
-      .order('created_at', { ascending: true })
+  const { data: profiles, error } = await supabase
+    .from('profiles')
+    .select('email, full_name')
+    .not('email', 'is', null)
+    .range(offset, offset + CHUNK_SIZE - 1)
+    .order('created_at', { ascending: true })
 
-    if (error) {
-      console.error('[backfill-resend-audience] Supabase error:', error)
-      return NextResponse.json({ error: error.message, added, failed }, { status: 500 })
-    }
-
-    if (!profiles || profiles.length === 0) break
-
-    await Promise.allSettled(
-      (profiles as { email: string; full_name: string | null }[]).map(async (p) => {
-        if (!p.email) return
-        const firstName = p.full_name?.split(' ')[0] ?? undefined
-        try {
-          await upsertContact(p.email, firstName)
-          added++
-        } catch {
-          failed++
-        }
-      }),
-    )
-
-    if (profiles.length < PAGE_SIZE) break
-    page++
-
-    // Respect Resend rate limits: ~10 req/s is safe
-    await new Promise((r) => setTimeout(r, 150))
+  if (error) {
+    console.error('[backfill-resend-audience] Supabase error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  console.info(`[backfill-resend-audience] Done: ${added} added, ${failed} failed.`)
-  return NextResponse.json({ success: true, added, failed })
+  let added = 0
+  let failed = 0
+  const sampleErrors: string[] = []
+
+  for (const p of (profiles as { email: string; full_name: string | null }[]) || []) {
+    if (!p.email) continue
+    const firstName = p.full_name?.split(' ')[0] ?? undefined
+    const result = await upsertContact(p.email, firstName)
+    if (result.success) {
+      added++
+    } else {
+      failed++
+      if (sampleErrors.length < 5) sampleErrors.push(result.error)
+    }
+    await sleep(DELAY_BETWEEN_CONTACTS_MS)
+  }
+
+  const processedCount = profiles?.length || 0
+  const nextOffset = offset + processedCount
+  const done = processedCount < CHUNK_SIZE
+
+  console.info(
+    `[backfill-resend-audience] Chunk [${offset}, ${nextOffset}): ${added} added, ${failed} failed. done=${done}`,
+  )
+
+  return NextResponse.json({
+    success: true,
+    added,
+    failed,
+    processed: processedCount,
+    offset,
+    nextOffset,
+    total: total ?? undefined,
+    done,
+    sampleErrors: sampleErrors.length > 0 ? sampleErrors : undefined,
+  })
 }

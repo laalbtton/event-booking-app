@@ -26,17 +26,41 @@ export default function AdminResendToolsPage() {
   async function handleBackfill() {
     setBackfillLoading(true)
     setBackfillResult('')
+    let totalAdded = 0
+    let totalFailed = 0
+    let offset = 0
+    let total: number | undefined
+    const errorSamples: string[] = []
     try {
       const token = await getToken()
-      const res = await fetch('/api/admin/backfill-resend-audience', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
-      setBackfillResult(`✅ Added ${data.added ?? 0} contacts, ${data.failed ?? 0} failed.`)
+      // Chunked/resumable: the API processes a small batch per call (rate-limit
+      // safe) and tells us where to resume. We loop until it reports done.
+      while (true) {
+        const res = await fetch(`/api/admin/backfill-resend-audience?offset=${offset}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
+
+        totalAdded += data.added ?? 0
+        totalFailed += data.failed ?? 0
+        if (typeof data.total === 'number') total = data.total
+        if (Array.isArray(data.sampleErrors)) errorSamples.push(...data.sampleErrors)
+
+        setBackfillResult(
+          `⏳ Processed ${offset + (data.processed ?? 0)}${total ? ` of ${total}` : ''} — ${totalAdded} added, ${totalFailed} failed so far…`,
+        )
+
+        if (data.done) break
+        offset = data.nextOffset ?? offset + (data.processed ?? 0)
+      }
+      const errSuffix = errorSamples.length > 0 ? ` Sample errors: ${[...new Set(errorSamples)].slice(0, 3).join('; ')}` : ''
+      setBackfillResult(`✅ Done. Added ${totalAdded} contacts, ${totalFailed} failed.${errSuffix}`)
     } catch (err) {
-      setBackfillResult(`❌ ${err instanceof Error ? err.message : 'Backfill failed'}`)
+      setBackfillResult(
+        `❌ ${err instanceof Error ? err.message : 'Backfill failed'} (${totalAdded} added, ${totalFailed} failed before the error)`,
+      )
     } finally {
       setBackfillLoading(false)
     }
