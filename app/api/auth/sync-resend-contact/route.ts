@@ -44,7 +44,15 @@ export async function POST(request: Request) {
     // Extract first name from full_name (take the first word).
     const firstName = profile.full_name?.split(' ')[0] ?? undefined
 
-    await upsertContact(profile.email, firstName)
+    const result = await upsertContact(profile.email, firstName)
+    if (!result.success) {
+      // Don't fail the request — this must never block onboarding — but do
+      // report the real outcome instead of a hardcoded `success: true` that
+      // would mask a broken Resend integration (missing env vars, bad
+      // segment id, rate limiting, etc.).
+      console.error(`[sync-resend-contact] upsertContact failed for user ${userId}:`, result.error)
+      return NextResponse.json({ success: false, error: result.error })
+    }
 
     return NextResponse.json({ success: true })
   } catch (err: unknown) {

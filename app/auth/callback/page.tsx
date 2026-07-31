@@ -84,6 +84,15 @@ export default function AuthCallbackPage() {
         }
 
         window.localStorage.removeItem('pending_role_onboarding')
+
+        // Sync new user to Resend marketing segment (non-blocking). This flow
+        // assigns a role directly and skips /onboarding/role, which is the
+        // only other place this sync happens — so it must be done here too.
+        fetch('/api/auth/sync-resend-contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id }),
+        }).catch(() => {})
       }
 
       // 2. Create the audience booking (idempotent — ignore "already booked" errors)
@@ -167,6 +176,15 @@ export default function AuthCallbackPage() {
       }
 
       window.localStorage.removeItem('pending_role_onboarding')
+
+      // Sync new user to Resend marketing segment (non-blocking). This flow
+      // assigns a role directly and skips /onboarding/role, which is the
+      // only other place this sync happens — so it must be done here too.
+      fetch('/api/auth/sync-resend-contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      }).catch(() => {})
 
       // Mark the founding member account as activated (email comes from the session server-side)
       try {
