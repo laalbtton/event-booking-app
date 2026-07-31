@@ -33,6 +33,8 @@ function getResend(): Resend | null {
   return new Resend(key)
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 function getSegmentId(): string | null {
   const raw = process.env.RESEND_SEGMENT_ID
   if (!raw) return null
@@ -40,7 +42,20 @@ function getSegmentId(): string | null {
   // copy-paste mistake when setting env vars in Vercel that produces an
   // ID Resend's API doesn't recognize (often surfacing as a generic 500).
   const cleaned = raw.trim().replace(/^['"]|['"]$/g, '').trim()
-  return cleaned || null
+  if (!cleaned) return null
+
+  // Resend segment/audience IDs are UUIDs (36 chars). Anything else almost
+  // certainly means extra text got pasted into the env var by mistake —
+  // fail loudly here instead of letting Resend's API return a generic 500.
+  if (!UUID_RE.test(cleaned)) {
+    console.error(
+      `[resendAudience] RESEND_SEGMENT_ID does not look like a valid UUID ` +
+        `(length=${cleaned.length}, expected 36). Re-copy the ID from the Resend ` +
+        `dashboard (Contacts → Segments) and re-set the env var in Vercel.`,
+    )
+  }
+
+  return cleaned
 }
 
 /** Masks a segment/audience id for safe logging (not a secret, but keep logs tidy). */
