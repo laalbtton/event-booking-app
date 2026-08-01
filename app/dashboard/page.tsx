@@ -54,6 +54,24 @@ import {
   findActiveBookingForEvent,
   isAudienceBookingScope,
 } from '@/lib/bookingScopeUtils'
+import { resolveEventDisplayPosterUrl } from '@/lib/eventPosterDefaults'
+
+/** Same Brampton/Toronto default posters as the public site when no custom poster. */
+function getDashboardEventPosterUrl(
+  event: Event,
+  venueById: Record<string, { name: string; city: string | null }>,
+): string | null {
+  const venueRow = event.venue_id ? venueById[event.venue_id] : undefined
+  return resolveEventDisplayPosterUrl({
+    posterUrl: event.poster_url,
+    startDate: event.date,
+    locationText: event.location || '',
+    venue: venueRow ? { name: venueRow.name, city: venueRow.city ?? undefined } : null,
+    eventType: event.event_type,
+    openMicType: (event as { open_mic_type?: string | null }).open_mic_type,
+    title: event.title,
+  })
+}
 
 type PushNotificationPrefs = {
   user_id: string
@@ -2249,16 +2267,19 @@ export default function Dashboard() {
                               </div>
                               
                               <div className="flex items-center gap-2 shrink-0">
-                                {event.poster_url && (
+                                {(() => {
+                                  const posterUrl = getDashboardEventPosterUrl(event, venueById)
+                                  return posterUrl ? (
                                   <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-border bg-muted">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
-                                      src={event.poster_url}
+                                      src={posterUrl}
                                       alt=""
                                       className="w-full h-full object-cover"
                                     />
                                   </div>
-                                )}
+                                  ) : null
+                                })()}
                                 {hasMatchingScopeBooking && activeBooking?.id ? (
                                   <Button asChild size="sm" className="text-xs shrink-0">
                                     <Link
@@ -2403,16 +2424,19 @@ export default function Dashboard() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                  {event.poster_url && (
+                                  {(() => {
+                                    const posterUrl = getDashboardEventPosterUrl(event, venueById)
+                                    return posterUrl ? (
                                     <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-border bg-muted">
                                       {/* eslint-disable-next-line @next/next/no-img-element */}
                                       <img
-                                        src={event.poster_url}
+                                        src={posterUrl}
                                         alt=""
                                         className="w-full h-full object-cover"
                                       />
                                     </div>
-                                  )}
+                                    ) : null
+                                  })()}
                                   {myTicket ? (
                                     <Button asChild size="sm" className="text-xs">
                                       <Link

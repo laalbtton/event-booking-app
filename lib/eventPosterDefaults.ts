@@ -67,7 +67,12 @@ export function isThursdayComedyOpenMicEvent(args: {
   return isComedyOpenMicEvent(args)
 }
 
-/** Default poster for public listings when no custom poster is uploaded. */
+/**
+ * Default poster for event listings (public site + app) when no custom poster
+ * is uploaded. Same rules as the Brampton / Toronto marketing pages:
+ *   - Wednesday Ryan's Chai open mic → Brampton generic poster
+ *   - Thursday comedy open mic → Toronto open mic poster
+ */
 export function resolvePublicEventPosterUrl(args: {
   posterUrl: string | null | undefined
   startDate: string
@@ -89,4 +94,22 @@ export function resolvePublicEventPosterUrl(args: {
   }
 
   return null
+}
+
+/** Alias used by the app UI — same resolution rules as the public website. */
+export const resolveEventDisplayPosterUrl = resolvePublicEventPosterUrl
+
+/**
+ * Email clients need absolute image URLs. Relative paths like
+ * `/images/OpenMicToronto.png` are turned into `${baseUrl}/images/...`.
+ */
+export function absolutizePosterUrl(
+  url: string | null | undefined,
+  baseUrl: string,
+): string | null {
+  const trimmed = url?.trim()
+  if (!trimmed) return null
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  const base = baseUrl.replace(/\/$/, '')
+  return trimmed.startsWith('/') ? `${base}${trimmed}` : `${base}/${trimmed}`
 }

@@ -14,12 +14,54 @@ import { getEmailTemplate, interpolate, TEMPLATE_KEYS } from '@/lib/server/email
 import { addCalendarDaysToYmd, getEasternCalendarDateString } from '@/lib/dateUtils'
 import { getSiteUrl, buildEventUrl, validateBaseUrl } from '@/lib/server/emailUrl'
 import { sendBroadcast, getMissingBroadcastConfig } from '@/lib/server/resendAudience'
+import {
+  absolutizePosterUrl,
+  resolveEventDisplayPosterUrl,
+} from '@/lib/eventPosterDefaults'
 
 function getAdminSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
+}
+
+type DigestVenue = { name: string; city?: string | null }
+
+function resolveDigestPosterUrl(args: {
+  posterUrl: string | null
+  startDate: string
+  locationText: string
+  venue: DigestVenue | null
+  eventType?: string | null
+  openMicType?: string | null
+  title?: string | null
+  siteUrl: string
+}): string | null {
+  const resolved = resolveEventDisplayPosterUrl({
+    posterUrl: args.posterUrl,
+    startDate: args.startDate,
+    locationText: args.locationText,
+    venue: args.venue
+      ? { name: args.venue.name, city: args.venue.city ?? undefined }
+      : null,
+    eventType: args.eventType,
+    openMicType: args.openMicType,
+    title: args.title,
+  })
+  return absolutizePosterUrl(resolved, args.siteUrl)
+}
+
+/** Booked shows first (by date), then open mics / everything else (by date). */
+function sortDigestEventsBookedFirst<T extends { date: string; eventType?: string | null }>(
+  events: T[],
+): T[] {
+  return [...events].sort((a, b) => {
+    const aBooked = a.eventType === 'booked_show' ? 0 : 1
+    const bBooked = b.eventType === 'booked_show' ? 0 : 1
+    if (aBooked !== bBooked) return aBooked - bBooked
+    return new Date(a.date).getTime() - new Date(b.date).getTime()
+  })
 }
 
 /** Stable message fragment for deduplication queries */
@@ -73,7 +115,7 @@ export async function prepareWeeklyDigest(): Promise<WeeklyDigestPrepared | null
 
   const { data: rawEvents, error: evErr } = await supabase
     .from('events')
-    .select('id, title, date, slug, location, venue_id, poster_url')
+    .select('id, title, date, slug, location, venue_id, poster_url, event_type, open_mic_type')
     .gte('date', todayStr)
     .lte('date', cutoffStr)
     .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
@@ -102,13 +144,15 @@ export async function prepareWeeklyDigest(): Promise<WeeklyDigestPrepared | null
     ),
   ]
 
-  const venueMap = new Map<string, string>()
+  const venueMap = new Map<string, DigestVenue>()
   if (venueIds.length > 0) {
     const { data: venues } = await supabase
       .from('venues')
-      .select('id, name')
+      .select('id, name, city')
       .in('id', venueIds)
-    ;((venues ?? []) as { id: string; name: string }[]).forEach((v) => venueMap.set(v.id, v.name))
+    ;((venues ?? []) as { id: string; name: string; city: string | null }[]).forEach((v) =>
+      venueMap.set(v.id, { name: v.name, city: v.city }),
+    )
   }
 
   const { data: links, error: linkErr } = await supabase
@@ -202,6 +246,8 @@ export async function prepareWeeklyDigest(): Promise<WeeklyDigestPrepared | null
       location: string | null
       venue_id: string | null
       poster_url: string | null
+      event_type: string | null
+      open_mic_type: string | null
     }
   >()
   ;(
@@ -213,6 +259,8 @@ export async function prepareWeeklyDigest(): Promise<WeeklyDigestPrepared | null
       location: string | null
       venue_id: string | null
       poster_url: string | null
+      event_type: string | null
+      open_mic_type: string | null
     }[]
   ).forEach((e) => eventById.set(e.id, e))
 
@@ -232,18 +280,33 @@ export async function prepareWeeklyDigest(): Promise<WeeklyDigestPrepared | null
       const communityName = communityMap.get(communityId)
       if (!communityName) continue
 
-      const eventsForSection = evIds
-        .map((id) => eventById.get(id))
-        .filter(Boolean)
-        .map((ev) => ({
-          id: ev!.id,
-          slug: ev!.slug,
-          title: ev!.title,
-          date: ev!.date,
-          venueName: ev!.venue_id ? (venueMap.get(ev!.venue_id) ?? null) : null,
-          location: ev!.location,
-          posterUrl: ev!.poster_url ?? null,
-        }))
+      const eventsForSection = sortDigestEventsBookedFirst(
+        evIds
+          .map((id) => eventById.get(id))
+          .filter(Boolean)
+          .map((ev) => {
+            const venue = ev!.venue_id ? (venueMap.get(ev!.venue_id) ?? null) : null
+            return {
+              id: ev!.id,
+              slug: ev!.slug,
+              title: ev!.title,
+              date: ev!.date,
+              venueName: venue?.name ?? null,
+              location: ev!.location,
+              posterUrl: resolveDigestPosterUrl({
+                posterUrl: ev!.poster_url,
+                startDate: ev!.date,
+                locationText: ev!.location || '',
+                venue,
+                eventType: ev!.event_type,
+                openMicType: ev!.open_mic_type,
+                title: ev!.title,
+                siteUrl,
+              }),
+              eventType: ev!.event_type,
+            }
+          }),
+      )
 
       if (eventsForSection.length === 0) continue
       sections.push({ communityName, communityId, events: eventsForSection })
@@ -358,14 +421,14 @@ export type BroadcastDigestResult = {
  * Fetch all upcoming events (next 14 days) as a flat list, sorted by date.
  * Returns null when there is nothing to send.
  */
-async function fetchUpcomingEvents(): Promise<DigestEvent[] | null> {
+async function fetchUpcomingEvents(siteUrl: string): Promise<DigestEvent[] | null> {
   const supabase = getAdminSupabase()
   const todayStr = getEasternCalendarDateString(new Date())
   const cutoffStr = addCalendarDaysToYmd(todayStr, 14)
 
   const { data: rawEvents, error: evErr } = await supabase
     .from('events')
-    .select('id, title, date, slug, location, venue_id, poster_url')
+    .select('id, title, date, slug, location, venue_id, poster_url, event_type, open_mic_type')
     .gte('date', todayStr)
     .lte('date', cutoffStr)
     .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
@@ -376,6 +439,7 @@ async function fetchUpcomingEvents(): Promise<DigestEvent[] | null> {
   const events = (rawEvents as {
     id: string; slug: string | null; venue_id: string | null
     title: string; date: string; location: string | null; poster_url: string | null
+    event_type: string | null; open_mic_type: string | null
   }[]).filter((e) => {
     const url = buildEventUrl(e.slug ?? e.id)
     if (!url) console.warn(`[weeklyDigest/broadcast] Skipping event ${e.id}: cannot build URL.`)
@@ -385,22 +449,39 @@ async function fetchUpcomingEvents(): Promise<DigestEvent[] | null> {
   if (events.length === 0) return null
 
   const venueIds = [...new Set(events.map((e) => e.venue_id).filter(Boolean) as string[])]
-  const venueMap = new Map<string, string>()
+  const venueMap = new Map<string, DigestVenue>()
   if (venueIds.length > 0) {
     const { data: venues } = await supabase
-      .from('venues').select('id, name').in('id', venueIds)
-    ;((venues ?? []) as { id: string; name: string }[]).forEach((v) => venueMap.set(v.id, v.name))
+      .from('venues').select('id, name, city').in('id', venueIds)
+    ;((venues ?? []) as { id: string; name: string; city: string | null }[]).forEach((v) =>
+      venueMap.set(v.id, { name: v.name, city: v.city }),
+    )
   }
 
-  return events.map((e) => ({
-    id: e.id,
-    slug: e.slug,
-    title: e.title,
-    date: e.date,
-    venueName: e.venue_id ? (venueMap.get(e.venue_id) ?? null) : null,
-    location: e.location,
-    posterUrl: e.poster_url ?? null,
-  }))
+  return sortDigestEventsBookedFirst(
+    events.map((e) => {
+      const venue = e.venue_id ? (venueMap.get(e.venue_id) ?? null) : null
+      return {
+        id: e.id,
+        slug: e.slug,
+        title: e.title,
+        date: e.date,
+        venueName: venue?.name ?? null,
+        location: e.location,
+        posterUrl: resolveDigestPosterUrl({
+          posterUrl: e.poster_url,
+          startDate: e.date,
+          locationText: e.location || '',
+          venue,
+          eventType: e.event_type,
+          openMicType: e.open_mic_type,
+          title: e.title,
+          siteUrl,
+        }),
+        eventType: e.event_type,
+      }
+    }),
+  )
 }
 
 /**
@@ -425,7 +506,7 @@ export async function sendBroadcastWeeklyDigest(): Promise<BroadcastDigestResult
     return { broadcastId: null, eventCount: 0, skipped: true, error: 'Base URL unreachable' }
   }
 
-  const events = await fetchUpcomingEvents()
+  const events = await fetchUpcomingEvents(siteUrl)
   if (!events) {
     console.info('[weeklyDigest/broadcast] No upcoming events — skipping broadcast.')
     return { broadcastId: null, eventCount: 0, skipped: true }

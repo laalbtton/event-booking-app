@@ -710,6 +710,8 @@ export type DigestCommunitySection = {
     location: string | null
     /** Event poster URL — shown as the card image when present */
     posterUrl: string | null
+    /** Used to section booked shows above open mics in digests */
+    eventType?: string | null
   }>
 }
 
@@ -874,58 +876,91 @@ export function getWeeklyDigestEmail(data: {
 
 export type DigestEvent = DigestCommunitySection['events'][number]
 
+function digestEventCard(ev: DigestEvent, siteUrl: string): string {
+  const eventUrl = `${siteUrl}/events/${ev.slug ?? ev.id}`
+  const { dateLine: date, timeLine: time } = formatDigestEventDatePartsEastern(ev.date)
+  const venue = ev.venueName ?? ev.location ?? 'Venue TBA'
+
+  const imageBlock = ev.posterUrl
+    ? `<a href="${eventUrl}" style="display:block; text-decoration:none;">
+         <img src="${ev.posterUrl}" alt="${ev.title}" width="560"
+              style="display:block; width:100%; max-height:280px; object-fit:cover;
+                     border-radius:10px 10px 0 0; background:#27272a;" />
+       </a>`
+    : `<div style="background:#27272a; border-radius:10px 10px 0 0; padding:32px;
+                   text-align:center; font-size:32px;">🎤</div>`
+
+  return `
+    <div style="margin:0 0 20px 0; border-radius:10px; border:1px solid #3f3f46;
+                background:#18181b; overflow:hidden;">
+      ${imageBlock}
+      <div style="padding:18px 20px 20px;">
+        <a href="${eventUrl}"
+           style="display:block; font-size:17px; font-weight:700; color:#f5f5f4;
+                  text-decoration:none; line-height:1.35; margin-bottom:10px;">
+          ${ev.title}
+        </a>
+        <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">
+          <tr>
+            <td style="font-size:13px; color:#a8a29e; padding:3px 0; vertical-align:top; width:18px;">📅</td>
+            <td style="font-size:13px; color:#a8a29e; padding:3px 0;">${date} &nbsp;·&nbsp; ${time} ET</td>
+          </tr>
+          <tr>
+            <td style="font-size:13px; color:#a8a29e; padding:3px 0; vertical-align:top;">📍</td>
+            <td style="font-size:13px; color:#a8a29e; padding:3px 0;">${venue}</td>
+          </tr>
+        </table>
+        <div style="margin-top:16px;">
+          <a href="${eventUrl}"
+             style="display:inline-block; background:#fbbf24; color:#09090b;
+                    font-size:13px; font-weight:700; padding:9px 20px;
+                    border-radius:7px; text-decoration:none; letter-spacing:0.01em;">
+            View event →
+          </a>
+        </div>
+      </div>
+    </div>`
+}
+
+function digestSectionHeading(label: string): string {
+  return `
+    <h2 style="font-size:15px; font-weight:700; color:#fbbf24; margin:0 0 16px 0;
+               text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid #3f3f46;
+               padding-bottom:8px;">
+      ${label}
+    </h2>`
+}
+
+/** Booked shows at top, open mics below — each section chronological. */
+function buildBookedThenOpenMicBlocks(events: DigestEvent[], siteUrl: string): string {
+  const booked = events.filter((e) => e.eventType === 'booked_show')
+  const openMics = events.filter((e) => e.eventType !== 'booked_show')
+
+  const parts: string[] = []
+  if (booked.length > 0) {
+    parts.push(`
+      <div style="margin:0 0 32px 0;">
+        ${digestSectionHeading('Booked Shows')}
+        ${booked.map((ev) => digestEventCard(ev, siteUrl)).join('')}
+      </div>`)
+  }
+  if (openMics.length > 0) {
+    parts.push(`
+      <div style="margin:0 0 32px 0;">
+        ${digestSectionHeading('Open Mics')}
+        ${openMics.map((ev) => digestEventCard(ev, siteUrl)).join('')}
+      </div>`)
+  }
+  return parts.join('')
+}
+
 export function getBroadcastWeeklyDigestEmail(data: {
   events: DigestEvent[]
   siteUrl: string
 }): string {
   const { events, siteUrl } = data
   const totalEvents = events.length
-
-  function eventCard(ev: DigestEvent): string {
-    const eventUrl = `${siteUrl}/events/${ev.slug ?? ev.id}`
-    const { dateLine: date, timeLine: time } = formatDigestEventDatePartsEastern(ev.date)
-    const venue = ev.venueName ?? ev.location ?? 'Venue TBA'
-
-    const imageBlock = ev.posterUrl
-      ? `<a href="${eventUrl}" style="display:block; text-decoration:none;">
-           <img src="${ev.posterUrl}" alt="${ev.title}" width="560"
-                style="display:block; width:100%; max-height:280px; object-fit:cover;
-                       border-radius:10px 10px 0 0; background:#27272a;" />
-         </a>`
-      : `<div style="background:#27272a; border-radius:10px 10px 0 0; padding:32px;
-                     text-align:center; font-size:32px;">🎤</div>`
-
-    return `
-      <div style="margin:0 0 20px 0; border-radius:10px; border:1px solid #3f3f46;
-                  background:#18181b; overflow:hidden;">
-        ${imageBlock}
-        <div style="padding:18px 20px 20px;">
-          <a href="${eventUrl}"
-             style="display:block; font-size:17px; font-weight:700; color:#f5f5f4;
-                    text-decoration:none; line-height:1.35; margin-bottom:10px;">
-            ${ev.title}
-          </a>
-          <table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">
-            <tr>
-              <td style="font-size:13px; color:#a8a29e; padding:3px 0; vertical-align:top; width:18px;">📅</td>
-              <td style="font-size:13px; color:#a8a29e; padding:3px 0;">${date} &nbsp;·&nbsp; ${time} ET</td>
-            </tr>
-            <tr>
-              <td style="font-size:13px; color:#a8a29e; padding:3px 0; vertical-align:top;">📍</td>
-              <td style="font-size:13px; color:#a8a29e; padding:3px 0;">${venue}</td>
-            </tr>
-          </table>
-          <div style="margin-top:16px;">
-            <a href="${eventUrl}"
-               style="display:inline-block; background:#fbbf24; color:#09090b;
-                      font-size:13px; font-weight:700; padding:9px 20px;
-                      border-radius:7px; text-decoration:none; letter-spacing:0.01em;">
-              View event →
-            </a>
-          </div>
-        </div>
-      </div>`
-  }
+  const eventBlocks = buildBookedThenOpenMicBlocks(events, siteUrl)
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -970,10 +1005,10 @@ export function getBroadcastWeeklyDigestEmail(data: {
             </td>
           </tr>
 
-          <!-- Event cards -->
+          <!-- Event cards: booked shows first, then open mics -->
           <tr>
             <td style="padding:0 0 8px 0;">
-              ${events.map(eventCard).join('')}
+              ${eventBlocks}
             </td>
           </tr>
 

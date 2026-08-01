@@ -30,6 +30,10 @@ import { ExpandableEventDescription } from '@/components/public/ExpandableEventD
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import EventChat from '@/components/EventChat'
 import { AddToCalendarButtons } from '@/components/AddToCalendarButtons'
+import {
+  absolutizePosterUrl,
+  resolveEventDisplayPosterUrl,
+} from '@/lib/eventPosterDefaults'
 
 
 type EventDetails = {
@@ -234,9 +238,26 @@ export default function EventDetailsPage() {
     toast.success('Instagram handles copied!')
   }
 
+  function getDisplayPosterUrl(): string | null {
+    if (!event) return null
+    return resolveEventDisplayPosterUrl({
+      posterUrl: event.poster_url,
+      startDate: event.date,
+      locationText: event.location || '',
+      venue: venue ? { name: venue.name, city: venue.city ?? undefined } : null,
+      eventType: event.event_type,
+      openMicType: event.open_mic_type,
+      title: event.title,
+    })
+  }
+
   function copyPosterLink() {
-    if (!event?.poster_url) return
-    navigator.clipboard.writeText(event.poster_url)
+    const posterUrl = getDisplayPosterUrl()
+    if (!posterUrl) return
+    const absolute =
+      absolutizePosterUrl(posterUrl, typeof window !== 'undefined' ? window.location.origin : '') ||
+      posterUrl
+    navigator.clipboard.writeText(absolute)
     toast.success('Poster link copied!')
   }
 
@@ -290,13 +311,17 @@ export default function EventDetailsPage() {
   }
 
   async function sharePoster() {
-    if (!event?.poster_url) return
+    const posterUrl = getDisplayPosterUrl()
+    if (!event || !posterUrl) return
+    const absolute =
+      absolutizePosterUrl(posterUrl, typeof window !== 'undefined' ? window.location.origin : '') ||
+      posterUrl
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({
           title: `${event.title} poster`,
           text: event.poster_caption || `Check out this event poster for ${event.title}`,
-          url: event.poster_url,
+          url: absolute,
         })
         return
       }
@@ -894,6 +919,11 @@ export default function EventDetailsPage() {
   // Returning null here prevents the authenticated page shell from rendering on top of it.
   if (!currentUser) return null
 
+  const displayPosterUrl = getDisplayPosterUrl()
+  const displayPosterHref =
+    absolutizePosterUrl(displayPosterUrl, typeof window !== 'undefined' ? window.location.origin : '') ||
+    displayPosterUrl
+
   const spotsAvailable = event.max_attendees 
     ? event.max_attendees - confirmedBookings.length 
     : null
@@ -1016,12 +1046,12 @@ export default function EventDetailsPage() {
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="-mx-4 sm:mx-0">
         {/* Poster Section - at top, collapsible caption + buttons */}
-        {event.poster_url && (
+        {displayPosterUrl && (
           <Card className="mb-6 rounded-none sm:rounded-lg border-x-0 sm:border-x">
             <CardContent className="p-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={event.poster_url}
+                src={displayPosterUrl}
                 alt={`${event.title} poster`}
                 className="w-full max-h-[500px] object-contain rounded border bg-muted/30"
               />
@@ -1043,12 +1073,12 @@ export default function EventDetailsPage() {
                     <p className="text-sm text-muted-foreground whitespace-pre-wrap">{event.poster_caption}</p>
                   )}
                   <div className="flex flex-wrap gap-2">
-                    <a href={event.poster_url} target="_blank" rel="noreferrer" download>
+                    <a href={displayPosterHref || displayPosterUrl} target="_blank" rel="noreferrer" download>
                       <Button variant="outline" size="sm">Download</Button>
                     </a>
                     <Button variant="outline" size="sm" onClick={copyPosterLink}>Copy Link</Button>
                     <Button variant="outline" size="sm" onClick={sharePoster}>Share</Button>
-                    {(userBooking || isHost || isEventCreator) && (
+                    {event.poster_url && (userBooking || isHost || isEventCreator) && (
                       <Button
                         variant={eventAutoPostEnabled ? 'default' : 'outline'}
                         size="sm"
