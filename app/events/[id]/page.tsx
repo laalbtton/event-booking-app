@@ -544,7 +544,7 @@ export default function EventDetailsPage() {
               .eq('event_id', resolvedEventId)
               .order('created_at', { ascending: true })
           : Promise.resolve({ data: null, error: null }),
-        eventData.event_type === 'booked_show'
+        eventData.tickets_enabled
           ? supabase
               .from('event_tickets')
               .select('name, price_cents, quantity, sold')
@@ -1194,7 +1194,7 @@ export default function EventDetailsPage() {
                   )}
                 </div>
 
-                {event.event_type === 'booked_show' ? (
+                {(event.event_type === 'booked_show' || event.tickets_enabled) ? (
                   (ticketInfo || (event.tickets_enabled && !isAudienceUser)) && (
                     <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                       <span className="mr-2">🎟️</span>
@@ -1208,9 +1208,7 @@ export default function EventDetailsPage() {
                 ) : (
                 <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                   <span className="mr-2">💳</span>
-                  {event.tickets_enabled ? (
-                    <span><strong className="font-semibold">Tickets:</strong> {event.external_event ? 'External' : 'Available'}</span>
-                  ) : event.food_coupon_enabled ? (
+                  {event.food_coupon_enabled ? (
                     <span>
                       <strong className="font-semibold">Cost:</strong>{' '}
                       {Math.max(0, Number(event.spot_fee_credits || 0)) + Math.ceil(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100)} credits
@@ -1270,17 +1268,16 @@ export default function EventDetailsPage() {
                   </div>
                 )}
 
+                {event.tickets_enabled && !event.external_event && (
+                  <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
+                    <span className="mr-2">⏱️</span>
+                    <span>Ticket cancellation: up to {event.cancellation_hours}h before showtime for a full credit refund</span>
+                  </div>
+                )}
                 {event.event_type !== 'booked_show' && !event.tickets_enabled && (
                   <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                     <span className="mr-2">⏱️</span>
                     <span>Cancel up to {event.cancellation_hours}h before for full refund</span>
-                  </div>
-                )}
-
-                {event.event_type === 'booked_show' && event.tickets_enabled && !event.external_event && (
-                  <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
-                    <span className="mr-2">⏱️</span>
-                    <span>Ticket cancellation: up to {event.cancellation_hours}h before showtime for a full credit refund</span>
                   </div>
                 )}
             </div>
@@ -1328,98 +1325,106 @@ export default function EventDetailsPage() {
               </div>
               {event.status === 'cancelled' ? (
                 <Badge variant="destructive">Cancelled</Badge>
-              ) : event.event_type === 'booked_show' && ticketInfo ? (
-                /* ── Ticket purchase UI (works for guests, no login required) ── */
-                <div className="flex flex-col items-end gap-2">
-                  {ticketSuccess && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800 font-medium">
-                      ✅ Payment confirmed! Check your email for your tickets.
-                    </div>
-                  )}
-                  {myTicketPurchases.length > 0 && !ticketSuccess && (
+              ) : (
+                <div className="flex flex-col items-end gap-3">
+                  {/* Ticket purchase — booked shows and ticketed open mics */}
+                  {ticketInfo && event.tickets_enabled && !event.external_event && (
                     <div className="flex flex-col items-end gap-2">
-                      {myTicketPurchases.map((purchase) => (
-                        <div key={purchase.id} className="flex items-center gap-2">
-                          <span className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800 font-medium whitespace-nowrap">
-                            🎟️ {purchase.quantity} ticket{purchase.quantity !== 1 ? 's' : ''}
-                          </span>
-                          <Button asChild size="sm" variant="default">
-                            <Link href={`/tickets/${purchase.id}`}>Go to ticket</Link>
-                          </Button>
+                      {ticketSuccess && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800 font-medium">
+                          ✅ Payment confirmed! Check your email for your tickets.
                         </div>
-                      ))}
-                      {!isPast && event.status !== 'cancelled' && (
+                      )}
+                      {myTicketPurchases.length > 0 && !ticketSuccess && (
+                        <div className="flex flex-col items-end gap-2">
+                          {myTicketPurchases.map((purchase) => (
+                            <div key={purchase.id} className="flex items-center gap-2">
+                              <span className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800 font-medium whitespace-nowrap">
+                                🎟️ {purchase.quantity} ticket{purchase.quantity !== 1 ? 's' : ''}
+                              </span>
+                              <Button asChild size="sm" variant="default">
+                                <Link href={`/tickets/${purchase.id}`}>Go to ticket</Link>
+                              </Button>
+                            </div>
+                          ))}
+                          {!isPast && event.status !== 'cancelled' && (
+                            <AddToCalendarButtons event={event} layout="row" />
+                          )}
+                        </div>
+                      )}
+                      {ticketSuccess && !isPast && event.status !== 'cancelled' && (
                         <AddToCalendarButtons event={event} layout="row" />
                       )}
-                    </div>
-                  )}
-                  {ticketSuccess && !isPast && event.status !== 'cancelled' && (
-                    <AddToCalendarButtons event={event} layout="row" />
-                  )}
-                  {Math.max(0, ticketInfo.quantity - ticketInfo.sold) > 0 ? (
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium text-muted-foreground">Qty:</label>
-                        <select
-                          className="h-9 w-16 rounded-md border border-input bg-background px-2 text-sm"
-                          value={ticketQty}
-                          onChange={(e) => setTicketQty(Number(e.target.value))}
-                          disabled={ticketLoading}
-                        >
-                          {Array.from({ length: Math.min(10, Math.max(0, ticketInfo.quantity - ticketInfo.sold)) }, (_, i) => i + 1).map((n) => (
-                            <option key={n} value={n}>{n}</option>
-                          ))}
-                        </select>
-                        <Button
-                          onClick={handleBuyTickets}
-                          disabled={ticketLoading}
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          {ticketLoading
-                            ? 'Opening...'
-                            : ticketCreditsToApply > 0 && ticketRemainingCents <= 0
-                              ? `Confirm with ${ticketCreditsToApply} credit${ticketCreditsToApply === 1 ? '' : 's'}`
-                              : `Buy Tickets · $${(ticketRemainingCents / 100).toFixed(2)}`}
-                        </Button>
-                      </div>
-                      {availableTicketCredits > 0 && (
-                        <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border border-border">
-                          <label className="flex items-center gap-2 cursor-pointer text-foreground font-medium">
-                            <input
-                              type="checkbox"
-                              checked={applyCreditsToTickets}
-                              onChange={(e) => setApplyCreditsToTickets(e.target.checked)}
+                      {Math.max(0, ticketInfo.quantity - ticketInfo.sold) > 0 ? (
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-muted-foreground">Qty:</label>
+                            <select
+                              className="h-9 w-16 rounded-md border border-input bg-background px-2 text-sm"
+                              value={ticketQty}
+                              onChange={(e) => setTicketQty(Number(e.target.value))}
                               disabled={ticketLoading}
-                              className="h-4 w-4 accent-green-600"
-                            />
-                            Use my credits (you have {availableTicketCredits})
-                          </label>
-                          {applyCreditsToTickets && ticketCreditsToApply > 0 && (
-                            <div className="text-right space-y-0.5">
-                              <div>Ticket total: ${(ticketTotalCents / 100).toFixed(2)}</div>
-                              <div className="text-green-700 dark:text-green-400">
-                                Credits applied: -${(ticketCreditsAppliedCents / 100).toFixed(2)} ({ticketCreditsToApply} credit{ticketCreditsToApply === 1 ? '' : 's'})
-                              </div>
-                              {ticketRemainingCents > 0 ? (
-                                <div className="font-semibold text-foreground">Charged to card: ${(ticketRemainingCents / 100).toFixed(2)}</div>
-                              ) : (
-                                <div className="font-semibold text-foreground">Fully covered — no card charge!</div>
+                            >
+                              {Array.from({ length: Math.min(10, Math.max(0, ticketInfo.quantity - ticketInfo.sold)) }, (_, i) => i + 1).map((n) => (
+                                <option key={n} value={n}>{n}</option>
+                              ))}
+                            </select>
+                            <Button
+                              onClick={handleBuyTickets}
+                              disabled={ticketLoading}
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                            >
+                              {ticketLoading
+                                ? 'Opening...'
+                                : ticketCreditsToApply > 0 && ticketRemainingCents <= 0
+                                  ? `Confirm with ${ticketCreditsToApply} credit${ticketCreditsToApply === 1 ? '' : 's'}`
+                                  : `Buy Tickets · $${(ticketRemainingCents / 100).toFixed(2)}`}
+                            </Button>
+                          </div>
+                          {availableTicketCredits > 0 && (
+                            <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground bg-muted/40 rounded-md px-3 py-2 border border-border">
+                              <label className="flex items-center gap-2 cursor-pointer text-foreground font-medium">
+                                <input
+                                  type="checkbox"
+                                  checked={applyCreditsToTickets}
+                                  onChange={(e) => setApplyCreditsToTickets(e.target.checked)}
+                                  disabled={ticketLoading}
+                                  className="h-4 w-4 accent-green-600"
+                                />
+                                Use my credits (you have {availableTicketCredits})
+                              </label>
+                              {applyCreditsToTickets && ticketCreditsToApply > 0 && (
+                                <div className="text-right space-y-0.5">
+                                  <div>Ticket total: ${(ticketTotalCents / 100).toFixed(2)}</div>
+                                  <div className="text-green-700 dark:text-green-400">
+                                    Credits applied: -${(ticketCreditsAppliedCents / 100).toFixed(2)} ({ticketCreditsToApply} credit{ticketCreditsToApply === 1 ? '' : 's'})
+                                  </div>
+                                  {ticketRemainingCents > 0 ? (
+                                    <div className="font-semibold text-foreground">Charged to card: ${(ticketRemainingCents / 100).toFixed(2)}</div>
+                                  ) : (
+                                    <div className="font-semibold text-foreground">Fully covered — no card charge!</div>
+                                  )}
+                                </div>
                               )}
                             </div>
                           )}
                         </div>
+                      ) : (
+                        <Badge variant="destructive">Sold Out</Badge>
                       )}
                     </div>
-                  ) : (
-                    <Badge variant="destructive">Sold Out</Badge>
                   )}
-                </div>
-              ) : event.event_type === 'booked_show' ? (
-                !isAudienceUser && (
-                  <Badge variant="outline">Invite only</Badge>
-                )
-              ) : (
-              profile && (
+
+                  {event.event_type === 'booked_show' &&
+                    !(ticketInfo && event.tickets_enabled && !event.external_event) &&
+                    !isAudienceUser && (
+                      <Badge variant="outline">Invite only</Badge>
+                    )}
+
+                  {/* Open mic: performer booking (and free audience path when not ticketed) */}
+                  {event.event_type !== 'booked_show' &&
+                    profile &&
+                    !(isAudienceUser && event.tickets_enabled && !event.external_event && ticketInfo) && (
                 event.tickets_enabled && event.external_event && event.external_ticket_url ? (
                   <a href={event.external_ticket_url} target="_blank" rel="noreferrer">
                     <Button size="sm" variant="outline">Buy Tickets</Button>
@@ -1484,7 +1489,9 @@ export default function EventDetailsPage() {
                     {bookingLoading ? 'Booking...' : bookingLabel}
                   </Button>
                 )
-              ))}
+                  )}
+                </div>
+              )}
             </div>
 
             {waitlistBookings.length > 0 && (

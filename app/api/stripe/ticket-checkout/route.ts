@@ -44,11 +44,12 @@ export async function POST(request: Request) {
     if (event.status === 'cancelled') {
       return NextResponse.json({ error: 'This event has been cancelled' }, { status: 400 })
     }
-    if (event.event_type !== 'booked_show') {
-      return NextResponse.json({ error: 'Ticket checkout is only for booked shows' }, { status: 400 })
-    }
+    // Booked shows and open mics can both sell tickets when tickets_enabled is on
     if (!event.tickets_enabled) {
       return NextResponse.json({ error: 'Tickets are not enabled for this event' }, { status: 400 })
+    }
+    if (event.event_type !== 'booked_show' && event.event_type !== 'open_mic') {
+      return NextResponse.json({ error: 'Ticket checkout is not available for this event type' }, { status: 400 })
     }
 
     // Load ticket tier
@@ -217,7 +218,9 @@ export async function POST(request: Request) {
               name: lineItemName,
               description: [
                 venueName ? `Venue: ${venueName}` : null,
-                event.date ? `Date: ${new Date(event.date).toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}` : null,
+                // Always format in Eastern — Stripe runs on UTC servers, and
+                // toLocaleDateString without a timezone shifts evening shows to the next calendar day.
+                event.date ? `Date: ${formatDateTimeEastern(event.date as string)}` : null,
               ].filter(Boolean).join(' · ') || undefined,
             },
             unit_amount: chargeCents,

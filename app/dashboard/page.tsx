@@ -73,6 +73,18 @@ function getDashboardEventPosterUrl(
   })
 }
 
+/** Perform-tab thumbnail: host avatar first, then default/custom poster as backup. */
+function getPerformCardThumbnailUrl(
+  event: Event,
+  venueById: Record<string, { name: string; city: string | null }>,
+  hostById: Record<string, { full_name: string | null; avatar_url: string | null }>,
+): string | null {
+  const hostId = event.host_user_id
+  const hostAvatar = hostId ? hostById[hostId]?.avatar_url?.trim() : null
+  if (hostAvatar) return hostAvatar
+  return getDashboardEventPosterUrl(event, venueById)
+}
+
 type PushNotificationPrefs = {
   user_id: string
   preprompt_dismissed_at: string | null
@@ -140,6 +152,8 @@ export default function Dashboard() {
   const [events, setEvents] = useState<Event[]>([])
   /** Venue rows keyed by id — used for city / name on Perform tab filters */
   const [venueById, setVenueById] = useState<Record<string, { name: string; city: string | null }>>({})
+  /** Host profile pics keyed by host_user_id — used for Perform tab thumbnails */
+  const [hostById, setHostById] = useState<Record<string, { full_name: string | null; avatar_url: string | null }>>({})
   /** Ticket price/availability for booked/ticketed shows, keyed by event id — used for Attend cards */
   const [ticketByEvent, setTicketByEvent] = useState<Record<string, { price_cents: number; quantity: number; sold: number }>>({})
   /** User's completed ticket purchases keyed by event id — used to show Go to ticket on Attend cards */
@@ -1015,6 +1029,7 @@ export default function Dashboard() {
         // No communities — empty dashboard
         setEvents([])
         setVenueById({})
+        setHostById({})
       } else {
         // Get approved event IDs in those communities
         const { data: eventLinks } = await supabase
@@ -1028,6 +1043,7 @@ export default function Dashboard() {
         if (eventIds.length === 0) {
           setEvents([])
           setVenueById({})
+          setHostById({})
         } else {
           const { data: fetchedEvents, error: eventsError } = await supabase
             .from('events')
@@ -1056,6 +1072,26 @@ export default function Dashboard() {
             setVenueById(map)
           } else {
             setVenueById({})
+          }
+
+          const hostIds = [
+            ...new Set(eventsData.map((e: Event) => e.host_user_id).filter(Boolean)),
+          ] as string[]
+          if (hostIds.length > 0) {
+            const { data: hostRows } = await supabase
+              .from('profiles')
+              .select('id, full_name, avatar_url')
+              .in('id', hostIds)
+            const hostMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {}
+            for (const row of hostRows || []) {
+              hostMap[row.id] = {
+                full_name: row.full_name ?? null,
+                avatar_url: row.avatar_url ?? null,
+              }
+            }
+            setHostById(hostMap)
+          } else {
+            setHostById({})
           }
 
           const ticketedEventIds = eventsData
@@ -2268,13 +2304,16 @@ export default function Dashboard() {
                               
                               <div className="flex items-center gap-2 shrink-0">
                                 {(() => {
-                                  const posterUrl = getDashboardEventPosterUrl(event, venueById)
-                                  return posterUrl ? (
+                                  const thumbUrl = getPerformCardThumbnailUrl(event, venueById, hostById)
+                                  const hostName = event.host_user_id
+                                    ? hostById[event.host_user_id]?.full_name
+                                    : null
+                                  return thumbUrl ? (
                                   <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-border bg-muted">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
-                                      src={posterUrl}
-                                      alt=""
+                                      src={thumbUrl}
+                                      alt={hostName ? `${hostName} (host)` : ''}
                                       className="w-full h-full object-cover"
                                     />
                                   </div>
