@@ -4,7 +4,11 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEasternCalendarDateString, EASTERN_TZ } from '@/lib/dateUtils'
+import {
+  getEasternCalendarDateString,
+  EASTERN_TZ,
+  addCalendarDaysToYmd,
+} from '@/lib/dateUtils'
 import { userCanManageEvent } from '@/lib/server/eventPermissions'
 
 export const COMMUNITY_COMMAND_MANAGE_ROLES = ['admin', 'co_admin', 'event_creator'] as const
@@ -29,17 +33,22 @@ export type EventCandidate = {
   location: string | null
   hostUserId: string | null
   hostName: string | null
+  cityLabel: string | null
 }
 
 export type AssignmentPreviewStatus = 'ready' | 'ambiguous' | 'unmatched'
+
+/** City / mic region mentioned in the prompt (exact filter when present). */
+export type LocationHint = 'brampton' | 'toronto'
 
 export type AssignmentPreviewRow = {
   rowId: string
   dateHint: string
   hostNameHint: string
   eventTitleHint: string | null
+  locationHint: LocationHint | null
   status: AssignmentPreviewStatus
-  /** Eastern YYYY-MM-DD when parsed */
+  /** Eastern YYYY-MM-DD when parsed — exact calendar date from the prompt */
   resolvedDate: string | null
   eventId: string | null
   eventTitle: string | null
@@ -56,6 +65,7 @@ export type ExtractedHostAssignment = {
   dateHint: string
   hostNameHint: string
   eventTitleHint?: string | null
+  locationHint?: LocationHint | null
 }
 
 /** Platform admin or community admin/co_admin/event_creator for ≥1 community. */
@@ -150,8 +160,13 @@ export async function userCanManageCommunity(
 
 /**
  * Parse a free-form date hint into Eastern YYYY-MM-DD.
- * Accepts ISO dates, "Mar 4", "Wed Mar 4", "2026-03-04", etc.
- * Uses the reference year (usually "now") when year is omitted.
+ *
+ * IMPORTANT: builds the calendar date from month/day/year components directly.
+ * Never uses `new Date("Mar 4")` — that parses as UTC midnight and shifts the
+ * Eastern calendar day (e.g. Mar 4 → Mar 3 EST).
+ *
+ * When a weekday is present ("Wed Mar 4"), the month/day must land on that
+ * weekday for the chosen year when possible.
  */
 export function parseDateHintToEasternYmd(
   dateHint: string,
@@ -160,46 +175,197 @@ export function parseDateHintToEasternYmd(
   const raw = dateHint.trim()
   if (!raw) return null
 
-  // Already YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
 
-  // Strip leading weekday
-  const cleaned = raw.replace(/^(mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+/i, '').trim()
+  const weekdayMatch = raw.match(/^(mon|tue|wed|thu|fri|sat|sun)[a-z]*/i)
+  const wantedWeekday = weekdayMatch ? weekdayTokenToIndex(weekdayMatch[1]) : null
+
+  const cleaned = raw
+    .replace(/^(mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+/i, '')
+    .replace(/(\d+)(st|nd|rd|th)/gi, '$1')
+    .trim()
 
   const refY = Number(
     new Intl.DateTimeFormat('en-CA', { timeZone: EASTERN_TZ, year: 'numeric' }).format(referenceDate),
   )
+  const todayYmd = getEasternCalendarDateString(referenceDate)
 
-  // Try Date.parse with a year appended if missing
-  const hasYear = /\b(20\d{2})\b/.test(cleaned)
-  const tryStrings = hasYear
-    ? [cleaned, cleaned.replace(/(\d+)(st|nd|rd|th)/gi, '$1')]
-    : [
-        `${cleaned} ${refY}`,
-        `${cleaned.replace(/(\d+)(st|nd|rd|th)/gi, '$1')} ${refY}`,
-        `${cleaned} ${refY + 1}`,
-      ]
-
-  for (const s of tryStrings) {
-    const d = new Date(s)
-    if (Number.isNaN(d.getTime())) continue
-    const ymd = getEasternCalendarDateString(d)
-    // If year was omitted and the date already passed this year by >14 days, prefer next year
-    if (!hasYear) {
-      const todayYmd = getEasternCalendarDateString(referenceDate)
-      if (ymd < todayYmd) {
-        const next = new Date(s.replace(String(refY), String(refY + 1)))
-        if (!Number.isNaN(next.getTime())) return getEasternCalendarDateString(next)
-      }
+  // 2026/03/04 or 03/04/2026 or 3/4
+  const slash = cleaned.match(/^(\d{1,4})[\/\-.](\d{1,2})(?:[\/\-.](\d{1,4}))?$/)
+  if (slash) {
+    let y: number
+    let m: number
+    let d: number
+    let yearOmitted = false
+    if (slash[3] && slash[1].length === 4) {
+      y = Number(slash[1])
+      m = Number(slash[2])
+      d = Number(slash[3])
+    } else if (slash[3] && slash[3].length === 4) {
+      m = Number(slash[1])
+      d = Number(slash[2])
+      y = Number(slash[3])
+    } else {
+      m = Number(slash[1])
+      d = Number(slash[2])
+      y = refY
+      yearOmitted = true
     }
-    return ymd
+    return pickValidYmd(y, m, d, wantedWeekday, todayYmd, yearOmitted)
+  }
+
+  // "Mar 4", "March 4 2026", "4 Mar", "4 March 2026"
+  const monthName = cleaned.match(
+    /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i,
+  )
+  const dayMatch = cleaned.match(/\b(\d{1,2})\b/)
+  const yearMatch = cleaned.match(/\b(20\d{2})\b/)
+
+  if (monthName && dayMatch) {
+    const m = monthTokenToNumber(monthName[1])
+    const d = Number(dayMatch[1])
+    if (!m || !d) return null
+    const hasYear = !!yearMatch
+    const y = hasYear ? Number(yearMatch![1]) : refY
+    return pickValidYmd(y, m, d, wantedWeekday, todayYmd, !hasYear)
   }
 
   return null
 }
 
+function weekdayTokenToIndex(token: string): number {
+  const t = token.toLowerCase().slice(0, 3)
+  const map: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }
+  return map[t] ?? -1
+}
+
+function monthTokenToNumber(token: string): number | null {
+  const t = token.toLowerCase().slice(0, 3)
+  const map: Record<string, number> = {
+    jan: 1,
+    feb: 2,
+    mar: 3,
+    apr: 4,
+    may: 5,
+    jun: 6,
+    jul: 7,
+    aug: 8,
+    sep: 9,
+    oct: 10,
+    nov: 11,
+    dec: 12,
+  }
+  return map[t] ?? null
+}
+
+function ymdParts(y: number, m: number, d: number): string | null {
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null
+  const probe = new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+  if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== m - 1 || probe.getUTCDate() !== d) {
+    return null
+  }
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+/** Weekday of a YYYY-MM-DD civil date (noon UTC — unambiguous for the Y-M-D triple). */
+function weekdayIndexOfYmd(ymd: string): number {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getUTCDay()
+}
+
+function pickValidYmd(
+  year: number,
+  month: number,
+  day: number,
+  wantedWeekday: number | null,
+  todayYmd: string,
+  yearWasOmitted: boolean,
+): string | null {
+  const candidates: string[] = []
+  const primary = ymdParts(year, month, day)
+  if (primary) candidates.push(primary)
+  if (yearWasOmitted) {
+    const next = ymdParts(year + 1, month, day)
+    if (next) candidates.push(next)
+    const prev = ymdParts(year - 1, month, day)
+    if (prev) candidates.push(prev)
+  }
+
+  const weekdayOk = (ymd: string) =>
+    wantedWeekday == null || wantedWeekday < 0 || weekdayIndexOfYmd(ymd) === wantedWeekday
+
+  const ranked = candidates
+    .filter(weekdayOk)
+    .sort((a, b) => {
+      const aFuture = a >= todayYmd ? 0 : 1
+      const bFuture = b >= todayYmd ? 0 : 1
+      if (aFuture !== bFuture) return aFuture - bFuture
+      return a.localeCompare(b)
+    })
+
+  if (ranked.length > 0) return ranked[0]
+
+  // Fall back to calendar month/day even if weekday mismatched
+  if (primary && (!yearWasOmitted || primary >= todayYmd)) return primary
+  if (yearWasOmitted) {
+    const next = ymdParts(year + 1, month, day)
+    if (next) return next
+  }
+  return primary
+}
+
 function normalizeName(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+export function normalizeLocationHint(raw: string | null | undefined): LocationHint | null {
+  if (!raw?.trim()) return null
+  const s = normalizeName(raw)
+  if (s.includes('brampton') || s === 'b ton' || s === 'b-town') return 'brampton'
+  if (s.includes('toronto') || s === 'to' || s === 'the 6') return 'toronto'
+  // Venue aliases commonly used instead of city names
+  if (s.includes('ryan') && s.includes('chai')) return 'brampton'
+  if (s.includes('socap') || s.includes('so cap') || s.includes('station on bloor')) return 'toronto'
+  return null
+}
+
+function eventSearchBlob(ev: {
+  title: string
+  location: string | null
+  venueName: string | null
+  venueCity: string | null
+}): string {
+  return normalizeName([ev.title, ev.location || '', ev.venueName || '', ev.venueCity || ''].join(' '))
+}
+
+/**
+ * Infer Brampton vs Toronto from venue/location/title.
+ * Ryan's Chai → Brampton; SoCap / Station on Bloor → Toronto.
+ */
+export function inferEventLocationLabel(ev: {
+  title: string
+  location: string | null
+  venueName: string | null
+  venueCity: string | null
+}): LocationHint | null {
+  const blob = eventSearchBlob(ev)
+  const city = normalizeName(ev.venueCity || '')
+
+  if (city.includes('brampton') || blob.includes('brampton')) return 'brampton'
+  if (city.includes('toronto') || blob.includes('toronto')) return 'toronto'
+
+  if (
+    (blob.includes('ryan') && blob.includes('chai')) ||
+    blob.includes("ryan's chai") ||
+    blob.includes('ryans chai')
+  ) {
+    return 'brampton'
+  }
+  if (blob.includes('socap') || blob.includes('so cap') || blob.includes('station on bloor')) {
+    return 'toronto'
+  }
+
+  return null
 }
 
 function scoreHostMatch(hint: string, fullName: string | null, email: string | null): number {
@@ -224,16 +390,42 @@ function scoreHostMatch(hint: string, fullName: string | null, email: string | n
   return 0
 }
 
-function scoreTitleMatch(hint: string | null | undefined, title: string): number {
+function scoreTitleMatch(hint: string | null | undefined, title: string, locationBlob: string): number {
   if (!hint?.trim()) return 0
   const h = normalizeName(hint)
   const t = normalizeName(title)
+  const blob = normalizeName(`${title} ${locationBlob}`)
   if (t === h) return 100
   if (t.includes(h) || h.includes(t)) return 80
+  if (blob.includes(h)) return 75
   const hWords = h.split(' ').filter((w) => w.length > 2)
   if (hWords.length === 0) return 0
-  const hits = hWords.filter((w) => t.includes(w)).length
+  const hits = hWords.filter((w) => blob.includes(w)).length
   return Math.round((hits / hWords.length) * 70)
+}
+
+function toCandidate(
+  ev: {
+    id: string
+    title: string
+    date: string
+    location: string | null
+    host_user_id: string | null
+    venueName: string | null
+    venueCity: string | null
+  },
+  hostNameById: Map<string, string | null>,
+): EventCandidate {
+  const cityLabel = inferEventLocationLabel(ev)
+  return {
+    id: ev.id,
+    title: ev.title,
+    date: ev.date,
+    location: ev.location,
+    hostUserId: ev.host_user_id,
+    hostName: ev.host_user_id ? hostNameById.get(ev.host_user_id) ?? null : null,
+    cityLabel: cityLabel ? cityLabel[0].toUpperCase() + cityLabel.slice(1) : ev.venueCity,
+  }
 }
 
 export async function resolveHostAssignments(args: {
@@ -243,7 +435,6 @@ export async function resolveHostAssignments(args: {
 }): Promise<AssignmentPreviewRow[]> {
   const { supabase, communityId, extracted } = args
 
-  // Event IDs linked to this community
   const { data: links } = await supabase
     .from('event_communities')
     .select('event_id')
@@ -257,6 +448,7 @@ export async function resolveHostAssignments(args: {
       dateHint: item.dateHint,
       hostNameHint: item.hostNameHint,
       eventTitleHint: item.eventTitleHint ?? null,
+      locationHint: item.locationHint ?? null,
       status: 'unmatched' as const,
       resolvedDate: parseDateHintToEasternYmd(item.dateHint),
       eventId: null,
@@ -272,15 +464,19 @@ export async function resolveHostAssignments(args: {
   }
 
   const todayYmd = getEasternCalendarDateString(new Date())
-  // Look back 1 day / forward ~120 days of upcoming events
+  // Wide SQL window; exact Eastern calendar day is matched in memory.
+  const rangeStartYmd = addCalendarDaysToYmd(todayYmd, -3)
+  const rangeEndYmd = addCalendarDaysToYmd(todayYmd, 180)
+
   const { data: eventRows } = await supabase
     .from('events')
-    .select('id, title, date, location, host_user_id, status')
+    .select('id, title, date, location, host_user_id, status, venue_id, venues(name, city)')
     .in('id', eventIds)
-    .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
-    .gte('date', `${todayYmd}T00:00:00-05:00`)
+    .not('status', 'in', '("cancelled","archived","draft")')
+    .gte('date', `${rangeStartYmd}T00:00:00.000Z`)
+    .lte('date', `${rangeEndYmd}T23:59:59.999Z`)
     .order('date', { ascending: true })
-    .limit(500)
+    .limit(800)
 
   type Ev = {
     id: string
@@ -288,8 +484,34 @@ export async function resolveHostAssignments(args: {
     date: string
     location: string | null
     host_user_id: string | null
+    venueName: string | null
+    venueCity: string | null
+    easternYmd: string
   }
-  const events = (eventRows ?? []) as Ev[]
+
+  const events: Ev[] = []
+  for (const row of (eventRows ?? []) as Array<{
+    id: string
+    title: string
+    date: string
+    location: string | null
+    host_user_id: string | null
+    venues: { name: string; city: string | null } | { name: string; city: string | null }[] | null
+  }>) {
+    const venue = Array.isArray(row.venues) ? row.venues[0] : row.venues
+    const easternYmd = getEasternCalendarDateString(row.date)
+    if (easternYmd < rangeStartYmd || easternYmd > rangeEndYmd) continue
+    events.push({
+      id: row.id,
+      title: row.title,
+      date: row.date,
+      location: row.location,
+      host_user_id: row.host_user_id,
+      venueName: venue?.name ?? null,
+      venueCity: venue?.city ?? null,
+      easternYmd,
+    })
+  }
 
   const hostIds = [...new Set(events.map((e) => e.host_user_id).filter(Boolean))] as string[]
   const hostNameById = new Map<string, string | null>()
@@ -300,7 +522,6 @@ export async function resolveHostAssignments(args: {
     }
   }
 
-  // Community members as host candidates
   const { data: memberRows } = await supabase
     .from('community_members')
     .select('user_id, profiles!inner(id, full_name, email)')
@@ -323,13 +544,13 @@ export async function resolveHostAssignments(args: {
 
   const eventsByYmd = new Map<string, Ev[]>()
   for (const ev of events) {
-    const ymd = getEasternCalendarDateString(ev.date)
-    const arr = eventsByYmd.get(ymd) ?? []
+    const arr = eventsByYmd.get(ev.easternYmd) ?? []
     arr.push(ev)
-    eventsByYmd.set(ymd, arr)
+    eventsByYmd.set(ev.easternYmd, arr)
   }
 
   return extracted.map((item, i) => {
+    const locationHint = item.locationHint ?? null
     const resolvedDate = parseDateHintToEasternYmd(item.dateHint)
     const hostScored = members
       .map((m) => ({
@@ -346,52 +567,61 @@ export async function resolveHostAssignments(args: {
     let notes: string | null = null
 
     if (!resolvedDate) {
-      notes = `Could not parse date "${item.dateHint}".`
+      notes = `Could not parse date "${item.dateHint}" into an exact calendar day.`
     } else {
       const dayEvents = eventsByYmd.get(resolvedDate) ?? []
+
       if (dayEvents.length === 0) {
-        notes = `No upcoming community event on ${resolvedDate}.`
-      } else if (item.eventTitleHint?.trim()) {
-        const scored = dayEvents
-          .map((ev) => ({ ev, score: scoreTitleMatch(item.eventTitleHint, ev.title) }))
-          .sort((a, b) => b.score - a.score)
-        const best = scored[0]
-        if (best && best.score >= 70) {
-          const top = scored.filter((s) => s.score >= best.score - 10 && s.score >= 70)
-          eventCandidates = top.map(({ ev }) => ({
-            id: ev.id,
-            title: ev.title,
-            date: ev.date,
-            location: ev.location,
-            hostUserId: ev.host_user_id,
-            hostName: ev.host_user_id ? hostNameById.get(ev.host_user_id) ?? null : null,
-          }))
-        } else {
-          eventCandidates = dayEvents.map((ev) => ({
-            id: ev.id,
-            title: ev.title,
-            date: ev.date,
-            location: ev.location,
-            hostUserId: ev.host_user_id,
-            hostName: ev.host_user_id ? hostNameById.get(ev.host_user_id) ?? null : null,
-          }))
-          notes = `Title hint "${item.eventTitleHint}" did not uniquely match; pick an event.`
-        }
+        const near = [addCalendarDaysToYmd(resolvedDate, -1), addCalendarDaysToYmd(resolvedDate, 1)]
+          .flatMap((ymd) => (eventsByYmd.get(ymd) ?? []).map((e) => `${e.title} (${ymd})`))
+          .slice(0, 3)
+        notes =
+          near.length > 0
+            ? `No community event on exact date ${resolvedDate} (from "${item.dateHint}"). Nearby: ${near.join('; ')}.`
+            : `No community event on exact date ${resolvedDate} (from "${item.dateHint}").`
       } else {
-        eventCandidates = dayEvents.map((ev) => ({
-          id: ev.id,
-          title: ev.title,
-          date: ev.date,
-          location: ev.location,
-          hostUserId: ev.host_user_id,
-          hostName: ev.host_user_id ? hostNameById.get(ev.host_user_id) ?? null : null,
-        }))
+        let filtered = dayEvents
+
+        if (locationHint) {
+          const byLocation = dayEvents.filter((ev) => inferEventLocationLabel(ev) === locationHint)
+          if (byLocation.length > 0) {
+            filtered = byLocation
+          } else {
+            notes = `No ${locationHint[0].toUpperCase()}${locationHint.slice(1)} event on ${resolvedDate}; showing all events that day — pick one.`
+          }
+        }
+
+        if (item.eventTitleHint?.trim()) {
+          const scored = filtered
+            .map((ev) => ({
+              ev,
+              score: scoreTitleMatch(
+                item.eventTitleHint,
+                ev.title,
+                `${ev.location || ''} ${ev.venueName || ''} ${ev.venueCity || ''}`,
+              ),
+            }))
+            .sort((a, b) => b.score - a.score)
+          const best = scored[0]
+          if (best && best.score >= 70) {
+            const top = scored.filter((s) => s.score >= best.score - 10 && s.score >= 70)
+            eventCandidates = top.map(({ ev }) => toCandidate(ev, hostNameById))
+          } else {
+            eventCandidates = filtered.map((ev) => toCandidate(ev, hostNameById))
+            notes =
+              notes ||
+              `Title hint "${item.eventTitleHint}" did not uniquely match; pick an event.`
+          }
+        } else {
+          eventCandidates = filtered.map((ev) => toCandidate(ev, hostNameById))
+        }
       }
     }
 
     const topHost = hostScored[0] ?? null
     const secondHost = hostScored[1] ?? null
-    const hostClear = !!topHost && topHost.score >= 75 && (!secondHost || topHost.score - secondHost.score >= 10)
+    const hostClear =
+      !!topHost && topHost.score >= 75 && (!secondHost || topHost.score - secondHost.score >= 10)
 
     const topEvent = eventCandidates.length === 1 ? eventCandidates[0] : null
     const eventClear = !!topEvent
@@ -403,8 +633,10 @@ export async function resolveHostAssignments(args: {
 
     if (!notes) {
       if (!hostClear && hostScored.length === 0) notes = `No community member matched "${item.hostNameHint}".`
-      else if (!hostClear && hostScored.length > 1) notes = `Multiple host matches for "${item.hostNameHint}" — pick one.`
-      else if (!eventClear && eventCandidates.length > 1) notes = `Multiple events on ${resolvedDate} — pick one.`
+      else if (!hostClear && hostScored.length > 1)
+        notes = `Multiple host matches for "${item.hostNameHint}" — pick one.`
+      else if (!eventClear && eventCandidates.length > 1)
+        notes = `Multiple events on ${resolvedDate}${locationHint ? ` (${locationHint})` : ''} — pick one.`
     }
 
     return {
@@ -412,6 +644,7 @@ export async function resolveHostAssignments(args: {
       dateHint: item.dateHint,
       hostNameHint: item.hostNameHint,
       eventTitleHint: item.eventTitleHint ?? null,
+      locationHint,
       status,
       resolvedDate,
       eventId: eventClear ? topEvent!.id : null,

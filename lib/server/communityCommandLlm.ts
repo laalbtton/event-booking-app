@@ -4,7 +4,11 @@
  */
 
 import OpenAI from 'openai'
-import type { ExtractedHostAssignment } from '@/lib/server/communityCommands'
+import {
+  normalizeLocationHint,
+  type ExtractedHostAssignment,
+  type LocationHint,
+} from '@/lib/server/communityCommands'
 
 export function getMissingOpenAiConfig(): string[] {
   const missing: string[] = []
@@ -16,17 +20,18 @@ type LlmExtractResult =
   | { ok: true; assignments: ExtractedHostAssignment[] }
   | { ok: false; error: string }
 
-const SYSTEM = `You extract host-assignment instructions from admin notes for a comedy/events app.
+const SYSTEM = `You extract host-assignment instructions from admin notes for a comedy/events app in the GTA (Brampton + Toronto).
 Return ONLY valid JSON with this shape:
-{"assignments":[{"dateHint":"string","hostNameHint":"string","eventTitleHint":"string|null"}]}
+{"assignments":[{"dateHint":"string","hostNameHint":"string","locationHint":"brampton"|"toronto"|null,"eventTitleHint":"string|null"}]}
 
 Rules:
-- dateHint: keep the date as written (e.g. "Wed Mar 4", "2026-03-04", "March 4").
+- dateHint: keep the calendar date EXACTLY as written (e.g. "Wed Mar 4", "March 4", "2026-03-04"). Do not convert or rewrite the date.
 - hostNameHint: the person's name to assign as host.
-- eventTitleHint: optional event title/venue keyword if present; otherwise null.
+- locationHint: "brampton" or "toronto" when the line mentions city/mic location (Brampton, Toronto, Ryan's Chai, SoCap, etc.); otherwise null.
+- eventTitleHint: optional event title keyword if present and NOT just the city name; otherwise null.
 - Ignore lines that are not assignment instructions.
-- If the user gives a list of "date — name" pairs, emit one assignment per pair.
-- Do not invent names or dates that are not in the input.`
+- If the user gives a list of "date — name" or "date — Brampton — name" pairs, emit one assignment per pair.
+- Do not invent names, dates, or cities that are not in the input.`
 
 export async function extractHostAssignmentsFromPrompt(prompt: string): Promise<LlmExtractResult> {
   const missing = getMissingOpenAiConfig()
@@ -83,24 +88,63 @@ export async function extractHostAssignmentsFromPrompt(prompt: string): Promise<
       const dateHint = typeof row.dateHint === 'string' ? row.dateHint.trim() : ''
       const hostNameHint = typeof row.hostNameHint === 'string' ? row.hostNameHint.trim() : ''
       if (!dateHint || !hostNameHint) continue
-      const eventTitleHint =
+
+      let eventTitleHint =
         typeof row.eventTitleHint === 'string' && row.eventTitleHint.trim()
           ? row.eventTitleHint.trim()
           : null
-      assignments.push({ dateHint, hostNameHint, eventTitleHint })
+
+      let locationHint: LocationHint | null =
+        normalizeLocationHint(typeof row.locationHint === 'string' ? row.locationHint : null) ||
+        normalizeLocationHint(eventTitleHint)
+
+      // If the only "title" was a city/venue alias, treat it as location only
+      if (eventTitleHint && normalizeLocationHint(eventTitleHint) && !row.locationHint) {
+        eventTitleHint = null
+      }
+
+      // Also scan the raw date+name line leftovers via host/title for city words
+      if (!locationHint) {
+        locationHint = normalizeLocationHint(`${dateHint} ${hostNameHint} ${eventTitleHint || ''}`)
+      }
+
+      assignments.push({ dateHint, hostNameHint, eventTitleHint, locationHint })
     }
 
-    if (assignments.length === 0) {
+    // Deterministic fallback: if LLM missed location, scan each original line for Brampton/Toronto
+    const enriched = enrichLocationFromPromptLines(trimmed, assignments)
+
+    if (enriched.length === 0) {
       return {
         ok: false,
-        error: 'No host assignments found in the prompt. Try lines like "Wed Mar 4 — Jas".',
+        error: 'No host assignments found in the prompt. Try lines like "Wed Mar 4 — Brampton — Jas".',
       }
     }
 
-    return { ok: true, assignments }
+    return { ok: true, assignments: enriched }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[communityCommandLlm] extract failed:', err)
     return { ok: false, error: `OpenAI request failed: ${message}` }
   }
+}
+
+/** Best-effort: if a prompt line mentions Brampton/Toronto near a host, attach locationHint. */
+function enrichLocationFromPromptLines(
+  prompt: string,
+  assignments: ExtractedHostAssignment[],
+): ExtractedHostAssignment[] {
+  const lines = prompt.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  return assignments.map((a) => {
+    if (a.locationHint) return a
+    const host = a.hostNameHint.toLowerCase()
+    const date = a.dateHint.toLowerCase()
+    const matchLine = lines.find((line) => {
+      const l = line.toLowerCase()
+      return l.includes(host) && (l.includes(date.split(/\s+/).slice(-2).join(' ')) || l.includes(date))
+    })
+    const fromLine = normalizeLocationHint(matchLine || '')
+    if (fromLine) return { ...a, locationHint: fromLine }
+    return a
+  })
 }

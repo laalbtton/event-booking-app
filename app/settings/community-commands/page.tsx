@@ -55,7 +55,7 @@ export default function CommunityCommandsPage() {
   const [communities, setCommunities] = useState<ManagedCommunity[]>([])
   const [communityId, setCommunityId] = useState('')
   const [prompt, setPrompt] = useState(
-    'Assign hosts for upcoming open mics:\nWed Mar 4 — Jas\nThu Mar 5 — Aditya\nWed Mar 11 — Sunny',
+    'Assign hosts for upcoming open mics:\nWed Mar 4 — Brampton — Jas\nThu Mar 5 — Toronto — Aditya\nWed Mar 11 — Brampton — Sunny',
   )
   const [rows, setRows] = useState<EditableRow[]>([])
   const [parsing, setParsing] = useState(false)
@@ -272,8 +272,9 @@ export default function CommunityCommandsPage() {
         <CardHeader>
           <CardTitle className="text-lg">Assign hosts (preview first)</CardTitle>
           <CardDescription>
-            Paste free-form instructions. We extract date ↔ host pairs, match them to upcoming events in your
-            community, then you confirm before anything is saved. More command types later.
+            Paste free-form instructions. Dates match the exact calendar day you write (Eastern). Mention
+            Brampton or Toronto (or Ryan&apos;s Chai / SoCap) so we pick the right mic when both run the same
+            day. Confirm before anything is saved.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -319,7 +320,7 @@ export default function CommunityCommandsPage() {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={8}
-              placeholder={'Wed Mar 4 — Jas\nThu Mar 5 — Aditya'}
+              placeholder={'Wed Mar 4 — Brampton — Jas\nThu Mar 5 — Toronto — Aditya'}
               className="font-mono text-sm"
             />
           </div>
@@ -369,7 +370,10 @@ export default function CommunityCommandsPage() {
                         <td className="py-3 pr-2 space-y-1">
                           <p className="font-medium text-foreground">{row.dateHint}</p>
                           {row.resolvedDate && (
-                            <p className="text-xs text-muted-foreground">Parsed: {row.resolvedDate}</p>
+                            <p className="text-xs text-muted-foreground">Exact date: {row.resolvedDate}</p>
+                          )}
+                          {row.locationHint && (
+                            <p className="text-xs text-muted-foreground capitalize">Location: {row.locationHint}</p>
                           )}
                           {row.eventCandidates.length > 1 ? (
                             <select
@@ -391,6 +395,7 @@ export default function CommunityCommandsPage() {
                               <option value="">Pick event…</option>
                               {row.eventCandidates.map((ev) => (
                                 <option key={ev.id} value={ev.id}>
+                                  {ev.cityLabel ? `[${ev.cityLabel}] ` : ''}
                                   {ev.title}
                                   {ev.date ? ` · ${formatDateTimeEastern(ev.date)}` : ''}
                                 </option>
@@ -398,6 +403,9 @@ export default function CommunityCommandsPage() {
                             </select>
                           ) : (
                             <p className="text-xs text-muted-foreground">
+                              {row.eventCandidates[0]?.cityLabel
+                                ? `[${row.eventCandidates[0].cityLabel}] `
+                                : ''}
                               {row.eventTitle ||
                                 (row.eventCandidates[0]
                                   ? row.eventCandidates[0].title
