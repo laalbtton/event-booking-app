@@ -796,6 +796,11 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 # Email (Resend)
 RESEND_API_KEY=re_...
 
+# OpenAI (Community Command Assistant)
+OPENAI_API_KEY=sk-...
+# Optional override (default gpt-4o-mini)
+# OPENAI_MODEL=gpt-4o-mini
+
 # Cron Security
 CRON_SECRET=random_secret_key
 

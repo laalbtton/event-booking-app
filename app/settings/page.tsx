@@ -23,7 +23,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, ChevronDown, ChevronUp, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronDown, ChevronUp, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode, RefreshCw, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
@@ -52,6 +52,7 @@ export default function SettingsPage() {
   const isMobile = useIsMobile()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canCommunityCommands, setCanCommunityCommands] = useState(false)
   const [loading, setLoading] = useState(true)
   const [pushPrefs, setPushPrefs] = useState<PushNotificationPrefs | null>(null)
   const [pushSupported, setPushSupported] = useState(false)
@@ -125,8 +126,8 @@ export default function SettingsPage() {
       if (profileError) throw profileError
       setProfile(profileData)
 
-      // All four remaining queries are independent — run in parallel
-      const [adminResult, pushPrefsResult, socialResult, prefResult] = await Promise.all([
+      // Remaining queries are independent — run in parallel
+      const [adminResult, pushPrefsResult, socialResult, prefResult, communityManageResult] = await Promise.all([
         supabase.from('admin_users').select('user_id').eq('user_id', userId).maybeSingle(),
         supabase
           .from('push_notification_prefs')
@@ -146,9 +147,16 @@ export default function SettingsPage() {
           .eq('user_id', userId)
           .is('event_id', null)
           .limit(1),
+        supabase
+          .from('community_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .in('role', ['admin', 'co_admin', 'event_creator']),
       ])
 
-      setIsAdmin((profileData?.role === 'admin') || !!adminResult.data)
+      const adminOk = (profileData?.role === 'admin') || !!adminResult.data
+      setIsAdmin(adminOk)
+      setCanCommunityCommands(adminOk || (communityManageResult.count ?? 0) > 0)
       setPushPrefs((pushPrefsResult.data || null) as PushNotificationPrefs | null)
       const social = socialResult.data?.[0]
       setInstagramConnected(!!social)
@@ -607,6 +615,11 @@ export default function SettingsPage() {
               <div className="px-4 py-1">
                 <SettingsListRow href="/settings/communities" icon={Users} title="Communities" description="Your communities & memberships" />
               </div>
+              {canCommunityCommands && (
+                <div className="px-4 py-1">
+                  <SettingsListRow href="/settings/community-commands" icon={Terminal} title="Community commands" description="Bulk host assign from pasted notes" />
+                </div>
+              )}
               {isAdmin && (
                 <div className="px-4 py-1">
                   <SettingsListRow href="/admin" icon={Settings2} title="Admin" description="Manage users, events, requests" />
@@ -947,6 +960,25 @@ export default function SettingsPage() {
             </Button>
           </CardContent>
         </Card>
+
+        {canCommunityCommands && (
+          <Card className="shadow-sm border-border">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Terminal className="h-5 w-5" />
+                Community commands
+              </CardTitle>
+              <CardDescription>
+                Paste host assignment notes, preview matches, then apply — scoped to communities you manage.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="outline">
+                <Link href="/settings/community-commands">Open command assistant</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {isAdmin && (
           <Card className="shadow-sm border-purple-200">
