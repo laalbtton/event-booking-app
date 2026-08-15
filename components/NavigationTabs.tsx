@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Home, MessageSquare, Mic, MoreHorizontal, LogOut, Settings, Pencil, Newspaper } from 'lucide-react'
+import { Home, MessageSquare, Mic, MoreHorizontal, LogOut, Settings, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { signOutAndCleanup } from '@/lib/authClient'
@@ -167,18 +167,6 @@ export default function NavigationTabs() {
                 <CouponsUnreadBadge />
               </span>
               <span className="text-xs font-medium">Home</span>
-            </Link>
-
-            <Link
-              href="/feed"
-              className={`${navItemClass} ${
-                isActive('/feed')
-                  ? 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400'
-                  : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
-              }`}
-            >
-              <Newspaper className="w-5 h-5" />
-              <span className="text-xs font-medium">Feed</span>
             </Link>
 
             <Link

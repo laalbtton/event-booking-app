@@ -25,7 +25,7 @@ import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { cn } from '@/lib/utils'
 import { NotificationsBellLink } from '@/components/NotificationsBellLink'
-import { ChevronDown, Download, Filter, Gift } from 'lucide-react'
+import { ChevronDown, Download, Filter, Gift, Newspaper } from 'lucide-react'
 import { EventCardSkeleton } from '@/components/skeletons/EventCardSkeleton'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
@@ -1851,6 +1851,13 @@ export default function Dashboard() {
         <div className="mb-8 space-y-3">
           {userRole !== 'audience' && eventTab === 'perform' && (
             <div className="relative flex min-h-11 items-center justify-center px-10 sm:px-12">
+              <div className="absolute left-0 top-1/2 -translate-y-1/2">
+                <Button asChild variant="ghost" size="icon" className="h-8 w-8" title="Your feed">
+                  <Link href="/feed" aria-label="Your feed">
+                    <Newspaper className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
               <span className="text-center text-lg font-bold tracking-tight text-foreground sm:text-xl">
                 One Mic Stand
               </span>

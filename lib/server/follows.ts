@@ -305,7 +305,8 @@ export async function getFeedEvents(
         .from('events')
         .select('id, host_user_id')
         .in('host_user_id', followingIds)
-        .gte('date', nowIso),
+        // Same window as the final query, so an in-progress show isn't dropped here.
+        .or(`date.gte.${nowIso},end_time.gte.${nowIso}`),
       supabase
         .from('bookings')
         .select('event_id, user_id, status, booking_scope')

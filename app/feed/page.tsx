@@ -73,6 +73,11 @@ export default function FeedPage() {
     [events],
   )
 
+  const communityCount = useMemo(
+    () => events.filter((e) => e.reasons.some((r) => r.kind === 'community')).length,
+    [events],
+  )
+
   if (!authResolved || loading) {
     return (
       <div className="min-h-screen bg-background pb-24 flex items-center justify-center">
@@ -92,19 +97,21 @@ export default function FeedPage() {
             </p>
           </div>
           <Button asChild variant="outline" size="sm" className="shrink-0">
-            <Link href="/feed/following">Following</Link>
+            <Link href="/feed/following">
+              Following{followingCount > 0 ? ` · ${followingCount}` : ''}
+            </Link>
           </Button>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>
-            All ({events.length})
+            All events ({events.length})
           </FilterChip>
           <FilterChip active={filter === 'people'} onClick={() => setFilter('people')}>
-            People you follow ({peopleCount})
+            From people you follow ({peopleCount})
           </FilterChip>
           <FilterChip active={filter === 'communities'} onClick={() => setFilter('communities')}>
-            Communities
+            From my communities ({communityCount})
           </FilterChip>
         </div>
 
@@ -228,6 +235,28 @@ function EmptyState({ filter, followingCount }: { filter: FeedFilter; followingC
           </p>
           <Button asChild variant="outline" size="sm">
             <Link href="/dashboard">Browse events</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // You do follow people — they just have nothing booked yet. Say so, otherwise
+  // the empty list reads as though the follows didn't save.
+  if (filter === 'people') {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center space-y-3">
+          <CalendarDays className="h-8 w-8 mx-auto text-muted-foreground" />
+          <p className="font-medium">No gigs coming up yet</p>
+          <p className="text-sm text-muted-foreground">
+            {followingCount === 1
+              ? 'The person you follow has nothing on the calendar right now.'
+              : `None of the ${followingCount} people you follow have anything on the calendar right now.`}{' '}
+            You&apos;ll get a notification as soon as one of them books a spot or hosts a show.
+          </p>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/feed/following">See who you follow</Link>
           </Button>
         </CardContent>
       </Card>
