@@ -467,6 +467,21 @@ export type EventCommunity = {
   expires_at: string | null
 }
 
+// Follow graph ------------------------------------------------------
+
+/**
+ * One-way follow between two profiles.
+ *
+ * Follower counts are intentionally never exposed publicly — RLS restricts
+ * reads to the two parties so nobody can tally someone else's followers.
+ */
+export type ProfileFollow = {
+  id: string
+  follower_id: string
+  following_id: string
+  created_at: string
+}
+
 // Profile-to-profile reviews ----------------------------------------
 
 export type ProfileReview = {

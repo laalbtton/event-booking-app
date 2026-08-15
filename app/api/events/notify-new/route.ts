@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/server/supabaseAdmin'
 import { sendNewEventPushToCommunityMembers } from '@/lib/server/newEventCommunityPush'
+import { notifyFollowersOfGig } from '@/lib/server/follows'
 
 type ProfileRoleRow = { id: string; role?: string } | null
 
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, status')
+      .select('id, status, host_user_id')
       .eq('id', eventId)
       .maybeSingle()
 
@@ -104,12 +105,19 @@ export async function POST(request: NextRequest) {
 
     const result = await sendNewEventPushToCommunityMembers(supabase, eventId, communityIds)
 
+    // People following the host hear about it too, on their own opt-out category.
+    const hostUserId = (event as { host_user_id?: string | null }).host_user_id
+    const followerResult = hostUserId
+      ? await notifyFollowersOfGig(supabase, { actorUserId: hostUserId, eventId, role: 'host' })
+      : { notified: 0, sent: 0, failed: 0 }
+
     return NextResponse.json({
       success: true,
       sent: result.sent,
       failed: result.failed,
       skippedUsers: result.skippedUsers,
       memberCount: result.memberCount,
+      followersNotified: followerResult.notified,
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'

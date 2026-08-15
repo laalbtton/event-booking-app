@@ -15,6 +15,8 @@ export type NotificationType =
   | 'referral_credit_earned'
   | 'red_button_credits_earned'
   | 'red_button_lucky_draw_won'
+  | 'new_follower'
+  | 'followed_user_event'
 
 /**
  * Creates a notification for a user

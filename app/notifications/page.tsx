@@ -128,6 +128,8 @@ export default function NotificationsPage() {
       notification.related_event_id
     ) {
       router.push(`/events/${notification.related_event_id}/hosting-info`)
+    } else if (notification.type === 'new_follower') {
+      router.push('/feed/following')
     } else if (notification.related_event_id) {
       router.push(`/events/${notification.related_event_id}`)
     } else if (notification.related_booking_id) {

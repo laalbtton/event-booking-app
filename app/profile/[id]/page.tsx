@@ -7,6 +7,7 @@ import { buildPerformerMetadata } from '@/lib/seo/metadata'
 import { PublicProfileChrome } from '@/components/public/PublicProfileChrome'
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
 import PerformanceTabs from '@/components/PerformanceTabs'
+import FollowButton from '@/components/FollowButton'
 
 type Props = {
   params: Promise<{ id: string }>
@@ -127,7 +128,12 @@ export default async function PublicProfilePage({ params }: Props) {
 
           {/* Name, bio, links */}
           <div className="flex-1 text-center sm:text-left space-y-3">
-            <h1 className="text-3xl font-bold tracking-tight text-yellow-400">{profile.fullName}</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+              <h1 className="text-3xl font-bold tracking-tight text-yellow-400">{profile.fullName}</h1>
+              <div className="flex justify-center sm:justify-end">
+                <FollowButton targetUserId={profile.id} targetName={profile.fullName} theme="dark" />
+              </div>
+            </div>
 
             {profile.bio && (
               <p className="text-stone-300 leading-relaxed whitespace-pre-wrap">{profile.bio}</p>

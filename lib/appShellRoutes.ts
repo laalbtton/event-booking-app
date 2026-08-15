@@ -5,6 +5,7 @@
 export const APP_SHELL_ROUTE_PREFIXES = [
   '/profile',
   '/dashboard',
+  '/feed',
   '/jokes',
   '/notifications',
   '/credits',

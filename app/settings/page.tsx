@@ -23,7 +23,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, ChevronDown, ChevronUp, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode, RefreshCw, Terminal } from 'lucide-react'
+import { ChevronLeft, ChevronDown, ChevronUp, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode, RefreshCw, Terminal, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
@@ -615,6 +615,9 @@ export default function SettingsPage() {
               <div className="px-4 py-1">
                 <SettingsListRow href="/settings/communities" icon={Users} title="Communities" description="Your communities & memberships" />
               </div>
+              <div className="px-4 py-1">
+                <SettingsListRow href="/feed/following" icon={UserPlus} title="Following" description="People whose gigs show in your feed" />
+              </div>
               {canCommunityCommands && (
                 <div className="px-4 py-1">
                   <SettingsListRow href="/settings/community-commands" icon={Terminal} title="Community commands" description="Bulk host assign from pasted notes" />
@@ -957,6 +960,27 @@ export default function SettingsPage() {
             </Button>
             <Button asChild variant="outline" size="sm">
               <Link href="/communities">Browse All</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-xl flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              Following
+            </CardTitle>
+            <CardDescription>
+              People you follow show up in your feed when they have a gig coming up. Follower counts are never
+              shown on profiles.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-2 flex-wrap">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/feed/following">Manage following</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/feed">Open feed</Link>
             </Button>
           </CardContent>
         </Card>

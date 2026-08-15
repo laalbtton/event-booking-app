@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { sendPushToAllUsers } from '@/lib/server/push'
 import { splitDeduction, hasEnoughCredits, getEffectiveCreditBalances } from '@/lib/creditLedger'
 import { applyVenueCreditGrants } from '@/lib/server/venueCreditGrants'
+import { notifyFollowersOfGig } from '@/lib/server/follows'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -456,6 +457,15 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+    }
+
+    // Let this performer's followers know they picked up a spot.
+    if (bookingStatus === 'confirmed' && !isAudienceBooking) {
+      await notifyFollowersOfGig(supabase, {
+        actorUserId: authData.user.id,
+        eventId: event.id,
+        role: 'performer',
+      })
     }
 
     return NextResponse.json({
