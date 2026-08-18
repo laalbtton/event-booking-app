@@ -1,14 +1,44 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+let cachedClient: SupabaseClient | null = null
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    // Use implicit flow to avoid PKCE verifier storage issues in client-only OAuth.
-    flowType: 'implicit',
-    persistSession: true,
-    autoRefreshToken: true,
+function getSupabaseClient(): SupabaseClient {
+  if (cachedClient) return cachedClient
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+    )
+  }
+
+  cachedClient = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      // Use implicit flow to avoid PKCE verifier storage issues in client-only OAuth.
+      flowType: 'implicit',
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  })
+
+  return cachedClient
+}
+
+/**
+ * Built on first use rather than at import. `next build` loads every route
+ * module to collect page data, so constructing eagerly made the whole build
+ * fail wherever the Supabase env vars are absent — the Appflow iOS build being
+ * the case that surfaced it. Using the client without config still throws.
+ */
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, property) {
+    const client = getSupabaseClient()
+    const value = Reflect.get(client, property) as unknown
+    return typeof value === 'function'
+      ? (value as (...args: unknown[]) => unknown).bind(client)
+      : value
   },
 })
 

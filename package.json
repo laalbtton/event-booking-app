@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "build:android": "next build && npx cap sync android",
+    "build:ios": "next build && npx cap sync ios",
     "open:android": "npx cap open android",
     "screenshots:tablet": "node scripts/capture-play-store-tablet-screenshots.mjs",
     "assets:android": "capacitor-assets generate --android"
@@ -50,6 +51,7 @@
     "@capacitor/android": "^8.3.4",
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.3.4",
+    "@capacitor/ios": "^8.5.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

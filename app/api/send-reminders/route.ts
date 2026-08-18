@@ -13,14 +13,23 @@ import { createNotification } from '@/lib/notifications'
 import { sendEventReminderEmail } from '@/lib/emailService'
 import { sendPushToUser } from '@/lib/server/push'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Service role key for server-side operations (bypasses RLS). Built per request
+// rather than at import so `next build` can load this route without env vars.
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Use service role key for server-side operations (bypasses RLS)
-const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase environment variables')
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey)
+}
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient()
     // Optional: Add authentication/authorization check here
     // For cron jobs, you might want to check a secret token
     const authHeader = request.headers.get('authorization')

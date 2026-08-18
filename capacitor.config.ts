@@ -3,9 +3,11 @@ import type { CapacitorConfig } from '@capacitor/cli'
 const config: CapacitorConfig = {
   appId: 'com.laalbutton.app',
   appName: 'One Mic Stand',
-  // webDir is required by Capacitor tooling even when server.url is used.
-  // The Android WebView will load from server.url at runtime.
-  webDir: 'out',
+  // Capacitor requires webDir to exist with an index.html, even when server.url
+  // is used and the assets are never shown. It cannot be `out`: Next.js builds a
+  // server app, not a static export, so no `out` directory is ever produced and
+  // `cap sync` fails on a clean checkout (CI included).
+  webDir: 'capacitor-webdir',
   server: {
     // Point the native WebView at the live hosted app so all Next.js
     // server features (API routes, auth, real-time) continue working.
