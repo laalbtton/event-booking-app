@@ -17,10 +17,20 @@ export type FollowedPerson = {
   followedAt: string
 }
 
+export type ProfileSearchResult = {
+  id: string
+  fullName: string | null
+  username: string | null
+  avatarUrl: string | null
+  bio: string | null
+  role: string | null
+  following: boolean
+}
+
 export type FeedReason =
   | { kind: 'community'; id: string; label: string }
-  | { kind: 'host'; id: string; label: string }
-  | { kind: 'performer'; id: string; label: string }
+  | { kind: 'host'; id: string; label: string; avatarUrl: string | null }
+  | { kind: 'performer'; id: string; label: string; avatarUrl: string | null }
 
 export type FeedEvent = {
   id: string
@@ -42,6 +52,17 @@ export type FeedEvent = {
   hostName: string | null
   hostAvatarUrl: string | null
   reasons: FeedReason[]
+}
+
+export type FeedJoke = {
+  id: string
+  content: string
+  createdAt: string
+  authorId: string
+  authorName: string | null
+  authorUsername: string | null
+  authorAvatarUrl: string | null
+  reactions: { like: number; bomb: number; kill: number; laughter: number }
 }
 
 export async function listFollowingIds(
@@ -98,6 +119,66 @@ export async function listFollowing(
     })
   }
   return out
+}
+
+export const PROFILE_SEARCH_MIN_LENGTH = 2
+const PROFILE_SEARCH_LIMIT = 20
+
+/**
+ * Find people to follow by name or username.
+ *
+ * Must run on a service-role client: the `profiles` RLS policies only let a user
+ * read their own row, so the same query from the browser returns nothing.
+ * Returns public-safe fields only — never email or credit balances.
+ */
+export async function searchProfiles(
+  supabase: SupabaseClient,
+  userId: string,
+  query: string,
+): Promise<ProfileSearchResult[]> {
+  // The pattern goes into a quoted PostgREST filter value, which tolerates
+  // commas, parens and periods but not quotes or backslashes.
+  const term = query.replace(/["\\]/g, '').trim()
+  if (term.length < PROFILE_SEARCH_MIN_LENGTH) return []
+
+  const pattern = `%${term}%`
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, username, avatar_url, bio, role')
+    .or(`full_name.ilike."${pattern}",username.ilike."${pattern}"`)
+    .neq('id', userId)
+    // Nulls last, so username-only profiles don't crowd out named ones.
+    .order('full_name', { ascending: true, nullsFirst: false })
+    .limit(PROFILE_SEARCH_LIMIT)
+
+  if (error) throw error
+
+  const rows = (data ?? []) as {
+    id: string
+    full_name: string | null
+    username: string | null
+    avatar_url: string | null
+    bio: string | null
+    role: string | null
+  }[]
+  if (rows.length === 0) return []
+
+  const followingIds = new Set(await listFollowingIds(supabase, userId))
+
+  return (
+    rows
+      // Nothing to render or link to without a name or a username.
+      .filter((row) => !!(row.full_name?.trim() || row.username?.trim()))
+      .map((row) => ({
+        id: row.id,
+        fullName: row.full_name,
+        username: row.username,
+        avatarUrl: row.avatar_url,
+        bio: row.bio,
+        role: row.role,
+        following: followingIds.has(row.id),
+      }))
+  )
 }
 
 /** Only ever called for the signed-in user's own account. */
@@ -290,14 +371,21 @@ export async function getFeedEvents(
   }
 
   // ── Events involving people you follow ──────────────────────────────
-  const followedNameById = new Map<string, string>()
+  const followedById = new Map<string, { name: string; avatarUrl: string | null }>()
   if (followingIds.length > 0) {
     const { data: followedProfiles } = await supabase
       .from('profiles')
-      .select('id, full_name')
+      .select('id, full_name, avatar_url')
       .in('id', followingIds)
-    for (const p of (followedProfiles ?? []) as { id: string; full_name: string | null }[]) {
-      followedNameById.set(p.id, p.full_name?.trim() || 'Someone you follow')
+    for (const p of (followedProfiles ?? []) as {
+      id: string
+      full_name: string | null
+      avatar_url: string | null
+    }[]) {
+      followedById.set(p.id, {
+        name: p.full_name?.trim() || 'Someone you follow',
+        avatarUrl: p.avatar_url,
+      })
     }
 
     const [{ data: hostedEvents }, { data: performerBookings }] = await Promise.all([
@@ -316,10 +404,12 @@ export async function getFeedEvents(
 
     for (const ev of (hostedEvents ?? []) as { id: string; host_user_id: string }[]) {
       candidateIds.add(ev.id)
+      const person = followedById.get(ev.host_user_id)
       addReason(ev.id, {
         kind: 'host',
         id: ev.host_user_id,
-        label: followedNameById.get(ev.host_user_id) || 'Someone you follow',
+        label: person?.name || 'Someone you follow',
+        avatarUrl: person?.avatarUrl ?? null,
       })
     }
 
@@ -330,10 +420,12 @@ export async function getFeedEvents(
     }[]) {
       if (b.booking_scope === 'audience') continue
       candidateIds.add(b.event_id)
+      const person = followedById.get(b.user_id)
       addReason(b.event_id, {
         kind: 'performer',
         id: b.user_id,
-        label: followedNameById.get(b.user_id) || 'Someone you follow',
+        label: person?.name || 'Someone you follow',
+        avatarUrl: person?.avatarUrl ?? null,
       })
     }
   }
@@ -411,6 +503,79 @@ export async function getFeedEvents(
       hostName: host?.full_name ?? null,
       hostAvatarUrl: host?.avatar_url ?? null,
       reasons: reasonsByEvent.get(ev.id) ?? [],
+    }
+  })
+}
+
+type JokeRow = {
+  id: string
+  user_id: string
+  content: string
+  created_at: string
+  joke_reactions: { reaction_type: string }[] | null
+}
+
+/**
+ * Recent jokes written by the people you follow.
+ *
+ * Jokes are world-readable (see supabase/jokes-tables.sql), so this needs no
+ * special visibility handling — it is the same content as /jokes, narrowed to
+ * the follow graph.
+ */
+export async function getFeedJokes(
+  supabase: SupabaseClient,
+  userId: string,
+  options?: { limit?: number },
+): Promise<FeedJoke[]> {
+  const limit = options?.limit ?? 15
+
+  const followingIds = await listFollowingIds(supabase, userId)
+  if (followingIds.length === 0) return []
+
+  const { data: jokeRows } = await supabase
+    .from('jokes')
+    .select('id, user_id, content, created_at, joke_reactions(reaction_type)')
+    .in('user_id', followingIds)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  const jokes = (jokeRows ?? []) as JokeRow[]
+  if (jokes.length === 0) return []
+
+  const { data: authorRows } = await supabase
+    .from('profiles')
+    .select('id, full_name, username, avatar_url')
+    .in('id', [...new Set(jokes.map((j) => j.user_id))])
+
+  const authorById = new Map(
+    (
+      (authorRows ?? []) as {
+        id: string
+        full_name: string | null
+        username: string | null
+        avatar_url: string | null
+      }[]
+    ).map((a) => [a.id, a]),
+  )
+
+  return jokes.map((joke) => {
+    const reactions = { like: 0, bomb: 0, kill: 0, laughter: 0 }
+    for (const r of joke.joke_reactions ?? []) {
+      if (r.reaction_type in reactions) {
+        reactions[r.reaction_type as keyof typeof reactions] += 1
+      }
+    }
+
+    const author = authorById.get(joke.user_id)
+    return {
+      id: joke.id,
+      content: joke.content,
+      createdAt: joke.created_at,
+      authorId: joke.user_id,
+      authorName: author?.full_name ?? null,
+      authorUsername: author?.username ?? null,
+      authorAvatarUrl: author?.avatar_url ?? null,
+      reactions,
     }
   })
 }

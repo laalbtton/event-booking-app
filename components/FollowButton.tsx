@@ -12,6 +12,12 @@ type FollowButtonProps = {
   targetName?: string
   /** 'dark' matches the public profile's zinc/yellow theme; 'app' matches in-app surfaces. */
   theme?: 'dark' | 'app'
+  /**
+   * Known follow state, for lists whose data source already resolved it. Supplying
+   * it skips the per-button status request, so a page of results costs one call
+   * instead of one per row.
+   */
+  initialFollowing?: boolean
   className?: string
 }
 
@@ -23,12 +29,13 @@ export default function FollowButton({
   targetUserId,
   targetName,
   theme = 'dark',
+  initialFollowing,
   className = '',
 }: FollowButtonProps) {
   const { authResolved, user } = useAuthBootstrap()
   const router = useRouter()
-  const [following, setFollowing] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [following, setFollowing] = useState(initialFollowing ?? false)
+  const [loading, setLoading] = useState(initialFollowing === undefined)
   const [saving, setSaving] = useState(false)
 
   const isSelf = !!user && user.id === targetUserId
@@ -40,7 +47,7 @@ export default function FollowButton({
 
   useEffect(() => {
     if (!authResolved) return
-    if (!user || isSelf) {
+    if (!user || isSelf || initialFollowing !== undefined) {
       setLoading(false)
       return
     }
@@ -66,7 +73,7 @@ export default function FollowButton({
     return () => {
       cancelled = true
     }
-  }, [authResolved, user, isSelf, targetUserId, getToken])
+  }, [authResolved, user, isSelf, targetUserId, getToken, initialFollowing])
 
   if (isSelf) return null
   if (authResolved && !user) {

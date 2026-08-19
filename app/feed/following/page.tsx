@@ -8,7 +8,7 @@ import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { ChevronLeft, UserPlus } from 'lucide-react'
+import { ChevronLeft, Search, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import type { FollowedPerson } from '@/lib/server/follows'
 
@@ -98,7 +98,12 @@ export default function FollowingPage() {
           <Link href="/feed" className="p-1 -ml-1 rounded hover:bg-muted shrink-0" aria-label="Back to feed">
             <ChevronLeft className="w-5 h-5" />
           </Link>
-          <h1 className="text-2xl font-bold">Following</h1>
+          <h1 className="text-2xl font-bold flex-1">Following</h1>
+          <Button asChild variant="outline" size="icon" aria-label="Find people to follow">
+            <Link href="/feed/search">
+              <Search className="h-4 w-4" />
+            </Link>
+          </Button>
         </div>
 
         <Card>
@@ -116,11 +121,17 @@ export default function FollowingPage() {
               <UserPlus className="h-8 w-8 mx-auto text-muted-foreground" />
               <p className="font-medium">You&apos;re not following anyone yet</p>
               <p className="text-sm text-muted-foreground">
-                Open a performer&apos;s profile and tap Follow to see their gigs in your feed.
+                Search for someone by name, or open a performer&apos;s profile and tap Follow to see
+                their gigs in your feed.
               </p>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/dashboard">Browse events</Link>
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button asChild size="sm">
+                  <Link href="/feed/search">Find people</Link>
+                </Button>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/dashboard">Browse events</Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ) : (
