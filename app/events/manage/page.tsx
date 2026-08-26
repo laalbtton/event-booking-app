@@ -21,6 +21,7 @@ import { QrCode, Link as LinkIcon, Image as ImageIcon, Trash2, MoreVertical, Cop
 import { cn } from '@/lib/utils'
 import { appendSlugSuffix, buildEventSlugBase } from '@/lib/seo/slug'
 import { MAX_CAPTION_CHARS } from '@/lib/posterCaption'
+import { savePosterUpdate, uploadPosterImage, validatePosterFile } from '@/lib/posterUpload'
 import { toast } from 'sonner'
 import RecurrencePicker, { type RecurrenceConfig } from '@/components/RecurrencePicker'
 
@@ -29,8 +30,6 @@ type Venue = {
   name: string
   address: string
 }
-
-const MAX_POSTER_BYTES = 10 * 1024 * 1024
 
 export default function EventManagementPage() {
   const { confirm } = useConfirmDialog()
@@ -1350,12 +1349,9 @@ export default function EventManagementPage() {
   }
 
   async function handlePosterUpload(eventId: string, file: File) {
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please upload an image file')
-      return
-    }
-    if (file.size > MAX_POSTER_BYTES) {
-      toast.error('Poster file must be 10MB or smaller')
+    const validationError = validatePosterFile(file)
+    if (validationError) {
+      toast.error(validationError)
       return
     }
 
@@ -1404,40 +1400,15 @@ export default function EventManagementPage() {
 
     setPosterUploadingId(draft.eventId)
     try {
-      const cleanName = draft.file.name.replace(/[^a-zA-Z0-9._-]/g, '-')
-      const path = `${draft.eventId}/${Date.now()}-${cleanName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('event-posters')
-        .upload(path, draft.file, { upsert: false, cacheControl: '3600' })
-
-      if (uploadError) throw uploadError
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from('event-posters').getPublicUrl(path)
-
-      const { data: sessionData } = await supabase.auth.getSession()
-      const accessToken = sessionData.session?.access_token
-      if (!accessToken) throw new Error('Not authenticated')
+      const publicUrl = await uploadPosterImage(draft.eventId, draft.file)
 
       const trimmed = draft.caption.trim()
-      const response = await fetch('/api/posters/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          eventId: draft.eventId,
-          action: 'set',
-          posterUrl: publicUrl,
-          posterCaption: trimmed.length > 0 ? trimmed : null,
-        }),
+      const result = await savePosterUpdate({
+        eventId: draft.eventId,
+        action: 'set',
+        posterUrl: publicUrl,
+        posterCaption: trimmed.length > 0 ? trimmed : null,
       })
-
-      const result = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(result.error || 'Failed to save poster')
 
       URL.revokeObjectURL(draft.previewUrl)
       setPosterCaptionDraft(null)
@@ -1461,24 +1432,7 @@ export default function EventManagementPage() {
     if (!shouldProceed) return
     setPosterUploadingId(eventId)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const accessToken = sessionData.session?.access_token
-      if (!accessToken) throw new Error('Not authenticated')
-
-      const response = await fetch('/api/posters/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          eventId,
-          action: 'remove',
-        }),
-      })
-
-      const result = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(result.error || 'Failed to remove poster')
+      await savePosterUpdate({ eventId, action: 'remove' })
       await loadEvents()
     } catch (error: any) {
       toast.error(error.message || 'Failed to remove poster')
