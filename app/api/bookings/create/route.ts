@@ -153,6 +153,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Insufficient credits' }, { status: 400 })
     }
 
+    // Belt and braces on the column we are about to debit. getEffectiveCreditBalances
+    // already caps spendable credits at `profile.credits`, but this is the invariant
+    // that actually matters and it must never be reachable from any balance shape.
+    if (Number(profile.credits || 0) < creditsToDebit) {
+      return NextResponse.json({ error: 'Insufficient credits' }, { status: 400 })
+    }
+
     const isVarietyOpenMic = event.event_type === 'open_mic' && (event as any).open_mic_type === 'variety_arts_open_mic'
     const requiresArtTypeSelection = !isAudienceBooking && isVarietyOpenMic
     let selectedArtTypeId: string | null = null
@@ -252,9 +259,9 @@ export async function POST(request: NextRequest) {
     }
 
     const profilePatch: Record<string, any> = {
-      credits: profile.credits - creditsToDebit,
-      credits_purchased: purchased - creditSplit.purchasedUsed,
-      credits_complimentary: complimentary - creditSplit.complimentaryUsed,
+      credits: Number(profile.credits || 0) - creditsToDebit,
+      credits_purchased: Math.max(0, purchased - creditSplit.purchasedUsed),
+      credits_complimentary: Math.max(0, complimentary - creditSplit.complimentaryUsed),
       updated_at: new Date().toISOString(),
     }
     if (hasAudienceFreePass) {
@@ -264,14 +271,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { error: creditUpdateError } = await supabase
+    // Compare-and-swap on the balance we validated. Everything above is a
+    // read-then-write, so without this two concurrent bookings (or a double-tap)
+    // both pass the check and both debit from the same starting balance, leaving
+    // the profile short by one booking's worth of credits.
+    const { data: creditUpdateRows, error: creditUpdateError } = await supabase
       .from('profiles')
       .update(profilePatch)
       .eq('id', authData.user.id)
+      .eq('credits', profile.credits)
+      .select('id')
 
     if (creditUpdateError) {
       await supabase.from('bookings').delete().eq('id', booking.id)
       return NextResponse.json({ error: creditUpdateError.message }, { status: 500 })
+    }
+
+    if (!creditUpdateRows || creditUpdateRows.length === 0) {
+      await supabase.from('bookings').delete().eq('id', booking.id)
+      return NextResponse.json(
+        { error: 'Your credit balance changed while booking. Please try again.' },
+        { status: 409 },
+      )
     }
 
     if (bookingStatus === 'waitlist') {

@@ -18,21 +18,30 @@ export type CreditBalanceProfile = {
 
 /**
  * Resolve purchased/complimentary balances for debits.
- * When `credits` exceeds the ledger split (legacy refunds / pre-ledger rows),
- * treat the gap as complimentary so spendable balance matches the profile total.
+ *
+ * `profiles.credits` is authoritative: it is the column the booking flow debits,
+ * the balance shown in the UI, and what `credit_transactions` sums toward. The
+ * split columns only record how a balance was funded, so they must never make
+ * more credits spendable than the profile actually holds.
+ *
+ * Reading the split as an independent source of truth is what allowed balances
+ * to go negative. Once `credits` dipped below zero, a top-up left
+ * `credits_purchased` overstating the real balance by exactly the debt (buy 10
+ * against -5 and you get credits=5 but credits_purchased=10), and the old
+ * `Math.max(0, credits)` floor hid the debt from the check entirely — so the
+ * overspend compounded on every cycle instead of being refused.
+ *
+ * A `credits` total *above* the split is still fully spendable and counts as
+ * complimentary: pre-ledger rows and paths that only bump `credits` (such as the
+ * profile-review reward trigger) legitimately leave that gap.
  */
 export function getEffectiveCreditBalances(profile: CreditBalanceProfile): {
   purchased: number
   complimentary: number
 } {
-  const purchased = Math.max(0, Number(profile.credits_purchased) || 0)
-  let complimentary = Math.max(0, Number(profile.credits_complimentary) || 0)
-  const ledgerTotal = purchased + complimentary
-  const legacyTotal = Math.max(0, Number(profile.credits) || 0)
-  if (legacyTotal > ledgerTotal) {
-    complimentary += legacyTotal - ledgerTotal
-  }
-  return { purchased, complimentary }
+  const total = Math.max(0, Number(profile.credits) || 0)
+  const purchased = Math.min(Math.max(0, Number(profile.credits_purchased) || 0), total)
+  return { purchased, complimentary: total - purchased }
 }
 
 /** Regular (non-venue) credits available for booking — matches server debit logic. */

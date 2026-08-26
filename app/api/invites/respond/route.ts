@@ -180,19 +180,55 @@ export async function POST(request: NextRequest) {
         const { purchased: currentPurchased, complimentary: currentComplimentary } =
           getEffectiveCreditBalances(profile ?? {})
 
-        const { error: creditUpdateError } = await supabase
+        // Re-split against the balance we just read: the earlier split came from a
+        // read taken before the booking insert, so reusing it here would debit
+        // against a balance that may already have moved.
+        const currentSplit = splitDeduction(currentPurchased, currentComplimentary, creditsToDebit)
+
+        if (Number(profile?.credits ?? 0) < creditsToDebit) {
+          await supabase.from('bookings').delete().eq('id', booking.id)
+          return NextResponse.json({ error: 'Insufficient credits' }, { status: 400 })
+        }
+
+        // Compare-and-swap, so a concurrent booking cannot debit the same balance twice.
+        const { data: creditUpdateRows, error: creditUpdateError } = await supabase
           .from('profiles')
           .update({
-            credits: (profile?.credits ?? 0) - creditsToDebit,
-            credits_purchased: currentPurchased - creditSplit.purchasedUsed,
-            credits_complimentary: currentComplimentary - creditSplit.complimentaryUsed,
+            credits: Number(profile?.credits ?? 0) - creditsToDebit,
+            credits_purchased: Math.max(0, currentPurchased - currentSplit.purchasedUsed),
+            credits_complimentary: Math.max(0, currentComplimentary - currentSplit.complimentaryUsed),
             updated_at: new Date().toISOString(),
           })
           .eq('id', authData.user.id)
+          .eq('credits', profile?.credits ?? 0)
+          .select('id')
 
         if (creditUpdateError) {
           await supabase.from('bookings').delete().eq('id', booking.id)
           return NextResponse.json({ error: creditUpdateError.message }, { status: 500 })
+        }
+
+        if (!creditUpdateRows || creditUpdateRows.length === 0) {
+          await supabase.from('bookings').delete().eq('id', booking.id)
+          return NextResponse.json(
+            { error: 'Your credit balance changed while accepting. Please try again.' },
+            { status: 409 },
+          )
+        }
+
+        // The booking row was inserted with the split from the earlier read. Keep it
+        // matching what was actually debited, since refunds reverse these columns.
+        if (
+          currentSplit.purchasedUsed !== creditSplit.purchasedUsed ||
+          currentSplit.complimentaryUsed !== creditSplit.complimentaryUsed
+        ) {
+          await supabase
+            .from('bookings')
+            .update({
+              credits_purchased_used: currentSplit.purchasedUsed,
+              credits_complimentary_used: currentSplit.complimentaryUsed,
+            })
+            .eq('id', booking.id)
         }
 
         const transactions: {
