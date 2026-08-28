@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { resolveEventManageAccess } from '@/lib/server/eventPermissions'
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -53,49 +54,7 @@ export async function GET(
       return NextResponse.json({ error: 'Event not found' }, { status: 404 })
     }
 
-    const isCreator = event.created_by === userId || event.host_user_id === userId
-
-    // Platform admin check.
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .maybeSingle()
-    const isPlatformAdmin = profile?.role === 'admin'
-
-    // Community co-admin/admin check (service-role bypasses RLS entirely).
-    let isCommunityAdmin = false
-    let communityIds: string[] = []
-
-    if (!isCreator && !isPlatformAdmin) {
-      const { data: links } = await supabase
-        .from('event_communities')
-        .select('community_id')
-        .eq('event_id', eventId)
-        .in('status', ['approved', 'pending'])
-
-      communityIds = [...new Set((links ?? []).map((l: { community_id: string }) => l.community_id))]
-
-      if (communityIds.length > 0) {
-        const { count } = await supabase
-          .from('community_members')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId)
-          .in('community_id', communityIds)
-          .in('role', ['admin', 'co_admin'])
-        isCommunityAdmin = (count ?? 0) > 0
-      }
-    } else if (isCreator || isPlatformAdmin) {
-      // Also grab community IDs so we can return member lists for the host picker.
-      const { data: links } = await supabase
-        .from('event_communities')
-        .select('community_id')
-        .eq('event_id', eventId)
-        .in('status', ['approved', 'pending'])
-      communityIds = [...new Set((links ?? []).map((l: { community_id: string }) => l.community_id))]
-    }
-
-    const canManage = isCreator || isPlatformAdmin || isCommunityAdmin
+    const { canManage, communityIds } = await resolveEventManageAccess(supabase, eventId, userId)
 
     if (!canManage) {
       return NextResponse.json({ canManage: false })

@@ -29,6 +29,7 @@ import { toast } from 'sonner'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import EventChat from '@/components/EventChat'
+import PerformerRolesCard from '@/components/PerformerRolesCard'
 import { AddToCalendarButtons } from '@/components/AddToCalendarButtons'
 import {
   absolutizePosterUrl,
@@ -1121,6 +1122,14 @@ export default function EventDetailsPage() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Optional performer roles — comedy / legacy open mics only, and only
+            shown to confirmed performers so they can claim a slot. */}
+        {currentUser && (
+          <div className="mb-6">
+            <PerformerRolesCard eventId={(event as any).id || eventId} mode="performer" />
+          </div>
         )}
 
         {/* Event Info Card */}

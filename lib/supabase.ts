@@ -188,6 +188,32 @@ export type Event = {
   series_overridden?: boolean
 }
 
+export const EVENT_PERFORMER_ROLE_KEYS = ['time_keeper', 'setup_wrapup'] as const
+
+export type EventPerformerRoleKey = (typeof EVENT_PERFORMER_ROLE_KEYS)[number]
+
+/**
+ * An optional extra job a confirmed performer can take at a comedy open mic
+ * (or an older open mic that never received an `open_mic_type`).
+ *
+ * A missing row for an (event, role) pair means the role is offered and
+ * unclaimed, so events created before this feature need no backfill. Read
+ * these through `lib/performerRoles.ts` rather than assuming a row exists.
+ */
+export type EventPerformerRole = {
+  id: string
+  event_id: string
+  role_key: EventPerformerRoleKey
+  enabled: boolean
+  assigned_user_id: string | null
+  assigned_at: string | null
+  /** Null when the performer claimed it themselves, otherwise the host who assigned it. */
+  assigned_by: string | null
+  notified_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type RecurrenceType = 'weekly' | 'biweekly' | 'monthly_weekday'
 
 export type EventSeries = {

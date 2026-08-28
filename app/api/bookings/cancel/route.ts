@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { releasePerformerRolesForUser } from '@/lib/server/releasePerformerRoles'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -137,6 +138,9 @@ export async function POST(request: NextRequest) {
     if (cancelError) {
       return NextResponse.json({ error: cancelError.message }, { status: 500 })
     }
+
+    // They are no longer performing, so any optional role they took has to reopen.
+    await releasePerformerRolesForUser(supabase, booking.event_id, authData.user.id)
 
     if (!isAudienceBooking && existingVoucher && existingVoucher.status === 'issued') {
       await supabase

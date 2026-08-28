@@ -4,6 +4,7 @@ import { sendPushToAllUsers } from '@/lib/server/push'
 import { splitDeduction, hasEnoughCredits, getEffectiveCreditBalances } from '@/lib/creditLedger'
 import { applyVenueCreditGrants } from '@/lib/server/venueCreditGrants'
 import { notifyFollowersOfGig } from '@/lib/server/follows'
+import { promptPerformerAboutOpenRoles } from '@/lib/server/performerRoleNotify'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -487,6 +488,7 @@ export async function POST(request: NextRequest) {
         eventId: event.id,
         role: 'performer',
       })
+      await promptPerformerAboutOpenRoles(supabase, event.id, authData.user.id)
     }
 
     return NextResponse.json({

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmail, getHostCancellationEmail } from '@/lib/email'
 import { formatDateTimeEastern } from '@/lib/dateUtils'
 import { buildEventUrl, getSiteUrl } from '@/lib/server/emailUrl'
+import { releasePerformerRolesForUser } from '@/lib/server/releasePerformerRoles'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -112,6 +113,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: cancelError.message }, { status: 500 })
       }
     }
+
+    // They are no longer performing, so any optional role they took has to reopen.
+    await releasePerformerRolesForUser(supabase, booking.event_id, booking.user_id)
 
     // Always refund credits for host-initiated cancellations (regardless of cancellation window)
     const creditsToRefund = Number(booking.credits_used || 0)

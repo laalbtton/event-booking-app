@@ -18,6 +18,9 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { ChevronLeft, Clock, User, Copy, ChevronDown, MessageCircle, Users, Mail, Send, Eye, Star, MessageSquare, X, MoreVertical } from 'lucide-react'
+import PerformerRolesCard from '@/components/PerformerRolesCard'
+import { PERFORMER_ROLE_LABELS } from '@/lib/performerRoles'
+import type { EventPerformerRoleKey } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { userCanManageEventChatSettings } from '@/lib/eventChatPermissions'
 import { EventCommunitiesDialog } from '@/components/EventCommunitiesDialog'
@@ -199,6 +202,7 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [hostProfile, setHostProfile] = useState<{ id: string; full_name: string } | null>(null)
+  const [performerRoleByUserId, setPerformerRoleByUserId] = useState<Record<string, string>>({})
   const [userRole, setUserRole] = useState<string | null>(null)
   const [canManageHost, setCanManageHost] = useState(false)
   const [isHost, setIsHostState] = useState(false)
@@ -573,6 +577,22 @@ export default function AttendancePage() {
       const audienceRows = (bookingsData || []).filter((b: any) => b.booking_scope === 'audience')
       setBookings(performerBookings as any)
       setAudienceBookings(audienceRows as any)
+
+      const { data: roleRows, error: roleError } = await supabase
+        .from('event_performer_roles')
+        .select('role_key, assigned_user_id')
+        .eq('event_id', resolvedEventId)
+        .not('assigned_user_id', 'is', null)
+
+      const roleMap: Record<string, string> = {}
+      if (!roleError) {
+        for (const row of roleRows ?? []) {
+          if (!row.assigned_user_id) continue
+          const label = PERFORMER_ROLE_LABELS[row.role_key as EventPerformerRoleKey]
+          if (label) roleMap[row.assigned_user_id] = label
+        }
+      }
+      setPerformerRoleByUserId(roleMap)
 
       const { data: waitlistData, error: waitlistError } = await supabase
         .from('bookings')
@@ -2220,6 +2240,19 @@ export default function AttendancePage() {
           )}
         </Card>
 
+        {/* Optional performer roles — comedy / legacy open mics only */}
+        <div className="mb-6">
+          <PerformerRolesCard
+            eventId={resolvedId}
+            mode="manage"
+            onChanged={() => {
+              void supabase.auth.getUser().then(({ data }) => {
+                if (data.user) void loadData(data.user.id)
+              })
+            }}
+          />
+        </div>
+
         {/* Bookings List */}
         <Card>
           <CardHeader className="space-y-3">
@@ -2325,6 +2358,11 @@ export default function AttendancePage() {
                                 >
                                   {booking.profiles.full_name || 'No name'}
                                 </Link>
+                                {performerRoleByUserId[booking.user_id] && (
+                                  <Badge variant="secondary" className="mt-1 text-[10px] sm:text-xs">
+                                    {performerRoleByUserId[booking.user_id]}
+                                  </Badge>
+                                )}
                                 <span className="hidden sm:inline text-xs text-muted-foreground">
                                   {formatDateTime(booking.booked_at)}
                                 </span>

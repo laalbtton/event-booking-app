@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { promptPerformerAboutOpenRoles } from '@/lib/server/performerRoleNotify'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, event_id, status, waitlist_position, booking_scope, event_art_type_id')
+      .select('id, event_id, user_id, status, waitlist_position, booking_scope, event_art_type_id')
       .eq('id', bookingId)
       .single()
 
@@ -169,6 +170,15 @@ export async function POST(request: NextRequest) {
           .update({ max_attendees: confirmedCount ?? 0 })
           .eq('id', booking.event_id)
       }
+    }
+
+    if (
+      status === 'confirmed' &&
+      booking.status !== 'confirmed' &&
+      bookingScope === 'performer' &&
+      booking.user_id
+    ) {
+      await promptPerformerAboutOpenRoles(supabase, booking.event_id, booking.user_id)
     }
 
     return NextResponse.json({ success: true })

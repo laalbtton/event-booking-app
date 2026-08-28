@@ -1,36 +1,56 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-type EventOwnership = {
-  created_by: string | null
-  host_user_id: string | null
+export type EventManageAccess = {
+  canManage: boolean
+  isPlatformAdmin: boolean
+  isCreatorOrHost: boolean
+  isCommunityAdmin: boolean
+  /** Communities linked to the event, used by host/member pickers. */
+  communityIds: string[]
+}
+
+const NO_ACCESS: EventManageAccess = {
+  canManage: false,
+  isPlatformAdmin: false,
+  isCreatorOrHost: false,
+  isCommunityAdmin: false,
+  communityIds: [],
 }
 
 /**
- * Returns true if the given user is allowed to manage (edit/cancel/change host
- * of) the given event.
+ * Resolves whether a user may manage an event.
  *
- * Permitted when any of these is true:
- *  - The user is the event creator (`created_by`)
- *  - The user is the current host (`host_user_id`)
- *  - The user has the platform `admin` role
- *  - The user has `co_admin` or `admin` role in any community linked to the event
+ * The rule is: the creator or assigned host, a platform admin, or an admin /
+ * co-admin of any community the event is linked to. This lives here so the
+ * several places that gate host-only actions cannot drift apart.
+ *
+ * Requires a service-role client — `event_communities` and `community_members`
+ * have RLS that would otherwise hide links from the very user being checked.
  */
-export async function userCanManageEvent(
+export async function resolveEventManageAccess(
   supabase: SupabaseClient,
   eventId: string,
-  userId: string,
-  event: EventOwnership
-): Promise<boolean> {
-  if (event.created_by === userId || event.host_user_id === userId) return true
+  userId: string | null | undefined,
+): Promise<EventManageAccess> {
+  if (!userId) return NO_ACCESS
+
+  const { data: event, error } = await supabase
+    .from('events')
+    .select('id, created_by, host_user_id')
+    .eq('id', eventId)
+    .maybeSingle()
+
+  if (error || !event) return NO_ACCESS
+
+  const isCreatorOrHost = event.created_by === userId || event.host_user_id === userId
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
     .eq('id', userId)
     .maybeSingle()
-  if (profile?.role === 'admin') return true
+  const isPlatformAdmin = profile?.role === 'admin'
 
-  // Check community co-admin / admin membership for any community linked to this event.
   const { data: links } = await supabase
     .from('event_communities')
     .select('community_id')
@@ -38,47 +58,44 @@ export async function userCanManageEvent(
     .in('status', ['approved', 'pending'])
 
   const communityIds = [
-    ...new Set((links ?? []).map((l: { community_id: string }) => l.community_id)),
+    ...new Set((links ?? []).map((link: { community_id: string }) => link.community_id)),
   ]
-  if (communityIds.length === 0) return false
 
-  const { count, error } = await supabase
-    .from('community_members')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .in('community_id', communityIds)
-    .in('role', ['admin', 'co_admin'])
+  let isCommunityAdmin = false
+  if (!isCreatorOrHost && !isPlatformAdmin && communityIds.length > 0) {
+    const { count } = await supabase
+      .from('community_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .in('community_id', communityIds)
+      .in('role', ['admin', 'co_admin'])
+    isCommunityAdmin = (count ?? 0) > 0
+  }
 
-  return !error && (count ?? 0) > 0
+  return {
+    canManage: isCreatorOrHost || isPlatformAdmin || isCommunityAdmin,
+    isPlatformAdmin,
+    isCreatorOrHost,
+    isCommunityAdmin,
+    communityIds,
+  }
+}
+
+type EventOwnership = {
+  created_by?: string | null
+  host_user_id?: string | null
 }
 
 /**
- * Returns the community IDs that link a given user (as co_admin or admin)
- * to a given event.  Useful for constraining host selections to members of
- * the relevant communities.
+ * Boolean wrapper kept for existing callers (change-host, community commands).
+ * New code should use `resolveEventManageAccess` so it gets the community IDs too.
  */
-export async function getCommunityIdsForEventAdmin(
+export async function userCanManageEvent(
   supabase: SupabaseClient,
   eventId: string,
-  userId: string
-): Promise<string[]> {
-  const { data: links } = await supabase
-    .from('event_communities')
-    .select('community_id')
-    .eq('event_id', eventId)
-    .in('status', ['approved', 'pending'])
-
-  const communityIds = [
-    ...new Set((links ?? []).map((l: { community_id: string }) => l.community_id)),
-  ]
-  if (communityIds.length === 0) return []
-
-  const { data: memberships } = await supabase
-    .from('community_members')
-    .select('community_id')
-    .eq('user_id', userId)
-    .in('community_id', communityIds)
-    .in('role', ['admin', 'co_admin'])
-
-  return (memberships ?? []).map((m: { community_id: string }) => m.community_id)
+  userId: string,
+  _event?: EventOwnership,
+): Promise<boolean> {
+  const access = await resolveEventManageAccess(supabase, eventId, userId)
+  return access.canManage
 }
