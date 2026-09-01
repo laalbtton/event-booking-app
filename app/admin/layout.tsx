@@ -89,7 +89,7 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Admin Sub-Navigation — scrollable on mobile, full row on desktop */}
-      <div className="bg-white shadow sticky top-0 z-30">
+      <div className="app-chrome-top bg-white shadow sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
           {/* Back link — mobile only, above the nav strip */}
           {isMobile && (

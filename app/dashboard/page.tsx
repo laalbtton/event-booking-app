@@ -30,7 +30,7 @@ import { EventCardSkeleton } from '@/components/skeletons/EventCardSkeleton'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { PushPermissionPrePrompt } from '@/components/notifications/push-permission-preprompt'
-import { getPushClientState, subscribeCurrentUserToPush } from '@/lib/pushClient'
+import { getEffectivePushPermission, subscribeCurrentUserToPush } from '@/lib/pushClient'
 import {
   getInstallBannerDismissedKey,
   getInstallPlatform,
@@ -528,7 +528,7 @@ export default function Dashboard() {
   }
 
   async function maybeShowPushPrePromptAfterBooking() {
-    const pushState = getPushClientState()
+    const pushState = await getEffectivePushPermission()
     if (!pushState.supported) return
 
     if (pushState.permission === 'granted') return

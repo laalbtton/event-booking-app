@@ -35,11 +35,25 @@ export function CapacitorProvider() {
 
       if (!isNative) return
 
-      const [{ App }, { PushNotifications }, { Capacitor }] = await Promise.all([
+      const [{ App }, { PushNotifications }, { Capacitor }, { StatusBar, Style }] = await Promise.all([
         import('@capacitor/app'),
         import('@capacitor/push-notifications'),
         import('@capacitor/core'),
+        import('@capacitor/status-bar'),
       ])
+
+      // Keep the WebView below the iPhone status bar so the clock and battery
+      // never sit on top of headers. CSS safe-area padding is the fallback when
+      // this plugin is missing from an older binary; skip that top padding once
+      // the native inset is in place so we do not get a double gap.
+      try {
+        await StatusBar.setOverlaysWebView({ overlay: false })
+        await StatusBar.setBackgroundColor({ color: '#000000' })
+        await StatusBar.setStyle({ style: Style.Light })
+        document.documentElement.classList.add('native-status-bar-inset')
+      } catch {
+        // Plugin missing from an older binary — CSS safe-area padding still applies.
+      }
 
       // ─── 0. Android notification channel ───────────────────────────────────
       // Android 8+ (API 26+) requires every notification to belong to a channel.
@@ -179,6 +193,18 @@ export function CapacitorProvider() {
         }
       )
       cleanupFns.push(() => tokenHandle.remove())
+
+      // If the OS already allowed notifications (returning user, or they
+      // enabled them in Settings), register now so FCM tokens are uploaded
+      // without another trip to the in-app settings screen.
+      try {
+        const permission = await PushNotifications.checkPermissions()
+        if (permission.receive === 'granted') {
+          await PushNotifications.register()
+        }
+      } catch {
+        // Non-fatal — NativePushPromptProvider retries after login.
+      }
     }
 
     init()

@@ -19,7 +19,9 @@ end
 
 target 'App' do
   capacitor_pods
-  # Add your Pods here
+  # FCM on iOS: Capacitor Push Notifications only yields an APNs token unless
+  # Firebase Messaging exchanges it. Same project as android/app/google-services.json.
+  pod 'FirebaseMessaging'
 end
 
 post_install do |installer|

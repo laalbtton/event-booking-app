@@ -368,21 +368,29 @@ export default function SettingsNotificationsPage() {
             ? String((err as { error: unknown }).error)
             : JSON.stringify(err)
           add(`✗ registrationError: ${msg}`)
-          add('This usually means: (1) Google Play Services missing, (2) SHA-1 not added to Firebase, or (3) google-services.json mismatch.')
+          add(
+            Capacitor.getPlatform() === 'ios'
+              ? 'On iPhone this usually means: (1) AppDelegate is not forwarding Apple’s token, (2) Push capability / entitlements missing, or (3) GoogleService-Info.plist is not in the iOS app.'
+              : 'This usually means: (1) Google Play Services missing, (2) SHA-1 not added to Firebase, or (3) google-services.json mismatch.',
+          )
         }),
       ])
 
       add('Calling PushNotifications.register()...')
       await PushNotifications.register()
-      add('register() called — waiting up to 15s for FCM response...')
+      add(`register() called — waiting up to 15s for ${Capacitor.getPlatform() === 'ios' ? 'APNs/FCM' : 'FCM'} response...`)
 
       await new Promise<void>((resolve) => setTimeout(resolve, 15_000))
       regHandle.remove()
       errHandle.remove()
 
       if (!tokenReceived) {
-        add('✗ No token or error received after 15s — FCM registration timed out.')
-        add('Check: (1) Device has internet, (2) Google Play Services is up to date, (3) SHA-1 fingerprint registered in Firebase Console.')
+        add('✗ No token or error received after 15s — registration timed out.')
+        add(
+          Capacitor.getPlatform() === 'ios'
+            ? 'On iPhone: rebuild TestFlight so AppDelegate forwards didRegisterForRemoteNotifications, enable Push Notifications in Xcode, and add GoogleService-Info.plist.'
+            : 'Check: (1) Device has internet, (2) Google Play Services is up to date, (3) SHA-1 fingerprint registered in Firebase Console.',
+        )
       }
     } catch (err: unknown) {
       add(`✗ Unexpected error: ${err instanceof Error ? err.message : String(err)}`)
@@ -688,7 +696,7 @@ export default function SettingsNotificationsPage() {
 
                   {(testPushResult.subscriptions?.length ?? 0) === 0 && (
                     <p className="text-xs text-red-500">
-                      No subscriptions in database. Open the app on your Android device and enable notifications first.
+                      No subscriptions in database. Open the installed app, allow notifications, then tap Register device.
                     </p>
                   )}
                 </div>

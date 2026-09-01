@@ -27,6 +27,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "platform must be 'android' or 'ios'" }, { status: 400 })
     }
 
+    // Capacitor's iOS plugin returns a hex APNs token unless AppDelegate
+    // exchanges it for an FCM token via Firebase Messaging. APNs hex cannot
+    // be sent with firebase-admin and would look "registered" but never notify.
+    const looksLikeApnsHex = /^[0-9a-f]+$/i.test(fcmToken) && !fcmToken.includes(':')
+    if (platform === 'ios' && looksLikeApnsHex) {
+      return NextResponse.json(
+        {
+          error:
+            'iPhone sent an Apple push token instead of an FCM token. Add GoogleService-Info.plist (Firebase iOS app com.laalbutton.app), rebuild, and try again.',
+        },
+        { status: 400 },
+      )
+    }
+
     const now = new Date().toISOString()
     // Use the full token as the endpoint so the unique-endpoint constraint is
     // never violated between two different FCM registrations.

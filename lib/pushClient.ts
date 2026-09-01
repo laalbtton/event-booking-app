@@ -3,6 +3,16 @@ export type PushClientState = {
   permission: NotificationPermission | 'unsupported'
 }
 
+export async function isNativeCapacitorApp(): Promise<boolean> {
+  if (typeof window === 'undefined') return false
+  try {
+    const { Capacitor } = await import('@capacitor/core')
+    return Capacitor.isNativePlatform()
+  } catch {
+    return false
+  }
+}
+
 export function getPushClientState(): PushClientState {
   if (typeof window === 'undefined') {
     return { supported: false, permission: 'unsupported' }
@@ -17,6 +27,41 @@ export function getPushClientState(): PushClientState {
     supported,
     permission: supported ? Notification.permission : 'unsupported',
   }
+}
+
+/**
+ * Permission state that works on both web and the native Capacitor shell.
+ * Web `Notification.permission` is often missing inside the WebView, so native
+ * apps must ask the plugin instead.
+ */
+export async function getEffectivePushPermission(): Promise<{
+  supported: boolean
+  native: boolean
+  permission: NotificationPermission | 'unsupported'
+}> {
+  const native = await isNativeCapacitorApp()
+  if (native) {
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications')
+      const { receive } = await PushNotifications.checkPermissions()
+      const permission: NotificationPermission =
+        receive === 'granted' ? 'granted' : receive === 'denied' ? 'denied' : 'default'
+      return { supported: true, native: true, permission }
+    } catch {
+      return { supported: false, native: true, permission: 'unsupported' }
+    }
+  }
+
+  const web = getPushClientState()
+  return { supported: web.supported, native: false, permission: web.permission }
+}
+
+function nativePushErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object') {
+    if ('error' in err) return String((err as { error: unknown }).error)
+    if ('message' in err) return String((err as { message: unknown }).message)
+  }
+  return JSON.stringify(err)
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -42,10 +87,8 @@ async function getServiceWorkerRegistration() {
 /**
  * Subscribe the current user to push notifications.
  *
- * On a native Capacitor build the function delegates to FCM registration via
- * the @capacitor/push-notifications plugin.  The actual token upload is handled
- * by the CapacitorProvider which listens for the 'registration' event — this
- * function only requests permission and calls register() to trigger that flow.
+ * On a native Capacitor build this requests permission, calls register(), waits
+ * for the device token, and uploads it to /api/push/register-fcm.
  *
  * On the web the existing VAPID / service-worker path is used unchanged.
  */
@@ -112,9 +155,9 @@ export async function subscribeCurrentUserToPush(accessToken: string): Promise<{
 /**
  * Native FCM registration path.
  *
- * Requests permission then triggers register().  The CapacitorProvider
- * (mounted in app/layout.tsx) listens for the 'registration' event and
- * sends the token to /api/push/register-fcm.
+ * Requests permission, calls register(), waits for the device token, and
+ * uploads it to /api/push/register-fcm. On iOS the token is an FCM token only
+ * after AppDelegate exchanges the APNs token via Firebase Messaging.
  */
 async function subscribeNative(accessToken: string): Promise<{
   permission: NotificationPermission
@@ -143,10 +186,11 @@ async function subscribeNative(accessToken: string): Promise<{
 
     // Await both listeners before calling register() to avoid a race where
     // the FCM registration event fires before our JS handler is attached.
+    const platform = Capacitor.getPlatform()
+
     Promise.all([
       PushNotifications.addListener('registration', async (token) => {
         try {
-          const platform = Capacitor.getPlatform()
           const res = await fetch('/api/push/register-fcm', {
             method: 'POST',
             headers: {
@@ -166,21 +210,23 @@ async function subscribeNative(accessToken: string): Promise<{
         }
       }),
       PushNotifications.addListener('registrationError', (err: unknown) => {
-        const msg =
-          err && typeof err === 'object' && 'error' in err
-            ? String((err as { error: unknown }).error)
-            : JSON.stringify(err)
-        settle(false, `FCM registration error: ${msg}`)
+        const msg = nativePushErrorMessage(err)
+        settle(false, platform === 'ios' ? `iPhone registration error: ${msg}` : `FCM registration error: ${msg}`)
       }),
     ]).then(([regHandle, errHandle]) => {
       // Call register() only after both listeners are confirmed attached.
       PushNotifications.register()
 
-      // Timeout safety net — 20 s should be plenty for FCM to respond.
+      // Timeout safety net — 20 s should be plenty for APNs/FCM to respond.
       setTimeout(() => {
         regHandle.remove()
         errHandle.remove()
-        settle(false, 'FCM registration timed out after 20 s. Check Google Play Services on this device.')
+        settle(
+          false,
+          platform === 'ios'
+            ? 'iPhone push registration timed out. Rebuild TestFlight after AppDelegate forwards Apple’s device token (and add GoogleService-Info.plist for FCM).'
+            : 'FCM registration timed out after 20 s. Check Google Play Services on this device.',
+        )
       }, 20_000)
     })
   })

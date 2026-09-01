@@ -1,5 +1,7 @@
 import UIKit
 import Capacitor
+import FirebaseCore
+import FirebaseMessaging
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,7 +9,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Firebase is required on iOS so the JS layer receives an FCM token
+        // (the same format Android already uses). Without GoogleService-Info.plist
+        // the app still launches; push registration then fails with a clear error.
+        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+            FirebaseApp.configure()
+        }
         return true
     }
 
@@ -26,7 +33,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+        // Restart any tasks that were paused (or not started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
@@ -44,6 +51,40 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Feel free to add additional processing here, but if you want the App API to support
         // tracking app url opens, make sure to keep this call
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
+    }
+
+    // Capacitor's Push Notifications plugin only learns about the device token if
+    // we forward Apple's callbacks. Without this, JS waits forever and times out.
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        if FirebaseApp.app() != nil {
+            Messaging.messaging().apnsToken = deviceToken
+            Messaging.messaging().token { token, error in
+                if let error = error {
+                    NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+                } else if let token = token {
+                    NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: token)
+                } else {
+                    let missing = NSError(
+                        domain: "PushRegistration",
+                        code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "Firebase did not return an FCM token for this iPhone."]
+                    )
+                    NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: missing)
+                }
+            }
+            return
+        }
+
+        let missingPlist = NSError(
+            domain: "PushRegistration",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "GoogleService-Info.plist is missing. Add the iOS app (bundle ID com.laalbutton.app) in Firebase Console, put the plist in ios/App/App/, and rebuild."]
+        )
+        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: missingPlist)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
     }
 
 }

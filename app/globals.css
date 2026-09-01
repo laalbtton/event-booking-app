@@ -79,4 +79,35 @@ body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  /* Notch / home-indicator insets. These are 0 on desktop. Top padding is
+     skipped when the native StatusBar already sits above the WebView
+     (.native-status-bar-inset) so we do not get a double gap. */
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+html:not(.native-status-bar-inset) body {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/*
+  Sticky/fixed chrome is positioned against the viewport, not the padded body.
+  Pull it back into the unsafe area so its background fills behind the clock,
+  then pad its contents so labels and buttons sit below the system icons.
+*/
+html:not(.native-status-bar-inset) header.sticky.top-0,
+html:not(.native-status-bar-inset) .app-chrome-top {
+  margin-top: calc(env(safe-area-inset-top, 0px) * -1);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.fixed.bottom-0 {
+  margin-bottom: calc(env(safe-area-inset-bottom, 0px) * -1);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Toasts are viewport-fixed and otherwise sit under the iPhone clock. */
+html:not(.native-status-bar-inset) [data-sonner-toaster][data-y-position='top'] {
+  top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
 }

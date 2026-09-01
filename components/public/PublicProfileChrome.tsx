@@ -38,7 +38,7 @@ export function PublicProfileChrome({
   return (
     <div className="min-h-screen bg-zinc-950 pb-24">
       {isLoggedIn ? (
-        <div className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
+        <div className="app-chrome-top sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-3xl items-center gap-2 px-4">
             <Button
               type="button"

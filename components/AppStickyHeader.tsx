@@ -47,7 +47,7 @@ export default function AppStickyHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-[45] border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 pt-[env(safe-area-inset-top,0px)]">
+    <header className="sticky top-0 z-[45] border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-11 flex items-center">
         <p className="text-sm font-semibold tracking-tight truncate">{displayName || '…'}</p>
       </div>

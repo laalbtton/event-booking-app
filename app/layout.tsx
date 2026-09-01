@@ -8,6 +8,7 @@ import { AuthBootstrapProvider } from '@/components/providers/auth-bootstrap-pro
 import { InstagramUsernamePromptProvider } from '@/components/providers/instagram-username-prompt-provider'
 import { PushServiceWorkerProvider } from '@/components/providers/push-service-worker-provider'
 import { CapacitorProvider } from '@/components/providers/capacitor-provider'
+import { NativePushPromptProvider } from '@/components/providers/native-push-prompt-provider'
 import RedButtonListener from '@/components/RedButtonListener'
 import { InstallBonusProvider } from '@/components/providers/install-bonus-provider'
 import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
@@ -46,7 +47,10 @@ export const metadata: Metadata = {
 
 // Next.js 16+ expects themeColor under `viewport`, not `metadata`.
 export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
   themeColor: "#000000",
+  viewportFit: "cover",
 }
 
 export default function RootLayout({
@@ -77,6 +81,7 @@ export default function RootLayout({
             <InstagramUsernamePromptProvider>
             <PushServiceWorkerProvider />
             <CapacitorProvider />
+            <NativePushPromptProvider />
             <RedButtonListener />
             {INSTALL_PROMPT_ENABLED && <InstallBonusProvider />}
             <GlobalAlertsProvider />

@@ -105,6 +105,13 @@ export async function sendFcmNotification(
           // caused silent failures on Capacitor.)
         },
       },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+          },
+        },
+      },
     })
     return { sent: true }
   } catch (err: unknown) {

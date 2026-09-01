@@ -20,8 +20,10 @@ const config: CapacitorConfig = {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
     StatusBar: {
-      style: 'dark',
+      // Light = white clock/icons on the black bar above the WebView.
+      style: 'LIGHT',
       backgroundColor: '#000000',
+      overlaysWebView: false,
     },
   },
 }

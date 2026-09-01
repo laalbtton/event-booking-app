@@ -56,3 +56,22 @@ This creates:
 - Pre-prompt includes `Enable notifications` and `Not now`.
 - `Not now` snoozes prompt for 7 days.
 - If native browser permission is denied, app does not auto-prompt again.
+
+## 6) Native iOS (TestFlight / App Store)
+
+Android already uses FCM via `google-services.json`. iPhone push uses the same backend, but Capacitor only gives an **APNs** token unless the iOS project is wired to Firebase.
+
+The TestFlight timeout ("Google Play Services") happened because `AppDelegate.swift` never forwarded Apple's device token to Capacitor, so JavaScript waited 20 seconds and showed the Android error.
+
+### One-time Firebase + Apple setup
+
+1. Firebase Console → project `onemicstand-1829b` → **Add app** → iOS.
+2. Bundle ID: `com.laalbutton.app`.
+3. Download `GoogleService-Info.plist` and put it in `ios/App/App/` (same folder as `AppDelegate.swift`).
+4. In Xcode, add that plist to the **App** target (Copy Bundle Resources).
+5. Apple Developer → Keys → create an **APNs Auth Key** (`.p8`).
+6. Firebase Console → Project settings → Cloud Messaging → Apple app configuration → upload the `.p8` (Key ID + Team ID).
+7. On a Mac: `cd ios/App && pod install`, then archive a new TestFlight build.
+
+Without steps 3–4, iPhone registration fails with a message about the missing plist. Without steps 5–6, registration can succeed but notifications never arrive.
+
