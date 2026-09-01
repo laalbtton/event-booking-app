@@ -122,6 +122,12 @@ export async function sendPushToUser(
 
   let sent = 0
   let failed = 0
+  const sendErrors: Array<{
+    subscriptionId: string
+    platform: string
+    errorCode?: string
+    errorMessage: string
+  }> = []
 
   for (const row of subscriptions) {
     const platform = row.platform ?? 'web'
@@ -129,6 +135,11 @@ export async function sendPushToUser(
     if (platform === 'android' || platform === 'ios') {
       if (!row.fcm_token) {
         failed += 1
+        sendErrors.push({
+          subscriptionId: row.id,
+          platform,
+          errorMessage: 'Subscription has no FCM token',
+        })
         continue
       }
       const result = await sendFcmToSubscription(supabase, row.id, row.fcm_token, {
@@ -136,7 +147,17 @@ export async function sendPushToUser(
         body: payload.body,
         data: buildFcmData(payload),
       })
-      result.sent ? (sent += 1) : (failed += 1)
+      if (result.sent) {
+        sent += 1
+      } else {
+        failed += 1
+        sendErrors.push({
+          subscriptionId: row.id,
+          platform,
+          errorCode: result.errorCode,
+          errorMessage: result.errorMessage || 'FCM send failed',
+        })
+      }
     } else {
       // Web push via VAPID
       try {
@@ -148,6 +169,11 @@ export async function sendPushToUser(
         sent += 1
       } catch (err: unknown) {
         failed += 1
+        sendErrors.push({
+          subscriptionId: row.id,
+          platform,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        })
         const statusCode =
           typeof err === 'object' &&
           err !== null &&
@@ -165,7 +191,7 @@ export async function sendPushToUser(
     }
   }
 
-  return { sent, failed }
+  return { sent, failed, sendErrors }
 }
 
 export async function sendPushToAllUsers(

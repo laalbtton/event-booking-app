@@ -75,3 +75,5 @@ The TestFlight timeout ("Google Play Services") happened because `AppDelegate.sw
 
 Without steps 3–4, iPhone registration fails with a message about the missing plist. Without steps 5–6, registration can succeed but notifications never arrive.
 
+If Settings → Push shows “Token saved” but the test send reports 0 sent, open Firebase Console → Project settings → Cloud Messaging and confirm an APNs Authentication Key is uploaded for the iOS app. TestFlight uses Production APNs; a Sandbox-only key will fail every send.
+

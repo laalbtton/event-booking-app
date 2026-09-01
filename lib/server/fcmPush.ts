@@ -69,6 +69,27 @@ function getAdminApp() {
   return adminApp!
 }
 
+export type FcmSendResult = {
+  sent: boolean
+  stale?: boolean
+  errorCode?: string
+  errorMessage?: string
+}
+
+function fcmErrorParts(err: unknown): { code: string; message: string } {
+  if (!err || typeof err !== 'object') {
+    return { code: '', message: String(err) }
+  }
+  const record = err as {
+    code?: unknown
+    message?: unknown
+    errorInfo?: { code?: unknown; message?: unknown }
+  }
+  const code = String(record.errorInfo?.code || record.code || '')
+  const message = String(record.errorInfo?.message || record.message || err)
+  return { code, message }
+}
+
 /**
  * Send a push notification to one FCM token.
  *
@@ -79,7 +100,7 @@ function getAdminApp() {
 export async function sendFcmNotification(
   fcmToken: string,
   payload: FcmPayload
-): Promise<{ sent: boolean; stale?: boolean }> {
+): Promise<FcmSendResult> {
   const app = getAdminApp()
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getMessaging } = require('firebase-admin/messaging')
@@ -106,8 +127,16 @@ export async function sendFcmNotification(
         },
       },
       apns: {
+        headers: {
+          'apns-push-type': 'alert',
+          'apns-priority': '10',
+        },
         payload: {
           aps: {
+            alert: {
+              title: payload.title,
+              body: payload.body,
+            },
             sound: 'default',
           },
         },
@@ -115,24 +144,26 @@ export async function sendFcmNotification(
     })
     return { sent: true }
   } catch (err: unknown) {
-    const code =
-      typeof err === 'object' && err !== null && 'code' in err
-        ? (err as { code: string }).code
-        : ''
+    const { code, message } = fcmErrorParts(err)
 
-    // These FCM error codes mean the token is no longer valid.
+    // Only deactivate when FCM says this specific device token is dead.
+    // Do not treat invalid-argument as stale — that also covers missing APNs
+    // credentials and malformed payloads, which would wipe a good iPhone token.
     const staleTokenCodes = [
       'messaging/invalid-registration-token',
       'messaging/registration-token-not-registered',
-      'messaging/invalid-argument',
+      'messaging/unregistered',
     ]
 
-    if (staleTokenCodes.some((c) => code.includes(c))) {
-      return { sent: false, stale: true }
-    }
+    const stale = staleTokenCodes.some((c) => code.includes(c) || message.includes(c))
+    console.error('FCM send error:', code || '(no code)', message)
 
-    console.error('FCM send error:', err)
-    return { sent: false }
+    return {
+      sent: false,
+      stale,
+      errorCode: code || undefined,
+      errorMessage: message,
+    }
   }
 }
 
@@ -145,7 +176,7 @@ export async function sendFcmToSubscription(
   subscriptionId: string,
   fcmToken: string,
   payload: FcmPayload
-): Promise<{ sent: boolean }> {
+): Promise<FcmSendResult> {
   const result = await sendFcmNotification(fcmToken, payload)
 
   if (result.stale) {
@@ -155,5 +186,5 @@ export async function sendFcmToSubscription(
       .eq('id', subscriptionId)
   }
 
-  return { sent: result.sent }
+  return result
 }

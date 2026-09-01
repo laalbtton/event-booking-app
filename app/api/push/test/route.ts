@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
       sent: result.sent ?? 0,
       failed: result.failed ?? 0,
       subscriptions: subsInfo,
+      sendErrors: result.sendErrors ?? [],
       firebaseEnvConfigured,
     })
   } catch (error: unknown) {

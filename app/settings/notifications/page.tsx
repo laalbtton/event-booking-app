@@ -47,6 +47,7 @@ export default function SettingsNotificationsPage() {
     sent: number
     failed: number
     subscriptions: Array<{ id: string; platform: string; isActive: boolean; hasToken: boolean; hasEndpoint: boolean }>
+    sendErrors?: Array<{ subscriptionId: string; platform: string; errorCode?: string; errorMessage: string }>
     firebaseEnvConfigured: boolean
     error?: string
   }
@@ -673,6 +674,27 @@ export default function SettingsNotificationsPage() {
                     </span>
                   </p>
 
+                  {(testPushResult.sendErrors?.length ?? 0) > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Send errors:</p>
+                      {testPushResult.sendErrors!.map((err) => (
+                        <p key={err.subscriptionId} className="text-xs text-red-600 dark:text-red-400">
+                          [{err.platform}] {err.errorCode ? `${err.errorCode}: ` : ''}
+                          {err.errorMessage}
+                        </p>
+                      ))}
+                      {testPushResult.sendErrors!.some(
+                        (err) =>
+                          /apns|third-party-auth|invalid-apns|unauthenticated/i.test(
+                            `${err.errorCode ?? ''} ${err.errorMessage}`,
+                          ),
+                      ) && (
+                        <p className="text-xs text-amber-700 dark:text-amber-400">
+                          Firebase cannot talk to Apple. In Firebase Console → Project settings → Cloud Messaging, upload a Production (or Sandbox &amp; Production) APNs Auth Key (.p8) with matching Key ID and Team ID. A Sandbox-only key will not reach TestFlight.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {(testPushResult.subscriptions?.length ?? 0) > 0 && (
                     <div className="space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">Subscriptions found:</p>
@@ -684,7 +706,7 @@ export default function SettingsNotificationsPage() {
                           <span className={s.isActive ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground line-through'}>
                             {s.isActive ? 'active' : 'inactive'}
                           </span>
-                          {s.platform === 'android' && (
+                          {(s.platform === 'android' || s.platform === 'ios') && (
                             <span className={s.hasToken ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
                               FCM token: {s.hasToken ? 'present ✓' : 'missing ✗'}
                             </span>
