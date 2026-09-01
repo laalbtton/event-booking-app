@@ -65,6 +65,7 @@ export function NativePushPromptProvider() {
     }
 
     let cancelled = false
+    const userId = user.id
 
     async function run() {
       const state = await getEffectivePushPermission()
@@ -88,7 +89,7 @@ export function NativePushPromptProvider() {
 
       if (state.permission === 'denied') return
       if (promptedThisSession.current) return
-      if (isSnoozed(user.id)) return
+      if (isSnoozed(userId)) return
 
       // Let the first screen paint before covering it.
       await new Promise((resolve) => setTimeout(resolve, 1200))
