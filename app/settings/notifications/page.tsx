@@ -47,8 +47,19 @@ export default function SettingsNotificationsPage() {
     sent: number
     failed: number
     subscriptions: Array<{ id: string; platform: string; isActive: boolean; hasToken: boolean; hasEndpoint: boolean }>
-    sendErrors?: Array<{ subscriptionId: string; platform: string; errorCode?: string; errorMessage: string }>
+    sendErrors?: Array<{
+      subscriptionId: string
+      platform: string
+      errorCode?: string
+      errorMessage: string
+      apnsReason?: string
+      httpStatus?: number
+      rawError?: string
+      hint?: string
+    }>
     firebaseEnvConfigured: boolean
+    firebaseProjectId?: string | null
+    expectedIosBundleId?: string
     error?: string
   }
   const [testPushLoading, setTestPushLoading] = useState(false)
@@ -672,27 +683,41 @@ export default function SettingsNotificationsPage() {
                     <span className={testPushResult.firebaseEnvConfigured ? 'text-green-600 dark:text-green-400' : 'text-red-500'}>
                       {testPushResult.firebaseEnvConfigured ? 'configured ✓' : 'missing — add FIREBASE_PROJECT_ID / CLIENT_EMAIL / PRIVATE_KEY to Vercel env'}
                     </span>
+                    {testPushResult.firebaseProjectId && (
+                      <>
+                        {' · '}project <span className="font-mono">{testPushResult.firebaseProjectId}</span>
+                        {testPushResult.firebaseProjectId !== 'onemicstand-1829b' && (
+                          <span className="text-red-500"> (expected onemicstand-1829b)</span>
+                        )}
+                      </>
+                    )}
                   </p>
 
                   {(testPushResult.sendErrors?.length ?? 0) > 0 && (
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">Send errors:</p>
                       {testPushResult.sendErrors!.map((err) => (
-                        <p key={err.subscriptionId} className="text-xs text-red-600 dark:text-red-400">
-                          [{err.platform}] {err.errorCode ? `${err.errorCode}: ` : ''}
-                          {err.errorMessage}
-                        </p>
+                        <div key={err.subscriptionId} className="space-y-1">
+                          <p className="text-xs text-red-600 dark:text-red-400">
+                            [{err.platform}] {err.errorCode ? `${err.errorCode}: ` : ''}
+                            {err.errorMessage}
+                          </p>
+                          {err.apnsReason && (
+                            <p className="text-xs font-mono text-red-700 dark:text-red-300">
+                              Apple APNs reason: {err.apnsReason}
+                              {err.httpStatus ? ` (HTTP ${err.httpStatus})` : ''}
+                            </p>
+                          )}
+                          {err.hint && (
+                            <p className="text-xs text-amber-700 dark:text-amber-400">{err.hint}</p>
+                          )}
+                          {err.rawError && (
+                            <pre className="text-[10px] leading-snug whitespace-pre-wrap break-all rounded bg-muted p-2 text-muted-foreground max-h-48 overflow-y-auto">
+                              {err.rawError}
+                            </pre>
+                          )}
+                        </div>
                       ))}
-                      {testPushResult.sendErrors!.some(
-                        (err) =>
-                          /apns|third-party-auth|invalid-apns|unauthenticated/i.test(
-                            `${err.errorCode ?? ''} ${err.errorMessage}`,
-                          ),
-                      ) && (
-                        <p className="text-xs text-amber-700 dark:text-amber-400">
-                          Firebase cannot talk to Apple. In Firebase Console → Project settings → Cloud Messaging, upload a Production (or Sandbox &amp; Production) APNs Auth Key (.p8) with matching Key ID and Team ID. A Sandbox-only key will not reach TestFlight.
-                        </p>
-                      )}
                     </div>
                   )}
                   {(testPushResult.subscriptions?.length ?? 0) > 0 && (

@@ -99,6 +99,8 @@ export async function POST(request: NextRequest) {
       subscriptions: subsInfo,
       sendErrors: result.sendErrors ?? [],
       firebaseEnvConfigured,
+      firebaseProjectId: process.env.FIREBASE_PROJECT_ID || null,
+      expectedIosBundleId: 'com.laalbutton.app',
     })
   } catch (error: unknown) {
     console.error('Push test error:', error)

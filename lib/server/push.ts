@@ -127,6 +127,10 @@ export async function sendPushToUser(
     platform: string
     errorCode?: string
     errorMessage: string
+    apnsReason?: string
+    httpStatus?: number
+    rawError?: string
+    hint?: string
   }> = []
 
   for (const row of subscriptions) {
@@ -156,6 +160,10 @@ export async function sendPushToUser(
           platform,
           errorCode: result.errorCode,
           errorMessage: result.errorMessage || 'FCM send failed',
+          apnsReason: result.apnsReason,
+          httpStatus: result.httpStatus,
+          rawError: result.rawError,
+          hint: result.hint,
         })
       }
     } else {
