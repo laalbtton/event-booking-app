@@ -57,7 +57,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // we forward Apple's callbacks. Without this, JS waits forever and times out.
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         if FirebaseApp.app() != nil {
-            Messaging.messaging().apnsToken = deviceToken
+            // TestFlight / App Store builds must be tagged production. If this is
+            // left as unknown, FCM sometimes treats the token as sandbox and then
+            // send fails with invalid APNs credentials when only a Production key is uploaded.
+            #if DEBUG
+            Messaging.messaging().setAPNSToken(deviceToken, type: .sandbox)
+            #else
+            Messaging.messaging().setAPNSToken(deviceToken, type: .prod)
+            #endif
             Messaging.messaging().token { token, error in
                 if let error = error {
                     NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)

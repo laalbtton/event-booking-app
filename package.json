@@ -10,6 +10,7 @@
     "build:android": "next build && npx cap sync android",
     "build:ios": "next build && npx cap sync ios",
     "open:android": "npx cap open android",
+    "bump:ios": "node scripts/bump-ios-build.mjs",
     "screenshots:tablet": "node scripts/capture-play-store-tablet-screenshots.mjs",
     "assets:android": "capacitor-assets generate --android"
   },

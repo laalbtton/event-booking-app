@@ -130,6 +130,7 @@ export async function sendFcmNotification(
         headers: {
           'apns-push-type': 'alert',
           'apns-priority': '10',
+          'apns-topic': 'com.laalbutton.app',
         },
         payload: {
           aps: {
