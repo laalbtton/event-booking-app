@@ -12,7 +12,9 @@
     "open:android": "npx cap open android",
     "bump:ios": "node scripts/bump-ios-build.mjs",
     "screenshots:tablet": "node scripts/capture-play-store-tablet-screenshots.mjs",
-    "assets:android": "capacitor-assets generate --android"
+    "assets:android": "capacitor-assets generate --android",
+    "assets:ios": "capacitor-assets generate --ios --iconBackgroundColor \"#ffffff\"",
+    "assets:native": "capacitor-assets generate --android --ios --iconBackgroundColor \"#ffffff\""
   },
   "dependencies": {
     "@capacitor/app": "^8.1.0",
