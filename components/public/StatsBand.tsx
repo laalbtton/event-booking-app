@@ -88,7 +88,7 @@ export function StatsBand({
   if (!hasActivity) return null
 
   return (
-    <section className="bg-zinc-950 text-white border-t border-white/5 px-4 py-12">
+    <section className="bg-zinc-950 text-white border-t border-red-600/25 px-4 py-12">
       <div className="max-w-5xl mx-auto">
         <p className="text-center text-sm uppercase tracking-widest text-stone-400 mb-8">
           The stage so far
@@ -97,7 +97,7 @@ export function StatsBand({
           {stats.map((stat) => (
             <div
               key={stat.label}
-              className="rounded-2xl border border-white/10 bg-white/5 px-6 py-8 text-center shadow-sm"
+              className="rounded-2xl border border-red-600/65 bg-white/5 px-6 py-8 text-center shadow-sm"
             >
               <div className="text-3xl mb-3" aria-hidden="true">
                 {stat.icon}

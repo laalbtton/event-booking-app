@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { PublicHeader } from '@/components/public/PublicHeader'
@@ -48,8 +49,16 @@ export default async function Home() {
       {/* ── Hero ─────────────────────────────────────────────────── */}
       <section className="bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 text-white py-20 px-4">
         <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-5xl md:text-6xl font-bold mb-4 tracking-tight text-yellow-400 drop-shadow-lg">
-            One Mic Stand
+          <h1 className="mb-6 flex justify-center">
+            <Image
+              src="/images/LogowithMicStand.png?v=2"
+              alt="One Mic Stand"
+              width={1600}
+              height={799}
+              className="h-auto w-full max-w-xl md:max-w-2xl"
+              priority
+              unoptimized
+            />
           </h1>
           <p className="text-xl md:text-2xl mb-10 text-stone-300 leading-relaxed">
             Discover and perform at comedy &amp; open mic events across Canada
@@ -108,7 +117,7 @@ export default async function Home() {
         <div className="max-w-5xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-10">How It Works</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="bg-card rounded-2xl border p-6 text-center space-y-3 shadow-sm">
+            <div className="bg-card rounded-2xl border border-red-600/25 p-6 text-center space-y-3 shadow-sm">
               <div className="text-4xl">🎤</div>
               <h3 className="text-lg font-semibold">Performers</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
@@ -122,7 +131,7 @@ export default async function Home() {
               </Link>
             </div>
 
-            <div className="bg-card rounded-2xl border p-6 text-center space-y-3 shadow-sm">
+            <div className="bg-card rounded-2xl border border-red-600/25 p-6 text-center space-y-3 shadow-sm">
               <div className="text-4xl">🎟️</div>
               <h3 className="text-lg font-semibold">Audience</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
@@ -136,7 +145,7 @@ export default async function Home() {
               </Link>
             </div>
 
-            <div className="bg-card rounded-2xl border p-6 text-center space-y-3 shadow-sm">
+            <div className="bg-card rounded-2xl border border-red-600/25 p-6 text-center space-y-3 shadow-sm">
               <div className="text-4xl">🏘️</div>
               <h3 className="text-lg font-semibold">Communities</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
@@ -168,7 +177,7 @@ export default async function Home() {
                 <Link
                   key={c.id}
                   href={`/communities/${c.slug || c.id}`}
-                  className="group block rounded-xl border bg-card p-5 shadow-sm hover:shadow-md transition-shadow"
+                  className="group block rounded-xl border border-red-600/25 bg-card p-5 shadow-sm hover:shadow-md hover:border-red-600/45 transition-all"
                 >
                   <h3 className="font-semibold text-base group-hover:text-primary transition-colors">
                     {c.name}
@@ -215,9 +224,17 @@ export default async function Home() {
       </section>
 
       {/* ── Footer ───────────────────────────────────────────────── */}
-      <footer className="py-8 px-4 border-t bg-background">
+      <footer className="py-8 px-4 border-t border-red-600/25 bg-background">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <span className="font-bold text-foreground">One Mic Stand</span>
+          <Link href="/" className="flex shrink-0 items-center" aria-label="One Mic Stand home">
+            <Image
+              src="/images/BlackLogoSmall_website_Top.png"
+              alt="One Mic Stand"
+              width={937}
+              height={220}
+              className="h-8 w-auto"
+            />
+          </Link>
           <nav className="flex flex-wrap gap-5 text-sm text-muted-foreground">
             <Link href="/events" className="hover:text-foreground transition-colors">
               Events

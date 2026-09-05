@@ -117,7 +117,7 @@ function SignupContent() {
   if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 px-4 py-8">
-        <Card className="max-w-md w-full text-center shadow-2xl border-zinc-700 bg-zinc-900 text-stone-100">
+        <Card className="max-w-md w-full text-center shadow-2xl border-red-600/55 bg-zinc-900 text-stone-100">
           <CardHeader>
             <div className="text-6xl mb-4">📧</div>
             <CardTitle className="text-2xl text-yellow-400">Check Your Email!</CardTitle>
@@ -150,7 +150,7 @@ function SignupContent() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 px-4 py-12 sm:py-16">
-      <Card className="max-w-md w-full shadow-2xl border-zinc-700 bg-zinc-900 text-stone-100">
+      <Card className="max-w-md w-full shadow-2xl border-red-600/55 bg-zinc-900 text-stone-100">
         <CardHeader className="space-y-2 pb-6">
           <CardTitle className="text-3xl font-bold text-center tracking-tight text-yellow-400">Sign Up</CardTitle>
           <CardDescription className="text-center text-base text-stone-400">

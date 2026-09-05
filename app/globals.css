@@ -71,20 +71,22 @@
   --font-mono: var(--font-geist-mono);
 }
 
-* {
-  border-color: hsl(var(--border));
-}
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
 
-body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  /* Notch / home-indicator insets. These are 0 on desktop. Top padding is
-     skipped when the native StatusBar already sits above the WebView
-     (.native-status-bar-inset) so we do not get a double gap. */
-  padding-right: env(safe-area-inset-right, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+    /* Notch / home-indicator insets. These are 0 on desktop. Top padding is
+       skipped when the native StatusBar already sits above the WebView
+       (.native-status-bar-inset) so we do not get a double gap. */
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+  }
 }
 
 html:not(.native-status-bar-inset) body {

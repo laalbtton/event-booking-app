@@ -211,7 +211,7 @@ export default async function PublicEventsPage({
             </div>
           </section>
         ) : (
-          <div className="rounded-xl border border-zinc-700 bg-zinc-800/40 py-16 text-center">
+          <div className="rounded-xl border border-red-600/55 bg-zinc-800/40 py-16 text-center">
             <p className="text-lg font-medium text-stone-200">No upcoming events found</p>
             <p className="mt-2 text-sm text-stone-400">
               {hasActiveFilters

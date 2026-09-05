@@ -99,7 +99,7 @@ function VenueCard({ venue, muted = false }: { venue: PublicVenue; muted?: boole
   return (
     <Link
       href={venuePublicPath(venue)}
-      className={`block rounded-xl border bg-card p-4 hover:shadow-md transition-shadow group ${muted ? 'opacity-70' : ''}`}
+      className={`block rounded-xl border border-red-600/25 bg-card p-4 hover:shadow-md hover:border-red-600/45 transition-all group ${muted ? 'opacity-70' : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0 space-y-1.5">

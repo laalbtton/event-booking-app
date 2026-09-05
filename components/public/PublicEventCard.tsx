@@ -43,7 +43,7 @@ export function PublicEventCard({ event, cityFilter }: Props) {
   return (
     <Link
       href={href}
-      className="group block rounded-xl border border-zinc-700 bg-zinc-900 text-stone-100 shadow-sm hover:shadow-lg hover:border-zinc-500 transition-all overflow-hidden"
+      className="group block rounded-xl border border-red-600/55 bg-zinc-900 text-stone-100 shadow-sm hover:shadow-lg hover:border-red-500/80 transition-all overflow-hidden"
     >
       {/* Event image — square aspect ratio with object-contain when poster exists; compact fixed height when no poster */}
       {event.imageUrl ? (

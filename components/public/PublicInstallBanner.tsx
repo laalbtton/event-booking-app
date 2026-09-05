@@ -47,7 +47,7 @@ export function PublicInstallBanner() {
 
   return (
     <div className="mt-3">
-      <div className="flex items-start gap-3 rounded-xl border border-zinc-700 bg-zinc-800/60 p-4 shadow-sm">
+      <div className="flex items-start gap-3 rounded-xl border border-red-600/35 bg-zinc-800/60 p-4 shadow-sm">
         <div className="shrink-0 text-xl">📱</div>
         <div className="flex-1 min-w-0">
           {showIosInstructions ? (

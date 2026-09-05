@@ -119,7 +119,7 @@ export function PublicEventsFilters() {
 
       {/* Expanded filters */}
       {expanded && (
-        <div className="rounded-xl border bg-card p-4 space-y-4">
+        <div className="rounded-xl border border-red-600/25 bg-card p-4 space-y-4">
           {/* Date presets */}
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-2">Date</p>

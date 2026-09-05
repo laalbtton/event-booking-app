@@ -226,7 +226,7 @@ function LoginContent() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-neutral-900 to-stone-900 px-4 py-12 sm:py-16">
-      <Card className="max-w-md w-full shadow-2xl border-zinc-700 bg-zinc-900 text-stone-100">
+      <Card className="max-w-md w-full shadow-2xl border-red-600/55 bg-zinc-900 text-stone-100">
         <CardHeader className="space-y-2 pb-6">
           <CardTitle className="text-3xl font-bold text-center tracking-tight text-yellow-400">Login</CardTitle>
           <CardDescription className="text-center text-base text-stone-400">Sign in to manage your performances and event bookings</CardDescription>
