@@ -655,6 +655,10 @@ export default function EventDetailsPage() {
 
   async function handleBuyTickets() {
     if (!event) return
+    if (isPerformerSignedUpForEvent) {
+      toast.error('You already have a performer spot. Tickets are for audience only.')
+      return
+    }
     setTicketLoading(true)
     try {
       const response = await fetch('/api/stripe/ticket-checkout', {
@@ -965,6 +969,13 @@ export default function EventDetailsPage() {
     creditsRequiredForButton,
   )
   const bookingLabel = isFull ? 'Join Waitlist' : isAudienceUser ? 'Reserve Spot' : 'Book Event'
+  const showAudienceTicketCta =
+    !!ticketInfo && event.tickets_enabled && !event.external_event && !isPerformerSignedUpForEvent
+  const showOwnedTickets =
+    !!ticketInfo &&
+    event.tickets_enabled &&
+    !event.external_event &&
+    (myTicketPurchases.length > 0 || ticketSuccess)
   const now = new Date()
   const startTime = new Date(event.date)
   const endTime = event.end_time
@@ -1277,7 +1288,7 @@ export default function EventDetailsPage() {
                   </div>
                 )}
 
-                {event.tickets_enabled && !event.external_event && (
+                {event.tickets_enabled && !event.external_event && !isPerformerSignedUpForEvent && (
                   <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                     <span className="mr-2">⏱️</span>
                     <span>Ticket cancellation: up to {event.cancellation_hours}h before showtime for a full credit refund</span>
@@ -1336,8 +1347,9 @@ export default function EventDetailsPage() {
                 <Badge variant="destructive">Cancelled</Badge>
               ) : (
                 <div className="flex flex-col items-end gap-3">
-                  {/* Ticket purchase — booked shows and ticketed open mics */}
-                  {ticketInfo && event.tickets_enabled && !event.external_event && (
+                  {/* Ticket purchase — audience path on booked shows and ticketed open mics.
+                      Performers who already have a spot should not also buy a ticket. */}
+                  {(showAudienceTicketCta || showOwnedTickets) && ticketInfo && (
                     <div className="flex flex-col items-end gap-2">
                       {ticketSuccess && (
                         <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800 font-medium">
@@ -1364,7 +1376,8 @@ export default function EventDetailsPage() {
                       {ticketSuccess && !isPast && event.status !== 'cancelled' && (
                         <AddToCalendarButtons event={event} layout="row" />
                       )}
-                      {Math.max(0, ticketInfo.quantity - ticketInfo.sold) > 0 ? (
+                      {!isPerformerSignedUpForEvent && (
+                        Math.max(0, ticketInfo.quantity - ticketInfo.sold) > 0 ? (
                         <div className="flex flex-col items-end gap-2">
                           <div className="flex items-center gap-2">
                             <label className="text-sm font-medium text-muted-foreground">Qty:</label>
@@ -1418,8 +1431,9 @@ export default function EventDetailsPage() {
                             </div>
                           )}
                         </div>
-                      ) : (
-                        <Badge variant="destructive">Sold Out</Badge>
+                        ) : (
+                          <Badge variant="destructive">Sold Out</Badge>
+                        )
                       )}
                     </div>
                   )}
@@ -1434,7 +1448,7 @@ export default function EventDetailsPage() {
                   {event.event_type !== 'booked_show' &&
                     profile &&
                     !(isAudienceUser && event.tickets_enabled && !event.external_event && ticketInfo) && (
-                event.tickets_enabled && event.external_event && event.external_ticket_url ? (
+                isAudienceUser && event.tickets_enabled && event.external_event && event.external_ticket_url ? (
                   <a href={event.external_ticket_url} target="_blank" rel="noreferrer">
                     <Button size="sm" variant="outline">Buy Tickets</Button>
                   </a>
@@ -1660,7 +1674,7 @@ export default function EventDetailsPage() {
         <Link
           href={`/bookings/${userBooking.id}`}
           className="fixed left-0 right-0 z-40 flex items-center justify-center py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm shadow-lg"
-          style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+          style={{ bottom: 'calc(4rem + var(--app-safe-bottom, 0px))' }}
         >
           Go to booking
         </Link>

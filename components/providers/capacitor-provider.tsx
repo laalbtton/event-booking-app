@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { applySafeAreaFallbacks } from '@/lib/safeAreaInsets'
 
 /**
  * CapacitorProvider
@@ -46,14 +47,31 @@ export function CapacitorProvider() {
       // never sit on top of headers. CSS safe-area padding is the fallback when
       // this plugin is missing from an older binary; skip that top padding once
       // the native inset is in place so we do not get a double gap.
+      let nativeStatusBarInset = false
       try {
+        const platform = Capacitor.getPlatform()
+        const isDark = document.documentElement.classList.contains('dark')
         await StatusBar.setOverlaysWebView({ overlay: false })
-        await StatusBar.setBackgroundColor({ color: '#000000' })
-        await StatusBar.setStyle({ style: Style.Light })
-        document.documentElement.classList.add('native-status-bar-inset')
+        if (platform === 'android') {
+          await StatusBar.setBackgroundColor({ color: isDark ? '#0f172a' : '#ffffff' })
+          await StatusBar.setStyle({ style: isDark ? Style.Light : Style.Dark })
+        } else {
+          await StatusBar.setBackgroundColor({ color: '#000000' })
+          await StatusBar.setStyle({ style: Style.Light })
+        }
+        const systemConsumed = Math.max(0, (window.screen?.height || 0) - window.innerHeight)
+        // iOS overlay:false always insets. Android 15+ may still draw under the
+        // bars even after the plugin call — only skip CSS padding when the
+        // WebView is actually shorter than the screen.
+        if (platform !== 'android' || systemConsumed >= 28) {
+          document.documentElement.classList.add('native-status-bar-inset')
+          nativeStatusBarInset = true
+        }
       } catch {
         // Plugin missing from an older binary — CSS safe-area padding still applies.
       }
+
+      applySafeAreaFallbacks({ nativeStatusBarInset })
 
       // ─── 0. Android notification channel ───────────────────────────────────
       // Android 8+ (API 26+) requires every notification to belong to a channel.

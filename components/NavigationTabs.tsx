@@ -150,7 +150,7 @@ export default function NavigationTabs() {
   if (chatOverlayOpen) return null
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 shadow-lg border-t border-gray-200 dark:border-zinc-800 z-50 safe-area-inset-bottom">
+    <div className="app-bottom-nav fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 shadow-lg border-t border-gray-200 dark:border-zinc-800 z-50">
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
         <nav className="flex items-center justify-around py-2 sm:justify-between">
           <div className="flex items-center gap-1 sm:gap-2 flex-1 justify-around">

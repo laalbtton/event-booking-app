@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { redeemPendingAppInvite } from '@/lib/appInviteClient'
+import { ensureDefaultCommunities } from '@/lib/ensureDefaultCommunities'
 
 export default function AuthCallbackPage() {
   const router = useRouter()
@@ -61,24 +62,9 @@ export default function AuthCallbackPage() {
           data: { ...user.user_metadata, onboarding_role_pending: false },
         })
 
-        // Auto-join all public active communities (same as normal onboarding)
+        // Fall back to public communities if they joined none
         try {
-          const { data: publicCommunities } = await supabase
-            .from('communities')
-            .select('id')
-            .eq('is_public', true)
-            .eq('status', 'active')
-
-          if (publicCommunities) {
-            await Promise.allSettled(
-              publicCommunities.map((c: { id: string }) =>
-                fetch(`/api/communities/${c.id}/join`, {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${session.access_token}` },
-                }),
-              ),
-            )
-          }
+          await ensureDefaultCommunities(session.access_token)
         } catch {
           // Non-blocking
         }
@@ -155,22 +141,7 @@ export default function AuthCallbackPage() {
       })
 
       try {
-        const { data: publicCommunities } = await supabase
-          .from('communities')
-          .select('id')
-          .eq('is_public', true)
-          .eq('status', 'active')
-
-        if (publicCommunities) {
-          await Promise.allSettled(
-            publicCommunities.map((c: { id: string }) =>
-              fetch(`/api/communities/${c.id}/join`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${session.access_token}` },
-              }),
-            ),
-          )
-        }
+        await ensureDefaultCommunities(session.access_token)
       } catch {
         // Non-blocking
       }

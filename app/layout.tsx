@@ -15,6 +15,7 @@ import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
 import { ThemeProvider } from '@/components/providers/theme-provider'
 import AppNavigationShell from '@/components/AppNavigationShell'
 import ConditionalAppFooter from '@/components/ConditionalAppFooter'
+import { AppSystemInsetChrome } from '@/components/AppSystemInsetChrome'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -85,6 +86,7 @@ export default function RootLayout({
             <RedButtonListener />
             {INSTALL_PROMPT_ENABLED && <InstallBonusProvider />}
             <GlobalAlertsProvider />
+            <AppSystemInsetChrome />
             {/* Main content area */}
             <main className="flex-1">
               {children}

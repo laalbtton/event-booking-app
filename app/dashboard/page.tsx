@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import type { Profile, Event, Booking } from '@/lib/supabase'
 import { formatDateTime, formatTime } from '@/lib/dateUtils'
 import Link from 'next/link'
+import Image from 'next/image'
 import { createNotification } from '@/lib/notifications'
 import { sendBookingConfirmationEmail, sendWaitlistPromotionEmail, sendWaitlistPositionEmail } from '@/lib/emailService'
 import { Label } from '@/components/ui/label'
@@ -43,6 +44,7 @@ import {
 } from '@/lib/installPromptClient'
 import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
 import { getSpendableRegularCredits } from '@/lib/creditLedger'
+import { ensureDefaultCommunities } from '@/lib/ensureDefaultCommunities'
 import {
   canAffordWithVenueCredits,
   venueCreditsForEvent,
@@ -1021,12 +1023,24 @@ export default function Dashboard() {
         .select('community_id')
         .eq('user_id', userId)
 
-      const communityIds = (memberships || []).map((m: { community_id: string }) => m.community_id)
+      let communityIds = (memberships || []).map((m: { community_id: string }) => m.community_id)
+
+      // Signup paths that skip onboarding can leave the user with no
+      // memberships. Fall back to every public + active community.
+      if (communityIds.length === 0) {
+        const { data: sessionData } = await supabase.auth.getSession()
+        await ensureDefaultCommunities(sessionData.session?.access_token)
+        const { data: fallbackMemberships } = await supabase
+          .from('community_members')
+          .select('community_id')
+          .eq('user_id', userId)
+        communityIds = (fallbackMemberships || []).map((m: { community_id: string }) => m.community_id)
+      }
 
       let eventsData: Event[] = []
 
       if (communityIds.length === 0) {
-        // No communities — empty dashboard
+        // Still no communities (none public/active) — empty dashboard
         setEvents([])
         setVenueById({})
         setHostById({})
@@ -1532,6 +1546,40 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      {userRole !== 'audience' && eventTab === 'perform' && (
+        <div className="app-chrome-top sticky top-0 z-40 border-b border-border bg-background">
+          <div className="relative mx-auto flex min-h-12 max-w-7xl items-center justify-center px-12 sm:px-14">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 sm:left-6">
+              <Button asChild variant="ghost" size="icon" className="h-8 w-8" title="Your feed">
+                <Link href="/feed" aria-label="Your feed">
+                  <Newspaper className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+            <Link href="/dashboard" className="flex shrink-0 items-center" aria-label="One Mic Stand">
+              <Image
+                src="/images/BlackLogoSmall_website_Top.png"
+                alt="One Mic Stand"
+                width={937}
+                height={220}
+                className="h-7 w-auto sm:h-8 dark:hidden"
+                priority
+              />
+              <Image
+                src="/images/YellowLogoSmall_website_Top.png"
+                alt="One Mic Stand"
+                width={872}
+                height={207}
+                className="hidden h-7 w-auto sm:h-8 dark:block"
+                priority
+              />
+            </Link>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 sm:right-6">
+              <NotificationsBellLink />
+            </div>
+          </div>
+        </div>
+      )}
       <Dialog open={varietyDialogOpen} onOpenChange={setVarietyDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1847,25 +1895,8 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Perform: app title row + credits row; other tabs / audience: credits only */}
+        {/* Credits row; perform tab title/logo lives in the sticky header above */}
         <div className="mb-8 space-y-3">
-          {userRole !== 'audience' && eventTab === 'perform' && (
-            <div className="relative flex min-h-11 items-center justify-center px-10 sm:px-12">
-              <div className="absolute left-0 top-1/2 -translate-y-1/2">
-                <Button asChild variant="ghost" size="icon" className="h-8 w-8" title="Your feed">
-                  <Link href="/feed" aria-label="Your feed">
-                    <Newspaper className="h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-              <span className="text-center text-lg font-bold tracking-tight text-foreground sm:text-xl">
-                One Mic Stand
-              </span>
-              <div className="absolute right-0 top-1/2 -translate-y-1/2">
-                <NotificationsBellLink />
-              </div>
-            </div>
-          )}
           <Card className="bg-gradient-to-r from-emerald-600 to-teal-700 border-0 text-white shadow-lg w-full">
             <CardContent className="p-4 sm:p-5">
               <div className="flex items-center gap-2 sm:gap-3 flex-nowrap">

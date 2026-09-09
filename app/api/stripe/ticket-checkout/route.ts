@@ -52,6 +52,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Ticket checkout is not available for this event type' }, { status: 400 })
     }
 
+    // Tickets are the audience path. A performer spot already covers entry.
+    if (userId) {
+      const { data: existingBookings } = await serviceClient
+        .from('bookings')
+        .select('id, booking_scope')
+        .eq('event_id', eventId)
+        .eq('user_id', userId)
+        .in('status', ['confirmed', 'waitlist'])
+
+      const hasPerformerSpot = (existingBookings || []).some(
+        (b: { booking_scope?: string | null }) => (b.booking_scope || 'performer') !== 'audience',
+      )
+      if (hasPerformerSpot) {
+        return NextResponse.json(
+          { error: 'You already have a performer spot for this event. Tickets are for audience only.' },
+          { status: 400 },
+        )
+      }
+    }
+
     // Load ticket tier
     const { data: ticket, error: ticketError } = await serviceClient
       .from('event_tickets')

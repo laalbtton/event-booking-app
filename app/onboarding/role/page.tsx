@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { isStandaloneMode } from '@/lib/installPromptClient'
 import { INSTALL_PROMPT_ENABLED } from '@/lib/featureFlags'
 import { redeemPendingCommunityInvite } from '@/lib/communityInviteClient'
+import { ensureDefaultCommunities } from '@/lib/ensureDefaultCommunities'
 
 export default function RoleOnboardingPage() {
   const router = useRouter()
@@ -86,30 +87,6 @@ export default function RoleOnboardingPage() {
         },
       })
 
-      // Auto-join all public active communities
-      try {
-        const { data: publicCommunities } = await supabase
-          .from('communities')
-          .select('id')
-          .eq('is_public', true)
-          .eq('status', 'active')
-
-        const { data: sessionData } = await supabase.auth.getSession()
-        const token = sessionData.session?.access_token
-        if (token && publicCommunities) {
-          await Promise.allSettled(
-            publicCommunities.map((c: { id: string }) =>
-              fetch(`/api/communities/${c.id}/join`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-              })
-            )
-          )
-        }
-      } catch {
-        // Non-blocking — onboarding continues regardless
-      }
-
       // Sync new user to Resend marketing segment (non-blocking).
       try {
         fetch('/api/auth/sync-resend-contact', {
@@ -145,12 +122,14 @@ export default function RoleOnboardingPage() {
 
       window.localStorage.removeItem('pending_role_onboarding')
 
-      // Redeem a pending community invite link (e.g. from /join/[token])
+      // Redeem a pending community invite first. If they still have no
+      // memberships, fall back to every public + active community.
       try {
         const { data: sessionForInvite } = await supabase.auth.getSession()
-        const inviteToken = sessionForInvite.session?.access_token
-        if (inviteToken) {
-          await redeemPendingCommunityInvite(inviteToken)
+        const accessToken = sessionForInvite.session?.access_token
+        if (accessToken) {
+          await redeemPendingCommunityInvite(accessToken)
+          await ensureDefaultCommunities(accessToken)
         }
       } catch {
         // Non-blocking

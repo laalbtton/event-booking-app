@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { ChevronLeft, Users, LogOut, Plus, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
+import { ensureDefaultCommunities } from '@/lib/ensureDefaultCommunities'
 
 type MyCommunity = {
   id: string
@@ -62,12 +63,22 @@ export default function SettingsCommunitiesPage() {
   async function loadMyCommunities() {
     setLoading(true)
     try {
-      const { data: memberships } = await supabase
+      let { data: memberships } = await supabase
         .from('community_members')
         .select('community_id, role, communities(id, name, description)')
         .eq('user_id', user!.id)
 
-      if (!memberships) { setCommunities([]); return }
+      if (!memberships || memberships.length === 0) {
+        const { data: sessionData } = await supabase.auth.getSession()
+        await ensureDefaultCommunities(sessionData.session?.access_token)
+        const refetch = await supabase
+          .from('community_members')
+          .select('community_id, role, communities(id, name, description)')
+          .eq('user_id', user!.id)
+        memberships = refetch.data
+      }
+
+      if (!memberships || memberships.length === 0) { setCommunities([]); return }
 
       const communityIds = memberships.map((m) => m.community_id)
 

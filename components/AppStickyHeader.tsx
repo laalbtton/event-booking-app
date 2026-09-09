@@ -47,7 +47,7 @@ export default function AppStickyHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-[45] border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <header className="app-chrome-top sticky top-0 z-[45] border-b border-border bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-11 flex items-center">
         <p className="text-sm font-semibold tracking-tight truncate">{displayName || '…'}</p>
       </div>
