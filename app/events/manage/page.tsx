@@ -1711,7 +1711,7 @@ export default function EventManagementPage() {
 
         {/* Create Event Modal */}
         {showCreateForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="app-modal-scrim fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center overflow-y-auto px-4 pt-4">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 my-4 sm:my-8 mt-4 sm:mt-8">
               <h3 className="text-xl font-bold mb-4 text-gray-900">Create New Event</h3>
 
@@ -2480,7 +2480,7 @@ export default function EventManagementPage() {
 
         {/* Edit Event Modal */}
         {showEditForm && editingEvent && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="app-modal-scrim fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center overflow-y-auto px-4 pt-4">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 my-4 sm:my-8 mt-4 sm:mt-8">
               <h3 className="text-xl font-bold mb-4 text-gray-900">Edit Event</h3>
 

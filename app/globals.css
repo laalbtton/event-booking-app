@@ -137,6 +137,13 @@ html:not(.native-status-bar-inset) .app-chrome-top {
   padding-bottom: var(--app-safe-bottom);
 }
 
+/* Full-screen custom modals (event create/edit) sit above the tab bar and
+   keep their footer actions above the Android system nav. */
+.app-modal-scrim {
+  z-index: 70;
+  padding-bottom: calc(1rem + var(--app-safe-bottom));
+}
+
 /* Toasts are viewport-fixed and otherwise sit under the iPhone clock. */
 html:not(.native-status-bar-inset) [data-sonner-toaster][data-y-position='top'] {
   top: calc(var(--app-safe-top) + 12px) !important;

@@ -1654,7 +1654,7 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
       <Dialog open={performFilterDialogOpen} onOpenChange={setPerformFilterDialogOpen}>
-        <DialogContent className="max-h-[85vh] flex flex-col gap-0 p-0 sm:max-w-lg">
+        <DialogContent className="flex max-h-[min(85dvh,calc(100dvh-var(--app-safe-top)-var(--app-safe-bottom)-1.25rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
           <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle>Filter performer events</DialogTitle>
             <DialogDescription>
@@ -1790,7 +1790,7 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          <DialogFooter className="border-t px-6 py-4 sm:justify-between">
+          <DialogFooter className="shrink-0 border-t px-6 py-4 pb-[max(1rem,calc(1rem+var(--app-safe-bottom)))] sm:justify-between">
             <Button
               type="button"
               variant="outline"
