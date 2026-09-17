@@ -97,10 +97,10 @@ export function CapacitorProvider() {
       // ─── 1. Deep link handler ───────────────────────────────────────────────
       const appUrlHandle = await App.addListener('appUrlOpen', async (event) => {
         try {
-          // ── OAuth callback from Google Sign-in ──────────────────────────
-          // After the user authenticates in the Capacitor Browser tab, Google
-          // redirects to  com.laalbutton.app://auth/callback?code=<pkce_code>
-          // Android intercepts the custom scheme and fires this event.
+          // ── OAuth callback from Google / Apple Sign-in ────────────────
+          // After the user authenticates in the Capacitor Browser tab, the
+          // provider redirects to  com.laalbutton.app://auth/callback?code=<pkce_code>
+          // The OS intercepts the custom scheme and fires this event.
           if (event.url.startsWith('com.laalbutton.app://auth/callback')) {
             // Close the Chrome Custom Tab immediately so the user is back in-app.
             try {
@@ -121,7 +121,18 @@ export function CapacitorProvider() {
                 console.error('OAuth code exchange failed:', error.message)
                 router.replace('/login?error=auth_failed')
               } else {
-                router.replace('/dashboard')
+                const { persistOAuthProfileFields } = await import('@/lib/oauthClient')
+                const { data: { user } } = await supabase.auth.getUser()
+                if (user) await persistOAuthProfileFields(user)
+                const pendingOnboarding =
+                  !!user?.user_metadata?.onboarding_role_pending ||
+                  window.localStorage.getItem('pending_role_onboarding') === '1'
+                if (pendingOnboarding) {
+                  window.localStorage.removeItem('pending_role_onboarding')
+                  router.replace('/onboarding/role')
+                } else {
+                  router.replace('/dashboard')
+                }
               }
             } else {
               // Fallback: implicit-flow tokens arrive in the hash fragment.
@@ -135,7 +146,22 @@ export function CapacitorProvider() {
                   access_token: accessToken,
                   refresh_token: refreshToken,
                 })
-                router.replace(error ? '/login?error=auth_failed' : '/dashboard')
+                if (error) {
+                  router.replace('/login?error=auth_failed')
+                } else {
+                  const { persistOAuthProfileFields } = await import('@/lib/oauthClient')
+                  const { data: { user } } = await supabase.auth.getUser()
+                  if (user) await persistOAuthProfileFields(user)
+                  const pendingOnboarding =
+                    !!user?.user_metadata?.onboarding_role_pending ||
+                    window.localStorage.getItem('pending_role_onboarding') === '1'
+                  if (pendingOnboarding) {
+                    window.localStorage.removeItem('pending_role_onboarding')
+                    router.replace('/onboarding/role')
+                  } else {
+                    router.replace('/dashboard')
+                  }
+                }
               } else {
                 router.replace('/login?error=no_code')
               }

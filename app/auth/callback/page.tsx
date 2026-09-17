@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { redeemPendingAppInvite } from '@/lib/appInviteClient'
+import { persistOAuthProfileFields } from '@/lib/oauthClient'
 import { ensureDefaultCommunities } from '@/lib/ensureDefaultCommunities'
 
 export default function AuthCallbackPage() {
@@ -239,25 +240,18 @@ export default function AuthCallbackPage() {
         const shouldShowRoleOnboarding = await ensureRoleOnboardingFlag(user)
         window.localStorage.removeItem('pending_role_onboarding')
 
+        await persistOAuthProfileFields(user)
+
         if (shouldShowRoleOnboarding) {
           router.replace('/onboarding/role')
           return
         }
 
-        const avatarFromAuth = user.user_metadata?.avatar_url || user.user_metadata?.picture || null
-
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('role, avatar_url')
+          .select('role')
           .eq('id', user.id)
           .single()
-
-        if (!profileError && profile && !profile.avatar_url && avatarFromAuth) {
-          await supabase
-            .from('profiles')
-            .update({ avatar_url: avatarFromAuth as string, updated_at: new Date().toISOString() })
-            .eq('id', user.id)
-        }
 
         if (!profileError && profile?.role === 'admin') {
           router.replace('/admin')

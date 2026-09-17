@@ -51,9 +51,10 @@ export default function PrivacyPolicyPage() {
                 auth provider), and profile details you choose to add (bio, avatar, social links).
               </li>
               <li>
-                <strong>Authentication:</strong> if you sign in with Google, we receive basic
-                profile information from Google (such as name and email) according to your Google
-                account settings.
+                <strong>Authentication:</strong> if you sign in with Google or Apple, we receive
+                basic profile information from that provider (such as name and email) according to
+                your account settings. Apple may hide your real email behind a private relay
+                address if you choose Hide My Email.
               </li>
               <li>
                 <strong>Bookings &amp; activity:</strong> events you book, attendance status, credits
@@ -95,6 +96,7 @@ export default function PrivacyPolicyPage() {
               <li><strong>Supabase</strong> — authentication, database, and hosting of app data</li>
               <li><strong>Stripe</strong> — payment processing</li>
               <li><strong>Google</strong> — Sign-in with Google and analytics</li>
+              <li><strong>Apple</strong> — Sign in with Apple</li>
               <li><strong>Firebase / web push</strong> — push notification delivery</li>
               <li><strong>Resend</strong> — transactional email delivery</li>
             </ul>
