@@ -238,17 +238,8 @@ export function CapacitorProvider() {
       )
       cleanupFns.push(() => tokenHandle.remove())
 
-      // If the OS already allowed notifications (returning user, or they
-      // enabled them in Settings), register now so FCM tokens are uploaded
-      // without another trip to the in-app settings screen.
-      try {
-        const permission = await PushNotifications.checkPermissions()
-        if (permission.receive === 'granted') {
-          await PushNotifications.register()
-        }
-      } catch {
-        // Non-fatal — NativePushPromptProvider retries after login.
-      }
+      // Do not call register() here. That would request/upload a push token
+      // before the user opts in from Settings (App Store 4.5.4).
     }
 
     init()

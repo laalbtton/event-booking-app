@@ -146,7 +146,7 @@ export default function EventDetailsPage() {
   const [selectedVarietyOptionId, setSelectedVarietyOptionId] = useState('')
   const [posterExpanded, setPosterExpanded] = useState(false)
   const [showChat, setShowChat] = useState(false)
-  const [chatNotifEnabled, setChatNotifEnabled] = useState(true)
+  const [chatNotifEnabled, setChatNotifEnabled] = useState(false)
   const [ticketInfo, setTicketInfo] = useState<{ name: string; price_cents: number; quantity: number; sold: number } | null>(null)
   const [ticketQty, setTicketQty] = useState(1)
   const [ticketLoading, setTicketLoading] = useState(false)

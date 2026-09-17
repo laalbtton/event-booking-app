@@ -60,8 +60,11 @@ export default async function Home() {
               unoptimized
             />
           </h1>
-          <p className="text-xl md:text-2xl mb-10 text-stone-300 leading-relaxed">
+          <p className="text-xl md:text-2xl mb-4 text-stone-300 leading-relaxed">
             Discover and perform at comedy &amp; open mic events across Canada
+          </p>
+          <p className="mb-10 text-sm text-stone-400">
+            Browse events, communities, and performer pages with no account. Sign in only when you want to book or host.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link

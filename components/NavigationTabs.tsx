@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Home, MessageSquare, Mic, MoreHorizontal, LogOut, Settings, Pencil } from 'lucide-react'
+import { Home, MessageSquare, Mic, MoreHorizontal, LogOut, LogIn, Settings, Pencil, CalendarDays, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { signOutAndCleanup } from '@/lib/authClient'
@@ -140,12 +140,66 @@ export default function NavigationTabs() {
     }
   }
 
-  // Don't render the bottom nav for logged-out visitors
-  if (!authResolved || !user) return null
-
-  const isActive = (path: string) => pathname === path || pathname?.startsWith(path + '/')
+  const isActive = (path: string) =>
+    path === '/' ? pathname === '/' : pathname === path || pathname?.startsWith(`${path}/`)
   const navItemClass =
     'flex flex-col items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors'
+
+  // Guest chrome so reviewers and visitors can browse events without creating an account.
+  if (authResolved && !user) {
+    if (chatOverlayOpen) return null
+    return (
+      <div className="app-bottom-nav fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 shadow-lg border-t border-gray-200 dark:border-zinc-800 z-50">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
+          <nav className="flex items-center justify-around py-2">
+            <Link
+              href="/"
+              className={`${navItemClass} ${
+                isActive('/')
+                  ? 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400'
+                  : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
+              }`}
+            >
+              <Home className="w-5 h-5" />
+              <span className="text-xs font-medium">Home</span>
+            </Link>
+            <Link
+              href="/events"
+              className={`${navItemClass} ${
+                isActive('/events')
+                  ? 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400'
+                  : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
+              }`}
+            >
+              <CalendarDays className="w-5 h-5" />
+              <span className="text-xs font-medium">Events</span>
+            </Link>
+            <Link
+              href="/communities"
+              className={`${navItemClass} ${
+                isActive('/communities')
+                  ? 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-600 dark:text-yellow-400'
+                  : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800'
+              }`}
+            >
+              <Users className="w-5 h-5" />
+              <span className="text-xs font-medium">Communities</span>
+            </Link>
+            <Link
+              href="/login"
+              className={`${navItemClass} text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-zinc-800`}
+            >
+              <LogIn className="w-5 h-5" />
+              <span className="text-xs font-medium">Log in</span>
+            </Link>
+          </nav>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render the logged-in bottom nav until auth is known
+  if (!authResolved || !user) return null
 
   if (chatOverlayOpen) return null
 

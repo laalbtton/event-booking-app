@@ -197,6 +197,13 @@ function LoginContent() {
             </div>
           )}
 
+          <Link
+            href="/events"
+            className="block w-full text-center h-11 leading-[2.75rem] rounded-md border border-yellow-400/70 text-yellow-400 font-semibold hover:bg-yellow-400 hover:text-zinc-950 transition-colors"
+          >
+            Browse events without an account
+          </Link>
+
           {/* Google Login Button */}
           <Button
             onClick={() => handleOAuthLogin('google')}

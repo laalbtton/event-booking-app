@@ -23,5 +23,6 @@ export const APP_SHELL_ROUTE_PREFIXES = [
 
 export function matchesAppShellRoute(pathname: string | null): boolean {
   if (!pathname) return false
+  if (pathname === '/') return true
   return APP_SHELL_ROUTE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }

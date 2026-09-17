@@ -9,7 +9,7 @@ export default async function LegacyPublicEventRoute({ params }: Props) {
   const { id } = await params
   const event = await getPublicEventByIdentifier(id)
   if (!event) {
-    redirect('/signup')
+    redirect('/events')
   }
 
   if (event.slug) {

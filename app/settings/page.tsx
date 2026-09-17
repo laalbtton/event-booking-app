@@ -23,7 +23,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, ChevronDown, ChevronUp, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode, RefreshCw, Terminal, UserPlus } from 'lucide-react'
+import { ChevronLeft, ChevronDown, ChevronUp, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode, RefreshCw, Terminal, UserPlus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
@@ -573,6 +573,11 @@ export default function SettingsPage() {
     )
   }
 
+  const notificationsEnabled =
+    pushSupported &&
+    pushPermission === 'granted' &&
+    Boolean(pushPrefs?.subscribed_at)
+
   if (isMobile) {
     return (
       <div className="min-h-screen bg-background pb-20">
@@ -672,8 +677,11 @@ export default function SettingsPage() {
                   {user.email}
                 </div>
               )}
+              <div className="px-4 py-1">
+                <SettingsListRow href="/settings/account" icon={User} title="Account" description="Sign out and delete account" />
+              </div>
               <div className="px-4 py-1 pb-2">
-                <SettingsListRow href="/settings/account" icon={User} title="Account" description="Sign out & account" />
+                <SettingsListRow href="/settings/account#delete" icon={Trash2} title="Delete account" description="Permanently remove your account and data" />
               </div>
             </CardContent>
           </Card>
@@ -737,15 +745,31 @@ export default function SettingsPage() {
             <CardDescription>Get waitlist promotions, booking updates, and reminders.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Allow push notifications</p>
+                <p className="text-xs text-muted-foreground">
+                  Off until you turn this on. We will then ask the system for permission.
+                </p>
+              </div>
+              <Switch
+                checked={notificationsEnabled}
+                disabled={!pushSupported || pushActionLoading || pushPermission === 'denied'}
+                onCheckedChange={(checked) => {
+                  if (checked) void handleEnablePushNotifications()
+                  else void handleDisablePushNotifications()
+                }}
+              />
+            </div>
             <p className="text-sm text-muted-foreground">
               Status:{' '}
               {!pushSupported
                 ? 'Not supported on this browser/device'
-                : pushPermission === 'granted'
+                : notificationsEnabled
                 ? 'Enabled'
                 : pushPermission === 'denied'
                 ? 'Blocked by browser settings'
-                : 'Not enabled'}
+                : 'Off'}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -764,14 +788,17 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-2 pt-2 border-t">
               <p className="text-sm font-medium">Notification categories</p>
+              <p className="text-xs text-muted-foreground">
+                These stay off until you enable push notifications above.
+              </p>
               <div className="flex items-center justify-between text-sm">
                 <span>Booking updates (waitlist/promotions)</span>
                 <input
                   type="checkbox"
                   className="h-4 w-4"
-                  checked={pushPrefs?.booking_updates_enabled !== false}
+                  checked={notificationsEnabled && pushPrefs?.booking_updates_enabled !== false}
                   onChange={(e) => updatePushCategory('booking_updates_enabled', e.target.checked)}
-                  disabled={pushActionLoading}
+                  disabled={!notificationsEnabled || pushActionLoading}
                 />
               </div>
               <div className="flex items-center justify-between text-sm">
@@ -779,9 +806,9 @@ export default function SettingsPage() {
                 <input
                   type="checkbox"
                   className="h-4 w-4"
-                  checked={pushPrefs?.event_reminders_enabled !== false}
+                  checked={notificationsEnabled && pushPrefs?.event_reminders_enabled !== false}
                   onChange={(e) => updatePushCategory('event_reminders_enabled', e.target.checked)}
-                  disabled={pushActionLoading}
+                  disabled={!notificationsEnabled || pushActionLoading}
                 />
               </div>
               <div className="flex items-center justify-between text-sm">
@@ -789,9 +816,9 @@ export default function SettingsPage() {
                 <input
                   type="checkbox"
                   className="h-4 w-4"
-                  checked={pushPrefs?.new_events_enabled !== false}
+                  checked={notificationsEnabled && pushPrefs?.new_events_enabled !== false}
                   onChange={(e) => updatePushCategory('new_events_enabled', e.target.checked)}
-                  disabled={pushActionLoading}
+                  disabled={!notificationsEnabled || pushActionLoading}
                 />
               </div>
               <div className="flex items-center justify-between text-sm">
@@ -799,9 +826,9 @@ export default function SettingsPage() {
                 <input
                   type="checkbox"
                   className="h-4 w-4"
-                  checked={pushPrefs?.post_event_reviews_enabled !== false}
+                  checked={notificationsEnabled && pushPrefs?.post_event_reviews_enabled !== false}
                   onChange={(e) => updatePushCategory('post_event_reviews_enabled', e.target.checked)}
-                  disabled={pushActionLoading}
+                  disabled={!notificationsEnabled || pushActionLoading}
                 />
               </div>
             </div>
@@ -1096,13 +1123,19 @@ export default function SettingsPage() {
               {user?.email ? (
                 <span className="block text-muted-foreground break-all">{user.email}</span>
               ) : null}
-              <span className="block mt-1">Sign out of your account on this device.</span>
+              <span className="block mt-1">Sign out of this device, or permanently delete your account.</span>
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Button variant="destructive" onClick={async () => { await signOutAndCleanup(); router.push('/') }}>
+          <CardContent className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={async () => { await signOutAndCleanup(); router.push('/') }}>
               <LogOut className="w-4 h-4 mr-2" />
               Sign out
+            </Button>
+            <Button asChild variant="destructive">
+              <Link href="/settings/account#delete">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete account
+              </Link>
             </Button>
           </CardContent>
         </Card>
