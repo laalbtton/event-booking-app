@@ -24,7 +24,8 @@ const ROUTES = [
   { file: '01-home', path: '/' },
   { file: '02-events', path: '/events' },
   { file: '03-communities', path: '/communities' },
-  { file: '04-login', path: '/login' },
+  { file: '04-login', path: '/login', waitForText: 'Continue with Apple' },
+  { file: '05-signup', path: '/signup', waitForText: 'Continue with Apple' },
 ]
 
 /**
@@ -71,6 +72,11 @@ async function capture() {
       console.log(`[${folder}] ${url}`)
       try {
         await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 })
+        if (route.waitForText) {
+          const appleButton = page.getByRole('button', { name: route.waitForText })
+          await appleButton.waitFor({ state: 'visible', timeout: 20_000 })
+          await appleButton.scrollIntoViewIfNeeded()
+        }
         await page.waitForTimeout(1800)
         const filePath = path.join(outDir, `${route.file}.png`)
         await page.screenshot({
