@@ -5,6 +5,7 @@ import { splitDeduction, hasEnoughCredits, getEffectiveCreditBalances } from '@/
 import { applyVenueCreditGrants } from '@/lib/server/venueCreditGrants'
 import { notifyFollowersOfGig } from '@/lib/server/follows'
 import { promptPerformerAboutOpenRoles } from '@/lib/server/performerRoleNotify'
+import { getAudienceBookingCreditsRequired } from '@/lib/audienceBookingCredits'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
     const spotFeeCredits = Math.max(0, Number(event.spot_fee_credits || 0))
     const couponValueCents = Math.max(0, Number(event.food_coupon_value_cents || 0))
     const couponCreditsComponent = Math.ceil(couponValueCents / 100)
-    const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 1))
+    const audienceDepositCredits = getAudienceBookingCreditsRequired(event)
     const totalCreditsRequired = isAudienceBooking
       ? audienceDepositCredits
       : foodCouponEnabled

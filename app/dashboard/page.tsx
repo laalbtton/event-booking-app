@@ -57,6 +57,7 @@ import {
   isAudienceBookingScope,
 } from '@/lib/bookingScopeUtils'
 import { resolveEventDisplayPosterUrl } from '@/lib/eventPosterDefaults'
+import { getAudienceBookingCreditsRequired, getAudienceCreditsToDebit } from '@/lib/audienceBookingCredits'
 
 /** Same Brampton/Toronto default posters as the public site when no custom poster. */
 function getDashboardEventPosterUrl(
@@ -1433,10 +1434,8 @@ export default function Dashboard() {
       }
 
       const isAudienceUser = userRole === 'audience'
-      const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 0))
-      const audienceHasFreePass = Number(profile.audience_free_passes_remaining || 0) > 0
       const effectiveCreditsRequired = isAudienceUser
-        ? (audienceHasFreePass ? 0 : audienceDepositCredits)
+        ? getAudienceCreditsToDebit(event, profile.audience_free_passes_remaining)
         : getEffectiveCreditsRequired(event)
       if (
         !canAffordWithVenueCredits(
@@ -2199,17 +2198,12 @@ export default function Dashboard() {
                     !!activeBooking && !bookingMatchesUserIntent(activeBooking.booking_scope, userRole)
                   const isBooked = hasMatchingScopeBooking || optimisticBookings.has(event.id)
                   const effectiveCreditsRequired = getEffectiveCreditsRequired(event)
-                  const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 0))
-                  const audienceTicketCredits = Math.max(0, Number(event.credits_required || 0))
                   const audienceHasFreePass = Number(profile?.audience_free_passes_remaining || 0) > 0
-                  const audienceTicketRequiredCredits =
-                    event.tickets_enabled
-                      ? Math.max(audienceDepositCredits, audienceTicketCredits)
-                      : audienceDepositCredits
+                  const audienceDepositCredits = getAudienceBookingCreditsRequired(event)
                   const creditsRequiredForCard = isAudienceUser
-                    ? (audienceHasFreePass ? 0 : audienceTicketRequiredCredits)
+                    ? getAudienceCreditsToDebit(event, profile?.audience_free_passes_remaining)
                     : effectiveCreditsRequired
-                  const hasRedeemableCredits = event.tickets_enabled && Number((event as any).audience_deposit_credits || 0) > 0
+                  const hasRedeemableCredits = event.tickets_enabled && Number((event as any).audience_deposit_credits ?? 0) > 0
                   const showRedeemableHelpDot = hasRedeemableCredits && isAudienceUser
                   const languageSummary = formatEventLanguages(event)
                   const canAfford = canAffordWithVenueCredits(
@@ -2330,7 +2324,9 @@ export default function Dashboard() {
                                   <p className="text-xs text-muted-foreground">
                                     {audienceHasFreePass
                                       ? '1 free audience pass will be used'
-                                      : `Deposit hold ${audienceDepositCredits} Cr`}
+                                      : audienceDepositCredits > 0
+                                        ? `Deposit hold ${audienceDepositCredits} Cr`
+                                        : 'Free to reserve'}
                                   </p>
                                 )}
                                 {!isAudienceUser && event.food_coupon_enabled && (

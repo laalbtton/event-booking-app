@@ -35,6 +35,7 @@ import {
   absolutizePosterUrl,
   resolveEventDisplayPosterUrl,
 } from '@/lib/eventPosterDefaults'
+import { getAudienceCreditsToDebit } from '@/lib/audienceBookingCredits'
 
 
 type EventDetails = {
@@ -71,6 +72,7 @@ type EventDetails = {
   host_user_id: string | null
   created_by: string | null
   audience_expected_count?: number
+  audience_deposit_credits?: number | null
 }
 
 type VenueDetails = {
@@ -830,10 +832,8 @@ export default function EventDetailsPage() {
       }
 
       const isAudienceUser = profile.role === 'audience'
-      const audienceDepositCredits = Math.max(0, Number((eventData as any).audience_deposit_credits || 1))
-      const audienceHasFreePass = Number(profile.audience_free_passes_remaining || 0) > 0
       const effectiveCreditsRequired = isAudienceUser
-        ? (audienceHasFreePass ? 0 : audienceDepositCredits)
+        ? getAudienceCreditsToDebit(eventData, profile.audience_free_passes_remaining)
         : (eventData.food_coupon_enabled
           ? Math.max(0, Number(eventData.spot_fee_credits || 0)) +
             Math.ceil(Math.max(0, Number(eventData.food_coupon_value_cents || 0)) / 100)
@@ -943,10 +943,8 @@ export default function EventDetailsPage() {
     (userBooking.status === 'confirmed' || userBooking.status === 'waitlist') &&
     !bookingMatchesUserIntent(userBooking.booking_scope, profile?.role)
   const isAudienceUser = profile?.role === 'audience'
-  const audienceDepositCredits = Math.max(0, Number((event as any).audience_deposit_credits || 1))
-  const audienceHasFreePass = Number(profile?.audience_free_passes_remaining || 0) > 0
   const creditsRequiredForButton = isAudienceUser
-    ? (audienceHasFreePass ? 0 : audienceDepositCredits)
+    ? getAudienceCreditsToDebit(event, profile?.audience_free_passes_remaining)
     : (event.food_coupon_enabled
       ? Math.max(0, Number(event.spot_fee_credits || 0)) +
         Math.ceil(Math.max(0, Number(event.food_coupon_value_cents || 0)) / 100)
