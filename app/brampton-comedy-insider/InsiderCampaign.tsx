@@ -632,6 +632,7 @@ function ActivatedDashboard({
                         roleKept: m.roleKept,
                         keptRole: m.keptRole,
                       })
+                    }
                     setShowPrefs(false)
                   }}
                 />
