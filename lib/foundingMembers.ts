@@ -107,3 +107,26 @@ export function trackInsiderEvent(
     // analytics is best-effort
   }
 }
+
+/** Roles that Insider credit payout must never overwrite. */
+export function shouldKeepRoleOnInsiderCredit(role: string | null | undefined): boolean {
+  return role === 'performer' || role === 'event_creator' || role === 'admin'
+}
+
+export function insiderKeptRoleLabel(role: string | null | undefined): string {
+  if (role === 'event_creator') return 'an event creator'
+  if (role === 'admin') return 'an admin'
+  return 'a performer'
+}
+
+export function insiderCreditsKeptRoleMessage(
+  credits: number,
+  role: string | null | undefined,
+): string {
+  const creditWord = credits === 1 ? 'credit was' : 'credits were'
+  return (
+    `${credits} Brampton Comedy Insider ${creditWord} added to your account. ` +
+    `You're still ${insiderKeptRoleLabel(role)}. To use the audience profile, go to Settings and switch to Audience — ` +
+    `switch back to Performer before you book a spot.`
+  )
+}

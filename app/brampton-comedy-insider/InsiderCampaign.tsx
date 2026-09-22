@@ -21,12 +21,26 @@ import {
   INSTAGRAM_URL,
   TICKET_PRICE_RANGES,
   isValidEmail,
+  insiderCreditsKeptRoleMessage,
   trackInsiderEvent,
 } from '@/lib/foundingMembers'
 import { ChevronLeft } from 'lucide-react'
 import { toast } from 'sonner'
 
 const WHATSAPP_URL = 'https://chat.whatsapp.com/JOIfm1ByZfn0HGrEFPpG71'
+
+function toastInsiderCreditsGranted(
+  credits: number,
+  extra?: { roleKept?: boolean; keptRole?: string | null; newBalance?: number | null },
+) {
+  if (credits <= 0) return
+  if (extra?.roleKept) {
+    toast.success(insiderCreditsKeptRoleMessage(credits, extra.keptRole), { duration: 10000 })
+    return
+  }
+  const balance = extra?.newBalance != null ? ` (balance: ${extra.newBalance})` : ''
+  toast.success(`+${credits} Insider credits added to your account${balance}`)
+}
 
 type MemberState = {
   totalCredits: number
@@ -38,6 +52,8 @@ type MemberState = {
   emailUpdatesOptIn: boolean
   creditsGranted?: number
   newBalance?: number | null
+  roleKept?: boolean
+  keptRole?: string | null
 }
 
 // Full record fetched after activation
@@ -146,7 +162,10 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
               amount: data.creditsGranted,
               app_user: true,
             })
-            toast.success(`+${data.creditsGranted} Insider credits added to your account`)
+            toastInsiderCreditsGranted(data.creditsGranted, {
+              roleKept: data.roleKept,
+              keptRole: data.keptRole,
+            })
           }
           if (m.preferences_completed) {
             setStep('done')
@@ -446,10 +465,11 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
                   onComplete={(m) => {
                     setMember((prev) => (prev ? { ...prev, ...m } : prev))
                     if (m.creditsGranted && m.creditsGranted > 0) {
-                      toast.success(
-                        `+${m.creditsGranted} credits added to your account` +
-                          (m.newBalance != null ? ` (balance: ${m.newBalance})` : ''),
-                      )
+                      toastInsiderCreditsGranted(m.creditsGranted, {
+                        roleKept: m.roleKept,
+                        keptRole: m.keptRole,
+                        newBalance: m.newBalance,
+                      })
                     } else if (isAppUser) {
                       toast.message('Survey saved. If credits are missing, open this page again to sync.')
                     }
@@ -608,8 +628,10 @@ function ActivatedDashboard({
                   onComplete={(m) => {
                     onPreferencesComplete(m.totalCredits ?? credits + CREDIT_PREFERENCES)
                     if (m.creditsGranted && m.creditsGranted > 0) {
-                      toast.success(`+${m.creditsGranted} credits added to your account`)
-                    }
+                      toastInsiderCreditsGranted(m.creditsGranted, {
+                        roleKept: m.roleKept,
+                        keptRole: m.keptRole,
+                      })
                     setShowPrefs(false)
                   }}
                 />
@@ -761,6 +783,11 @@ function AppUserStartStep({
           reason: 'email_updates',
           amount: data.creditsGranted,
           app_user: true,
+        })
+        toastInsiderCreditsGranted(data.creditsGranted, {
+          roleKept: data.roleKept,
+          keptRole: data.keptRole,
+          newBalance: data.newBalance,
         })
       }
 
@@ -1034,6 +1061,8 @@ function PreferencesStep({
       // Belt-and-suspenders: force ledger sync for logged-in users.
       let creditsGranted = Number(data.member?.creditsGranted || 0)
       let newBalance = data.member?.newBalance ?? null
+      let roleKept = Boolean(data.member?.roleKept)
+      let keptRole = (data.member?.keptRole as string | null) ?? null
       if (token) {
         try {
           const syncRes = await fetch('/api/founding-members/sync-credits', {
@@ -1044,6 +1073,10 @@ function PreferencesStep({
           if (syncRes.ok) {
             creditsGranted = Math.max(creditsGranted, Number(syncData.creditsGranted || 0))
             if (syncData.newBalance != null) newBalance = syncData.newBalance
+            if (syncData.roleKept) {
+              roleKept = true
+              keptRole = syncData.keptRole ?? keptRole
+            }
           }
         } catch {
           // non-blocking — preferences already saved
@@ -1056,6 +1089,8 @@ function PreferencesStep({
         preferencesCompleted: true,
         creditsGranted,
         newBalance,
+        roleKept,
+        keptRole,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
@@ -1220,7 +1255,10 @@ function Confirmation({ credits, appUser = false }: { credits: number; appUser?:
         })
         const data = await res.json().catch(() => ({}))
         if (!cancelled && res.ok && Number(data.creditsGranted || 0) > 0) {
-          toast.success(`+${data.creditsGranted} Insider credits added to your account`)
+          toastInsiderCreditsGranted(Number(data.creditsGranted), {
+            roleKept: data.roleKept,
+            keptRole: data.keptRole,
+          })
         }
       } catch {
         // non-blocking

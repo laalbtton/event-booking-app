@@ -32,13 +32,6 @@ export async function POST(request: NextRequest) {
       .eq('id', userId)
       .maybeSingle()
 
-    if (profile?.role !== 'audience') {
-      return NextResponse.json(
-        { error: 'Insider credits are available to audience members only.' },
-        { status: 403 },
-      )
-    }
-
     const profileEmail = profile?.email ? normalizeEmail(profile.email) : ''
     const creditSync = await syncFoundingMemberCreditsToProfile(supabase, {
       userId,

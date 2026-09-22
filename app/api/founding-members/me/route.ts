@@ -81,6 +81,8 @@ export async function GET(request: NextRequest) {
       member: resolved,
       creditsGranted: creditSync?.creditsGranted ?? 0,
       newBalance: creditSync?.newBalance ?? null,
+      roleKept: creditSync?.roleKept ?? false,
+      keptRole: creditSync?.keptRole ?? null,
       syncError: creditSync?.error ?? null,
     })
   } catch (error: unknown) {

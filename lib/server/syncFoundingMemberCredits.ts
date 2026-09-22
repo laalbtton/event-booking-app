@@ -1,5 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { normalizeEmail } from '@/lib/foundingMembers'
+import { sendEmail } from '@/lib/email'
+import {
+  insiderCreditsKeptRoleMessage,
+  insiderKeptRoleLabel,
+  normalizeEmail,
+  shouldKeepRoleOnInsiderCredit,
+} from '@/lib/foundingMembers'
+import { sendPushToUser } from '@/lib/server/push'
 
 export type SyncFoundingMemberCreditsResult = {
   synced: boolean
@@ -7,6 +14,9 @@ export type SyncFoundingMemberCreditsResult = {
   newBalance: number | null
   alreadySynced: boolean
   matched: boolean
+  /** True when credits were granted without changing a performer/creator/admin role. */
+  roleKept?: boolean
+  keptRole?: string | null
   error?: string
   debug?: Record<string, unknown>
 }
@@ -126,9 +136,62 @@ async function sumInsiderCreditsGranted(
   return (data ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0)
 }
 
+async function notifyProtectedRoleCreditsAdded(
+  supabase: SupabaseClient,
+  params: {
+    userId: string
+    email: string | null
+    name: string | null
+    credits: number
+    role: string | null
+  },
+): Promise<void> {
+  const message = insiderCreditsKeptRoleMessage(params.credits, params.role)
+  const title = 'Insider credits added'
+
+  try {
+    await supabase.from('notifications').insert({
+      user_id: params.userId,
+      type: 'general',
+      title,
+      message,
+    })
+  } catch (error) {
+    console.warn('[syncFoundingMemberCredits] notification insert failed:', error)
+  }
+
+  try {
+    await sendPushToUser(
+      supabase,
+      params.userId,
+      { title, body: message, data: { url: '/settings', route: '/settings' } },
+      'booking_updates',
+    )
+  } catch (error) {
+    console.warn('[syncFoundingMemberCredits] push failed:', error)
+  }
+
+  const to = params.email?.trim()
+  if (!to) return
+  const firstName = (params.name || 'there').split(/\s+/)[0]
+  try {
+    await sendEmail({
+      to,
+      subject: 'Brampton Comedy Insider credits added to your account',
+      html: `
+        <p>Hi ${firstName},</p>
+        <p>${message}</p>
+        <p><a href="https://app.laalbutton.com/settings">Open Settings</a> to switch roles if you want the audience profile.</p>
+      `,
+    })
+  } catch (error) {
+    console.warn('[syncFoundingMemberCredits] email failed:', error)
+  }
+}
+
 /**
- * Grant unredeemed Brampton Comedy Insider campaign credits to an audience
- * member's profile ledger.
+ * Grant unredeemed Brampton Comedy Insider campaign credits onto the profile ledger.
+ * Never overwrites performer / event_creator / admin roles.
  *
  * Lookup order: memberId → profile_user_id → email (exact / ilike).
  * Payout truth: credit_transactions with source_reason = founding_member_insider.
@@ -210,13 +273,7 @@ export async function syncFoundingMemberCreditsToProfile(
   }
 
   const nowIso = new Date().toISOString()
-
-  if (typedProfile.role !== 'audience') {
-    await supabase
-      .from('profiles')
-      .update({ role: 'audience', updated_at: nowIso })
-      .eq('id', params.userId)
-  }
+  const keepRole = shouldKeepRoleOnInsiderCredit(typedProfile.role)
 
   const { data: freshProfile } = await supabase
     .from('profiles')
@@ -272,13 +329,34 @@ export async function syncFoundingMemberCreditsToProfile(
     .update({ profile_credits_synced: totalEarned })
     .eq('id', typedMember.id)
 
+  if (keepRole) {
+    await notifyProtectedRoleCreditsAdded(supabase, {
+      userId: params.userId,
+      email: typedProfile.email,
+      name: typedProfile.full_name,
+      credits: delta,
+      role: typedProfile.role,
+    })
+  }
+
   return {
     synced: true,
     creditsGranted: delta,
     newBalance: Number(updatedProfile.credits ?? nextCredits),
     alreadySynced: false,
     matched: true,
-    debug: { memberId: typedMember.id, email: typedMember.email, totalEarned, alreadyGranted, delta },
+    roleKept: keepRole,
+    keptRole: keepRole ? typedProfile.role : null,
+    debug: {
+      memberId: typedMember.id,
+      email: typedMember.email,
+      totalEarned,
+      alreadyGranted,
+      delta,
+      roleKept: keepRole,
+      keptRole: typedProfile.role,
+      roleLabel: keepRole ? insiderKeptRoleLabel(typedProfile.role) : null,
+    },
   }
 }
 

@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { redeemPendingAppInvite } from '@/lib/appInviteClient'
 import { persistOAuthProfileFields } from '@/lib/oauthClient'
 import { ensureDefaultCommunities } from '@/lib/ensureDefaultCommunities'
+import { shouldKeepRoleOnInsiderCredit } from '@/lib/foundingMembers'
 
 export default function AuthCallbackPage() {
   const router = useRouter()
@@ -102,7 +103,8 @@ export default function AuthCallbackPage() {
 
     /**
      * Brampton Comedy Insider magic-link flow:
-     * - Always assign audience role and auto-join public communities
+     * - New / audience users: assign audience role and auto-join public communities
+     * - Existing performers / event creators / admins: keep their role
      * - Activate founding member + sync redeemable credits to profile
      * - Redirect to the campaign page with an activated flag
      */
@@ -110,10 +112,20 @@ export default function AuthCallbackPage() {
       user: { id: string; user_metadata?: Record<string, unknown>; email?: string },
       session: { access_token: string },
     ) {
-      // Campaign signups are always audience members.
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('role, full_name')
+        .eq('id', user.id)
+        .maybeSingle()
+
       const profileUpdate: Record<string, unknown> = {
-        role: 'audience',
         updated_at: new Date().toISOString(),
+      }
+      if (
+        !shouldKeepRoleOnInsiderCredit(existingProfile?.role) &&
+        (!existingProfile?.role || existingProfile.role === 'audience')
+      ) {
+        profileUpdate.role = 'audience'
       }
 
       const userEmail = user.email?.trim().toLowerCase()
@@ -123,15 +135,8 @@ export default function AuthCallbackPage() {
           .select('first_name')
           .eq('email', userEmail)
           .maybeSingle()
-        if (member?.first_name) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', user.id)
-            .maybeSingle()
-          if (!profile?.full_name) {
-            profileUpdate.full_name = member.first_name
-          }
+        if (member?.first_name && !existingProfile?.full_name) {
+          profileUpdate.full_name = member.first_name
         }
       }
 

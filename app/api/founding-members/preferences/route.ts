@@ -148,6 +148,8 @@ export async function POST(request: NextRequest) {
         creditsSynced: creditSync.synced,
         creditsGranted: creditSync.creditsGranted,
         newBalance: creditSync.newBalance,
+        roleKept: creditSync.roleKept ?? false,
+        keptRole: creditSync.keptRole ?? null,
         syncError: creditSync.error ?? null,
       },
     })

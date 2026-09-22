@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/server/supabaseAdmin'
-import { normalizeEmail } from '@/lib/foundingMembers'
+import { normalizeEmail, shouldKeepRoleOnInsiderCredit } from '@/lib/foundingMembers'
 import { syncFoundingMemberCreditsToProfile } from '@/lib/server/syncFoundingMemberCredits'
 
 /**
  * Called from the auth callback when a Brampton Comedy Insider user completes
  * the magic-link sign-in. Marks the founding member account as activated and
- * syncs earned campaign credits into the audience profile ledger (redeemable
- * in-app). Authenticated via Bearer token; email comes from the session.
+ * syncs earned campaign credits into the profile ledger (redeemable in-app).
+ * Existing performers / event creators / admins keep their role.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -35,20 +35,20 @@ export async function POST(request: NextRequest) {
       .eq('email', email)
       .maybeSingle()
 
-    // Campaign signups are audience-only.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, role')
+      .eq('id', userId)
+      .maybeSingle()
+
     const profileUpdate: Record<string, unknown> = {
-      role: 'audience',
       updated_at: nowIso,
     }
-    if (member?.first_name) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', userId)
-        .maybeSingle()
-      if (!profile?.full_name) {
-        profileUpdate.full_name = member.first_name
-      }
+    if (!shouldKeepRoleOnInsiderCredit(profile?.role) && (!profile?.role || profile.role === 'audience')) {
+      profileUpdate.role = 'audience'
+    }
+    if (member?.first_name && !profile?.full_name) {
+      profileUpdate.full_name = member.first_name
     }
     await supabase.from('profiles').update(profileUpdate).eq('id', userId)
 
@@ -70,6 +70,8 @@ export async function POST(request: NextRequest) {
       creditsGranted: creditSync.creditsGranted,
       newBalance: creditSync.newBalance,
       creditsSynced: creditSync.synced,
+      roleKept: creditSync.roleKept ?? false,
+      keptRole: creditSync.keptRole ?? null,
     })
   } catch (error: unknown) {
     console.error('founding-members/activate error:', error)

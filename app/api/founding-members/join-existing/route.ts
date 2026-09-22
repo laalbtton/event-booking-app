@@ -7,6 +7,7 @@ import { syncFoundingMemberCreditsToProfile } from '@/lib/server/syncFoundingMem
  * Enroll an already-authenticated app user into Brampton Comedy Insider.
  * Skips magic-link / account-creation credits — they already have an account.
  * Awards email-update credit when opted in; preferences credit comes later.
+ * Performers and event creators keep their role; credits still land on the same account.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -39,12 +40,6 @@ export async function POST(request: NextRequest) {
 
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
-    }
-    if (profile.role !== 'audience') {
-      return NextResponse.json(
-        { error: 'This promotion is available to audience members only.' },
-        { status: 403 },
-      )
     }
 
     const firstName =
@@ -149,6 +144,8 @@ export async function POST(request: NextRequest) {
       },
       creditsGranted: creditSync.creditsGranted,
       newBalance: creditSync.newBalance,
+      roleKept: creditSync.roleKept ?? false,
+      keptRole: creditSync.keptRole ?? null,
     })
   } catch (error: unknown) {
     console.error('founding-members/join-existing error:', error)
