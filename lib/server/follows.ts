@@ -125,15 +125,17 @@ export const PROFILE_SEARCH_MIN_LENGTH = 2
 const PROFILE_SEARCH_LIMIT = 20
 
 /**
- * Find people to follow by name or username.
+ * Find performers by name or username.
  *
- * Must run on a service-role client: the `profiles` RLS policies only let a user
- * read their own row, so the same query from the browser returns nothing.
- * Returns public-safe fields only — never email or credit balances.
+ * Audience members are intentionally excluded — only `performer` and
+ * `event_creator` profiles are name-searchable. Must run on a service-role
+ * client: the `profiles` RLS policies only let a user read their own row, so
+ * the same query from the browser returns nothing. Returns public-safe fields
+ * only — never email or credit balances. `userId` may be null for guests.
  */
 export async function searchProfiles(
   supabase: SupabaseClient,
-  userId: string,
+  userId: string | null,
   query: string,
 ): Promise<ProfileSearchResult[]> {
   // The pattern goes into a quoted PostgREST filter value, which tolerates
@@ -142,11 +144,15 @@ export async function searchProfiles(
   if (term.length < PROFILE_SEARCH_MIN_LENGTH) return []
 
   const pattern = `%${term}%`
-  const { data, error } = await supabase
+  let request = supabase
     .from('profiles')
     .select('id, full_name, username, avatar_url, bio, role')
     .or(`full_name.ilike."${pattern}",username.ilike."${pattern}"`)
-    .neq('id', userId)
+    .in('role', ['performer', 'event_creator'])
+  if (userId) {
+    request = request.neq('id', userId)
+  }
+  const { data, error } = await request
     // Nulls last, so username-only profiles don't crowd out named ones.
     .order('full_name', { ascending: true, nullsFirst: false })
     .limit(PROFILE_SEARCH_LIMIT)
@@ -163,7 +169,7 @@ export async function searchProfiles(
   }[]
   if (rows.length === 0) return []
 
-  const followingIds = new Set(await listFollowingIds(supabase, userId))
+  const followingIds = userId ? new Set(await listFollowingIds(supabase, userId)) : new Set<string>()
 
   return (
     rows
@@ -441,7 +447,62 @@ export async function getFeedEvents(
     .order('date', { ascending: true })
     .limit(limit)
 
+  return assembleFeedEvents(supabase, (eventRows ?? []) as EventRow[], reasonsByEvent)
+}
+
+/**
+ * Guest / public feed: upcoming active events, with the host as the reason.
+ */
+export async function getPublicFeedEvents(
+  supabase: SupabaseClient,
+  options?: { limit?: number },
+): Promise<FeedEvent[]> {
+  const limit = options?.limit ?? 40
+  const nowIso = new Date().toISOString()
+
+  const { data: eventRows } = await supabase
+    .from('events')
+    .select(EVENT_COLUMNS)
+    .eq('status', 'active')
+    .or(`date.gte.${nowIso},end_time.gte.${nowIso}`)
+    .order('date', { ascending: true })
+    .limit(limit)
+
   const events = (eventRows ?? []) as EventRow[]
+  const reasonsByEvent = new Map<string, FeedReason[]>()
+  for (const ev of events) {
+    if (!ev.host_user_id) continue
+    reasonsByEvent.set(ev.id, [
+      {
+        kind: 'host',
+        id: ev.host_user_id,
+        label: 'Host',
+        avatarUrl: null,
+      },
+    ])
+  }
+
+  const assembled = await assembleFeedEvents(supabase, events, reasonsByEvent)
+  return assembled.map((event) => ({
+    ...event,
+    reasons: event.hostUserId
+      ? [
+          {
+            kind: 'host',
+            id: event.hostUserId,
+            label: event.hostName?.trim() || 'Host',
+            avatarUrl: event.hostAvatarUrl,
+          },
+        ]
+      : [],
+  }))
+}
+
+async function assembleFeedEvents(
+  supabase: SupabaseClient,
+  events: EventRow[],
+  reasonsByEvent: Map<string, FeedReason[]>,
+): Promise<FeedEvent[]> {
   if (events.length === 0) return []
 
   const venueIds = [...new Set(events.map((e) => e.venue_id).filter(Boolean))] as string[]
@@ -539,7 +600,31 @@ export async function getFeedJokes(
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  const jokes = (jokeRows ?? []) as JokeRow[]
+  return mapJokeRowsToFeedJokes(supabase, (jokeRows ?? []) as JokeRow[])
+}
+
+/**
+ * Recent jokes from anyone — used on the public feed and jokes page.
+ */
+export async function getPublicFeedJokes(
+  supabase: SupabaseClient,
+  options?: { limit?: number },
+): Promise<FeedJoke[]> {
+  const limit = options?.limit ?? 20
+
+  const { data: jokeRows } = await supabase
+    .from('jokes')
+    .select('id, user_id, content, created_at, joke_reactions(reaction_type)')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  return mapJokeRowsToFeedJokes(supabase, (jokeRows ?? []) as JokeRow[])
+}
+
+async function mapJokeRowsToFeedJokes(
+  supabase: SupabaseClient,
+  jokes: JokeRow[],
+): Promise<FeedJoke[]> {
   if (jokes.length === 0) return []
 
   const { data: authorRows } = await supabase

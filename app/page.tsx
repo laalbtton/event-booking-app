@@ -64,9 +64,9 @@ export default async function Home() {
             Discover and perform at comedy &amp; open mic events across Canada
           </p>
           <p className="mb-10 text-sm text-stone-400">
-            Browse events, communities, and performer pages with no account. Sign in only when you want to book or host.
+            Browse events, the community feed, performers, and jokes with no account. Sign in only when you want to book, follow, or post.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center">
             <Link
               href="/events"
               className="bg-yellow-400 text-zinc-950 px-8 py-4 rounded-xl font-semibold hover:bg-yellow-300 text-lg shadow-lg transition-colors"
@@ -74,8 +74,14 @@ export default async function Home() {
               Browse Events
             </Link>
             <Link
-              href="/signup"
+              href="/feed"
               className="bg-transparent border-2 border-yellow-400 text-yellow-400 px-8 py-4 rounded-xl font-semibold hover:bg-yellow-400 hover:text-zinc-950 text-lg shadow-lg transition-colors"
+            >
+              Open Feed
+            </Link>
+            <Link
+              href="/signup"
+              className="bg-transparent border-2 border-stone-500 text-stone-200 px-8 py-4 rounded-xl font-semibold hover:bg-stone-100 hover:text-zinc-950 text-lg shadow-lg transition-colors"
             >
               Sign Up Free
             </Link>
@@ -114,6 +120,48 @@ export default async function Home() {
           </div>
         </section>
       )}
+
+      {/* ── Community ─────────────────────────────────────────────── */}
+      <section className="py-12 px-4 bg-background">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-2xl font-bold mb-6">Explore the community</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Link
+              href="/feed"
+              className="group rounded-2xl border border-red-600/25 bg-card p-6 shadow-sm hover:shadow-md hover:border-red-600/45 transition-all"
+            >
+              <div className="text-3xl mb-3">📡</div>
+              <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">Feed</h3>
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                Upcoming shows and recent jokes from comics around the scene.
+              </p>
+              <span className="inline-block mt-4 text-sm text-primary font-medium">Open the feed →</span>
+            </Link>
+            <Link
+              href="/performers"
+              className="group rounded-2xl border border-red-600/25 bg-card p-6 shadow-sm hover:shadow-md hover:border-red-600/45 transition-all"
+            >
+              <div className="text-3xl mb-3">🔍</div>
+              <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">Find performers</h3>
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                Search comics by name and open their public profile.
+              </p>
+              <span className="inline-block mt-4 text-sm text-primary font-medium">Search performers →</span>
+            </Link>
+            <Link
+              href="/jokes"
+              className="group rounded-2xl border border-red-600/25 bg-card p-6 shadow-sm hover:shadow-md hover:border-red-600/45 transition-all"
+            >
+              <div className="text-3xl mb-3">🎤</div>
+              <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">Jokes</h3>
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                Read one-liners from performers and audience members. Sign in to post your own.
+              </p>
+              <span className="inline-block mt-4 text-sm text-primary font-medium">Read jokes →</span>
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {/* ── How It Works ──────────────────────────────────────────── */}
       <section className="py-14 px-4 bg-muted/40">
@@ -241,6 +289,15 @@ export default async function Home() {
           <nav className="flex flex-wrap gap-5 text-sm text-muted-foreground">
             <Link href="/events" className="hover:text-foreground transition-colors">
               Events
+            </Link>
+            <Link href="/feed" className="hover:text-foreground transition-colors">
+              Feed
+            </Link>
+            <Link href="/performers" className="hover:text-foreground transition-colors">
+              Performers
+            </Link>
+            <Link href="/jokes" className="hover:text-foreground transition-colors">
+              Jokes
             </Link>
             <Link href="/communities" className="hover:text-foreground transition-colors">
               Communities

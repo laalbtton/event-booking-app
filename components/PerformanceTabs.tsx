@@ -30,6 +30,9 @@ function EventCard({ event }: { event: PerformerEvent }) {
       {event.bookingStatus === 'waitlist' && event.waitlistPosition != null && (
         <p className="text-xs text-stone-500 mt-1">Waitlist position #{event.waitlistPosition}</p>
       )}
+      {event.bookingStatus === 'host' && (
+        <p className="text-xs text-stone-500 mt-1">Hosted</p>
+      )}
     </li>
   )
 }

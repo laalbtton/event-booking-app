@@ -10,11 +10,11 @@ import { cn } from '@/lib/utils'
 import { Heart, Bomb, Trash2, Send, RefreshCw, Laugh, Tag } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import { PublicHeader } from '@/components/public/PublicHeader'
 
 const MAX_CHARS = 280
 const MAX_TAG_CHARS = 140
 const MAX_TAGS = 5
-const LOAD_LIMIT = 50
 
 type ReactionType = 'like' | 'bomb' | 'kill' | 'laughter'
 
@@ -241,7 +241,7 @@ export default function JokesPage() {
   // Initial loads + clear unread badge when visiting the tab
   useEffect(() => {
     void loadBrowse()
-  }, [])
+  }, [user?.id])
 
   useEffect(() => {
     if (!user) return
@@ -298,48 +298,19 @@ export default function JokesPage() {
 
   // ── Data fetching ─────────────────────────────────────────────────────────
 
-  async function fetchProfiles(userIds: string[]): Promise<ProfileMap> {
-    if (!userIds.length) return {}
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, full_name, avatar_url')
-      .in('id', userIds)
-    return Object.fromEntries(
-      (data ?? []).map((p) => [
-        p.id,
-        { full_name: p.full_name ?? null, avatar_url: (p as { avatar_url?: string | null }).avatar_url ?? null },
-      ]),
-    )
-  }
-
   async function loadBrowse() {
     setBrowseLoading(true)
     setBrowseError(null)
     try {
-      const { data, error } = await supabase
-        .from('jokes')
-        .select(
-          'id, user_id, content, created_at, joke_reactions(id, user_id, reaction_type), joke_tags(id, user_id, content, created_at)',
-        )
-        .order('created_at', { ascending: false })
-        .limit(LOAD_LIMIT)
+      const token = await getAccessToken()
+      const headers: HeadersInit = {}
+      if (token) headers.Authorization = `Bearer ${token}`
+      const res = await fetch('/api/jokes', { headers })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Failed to load jokes')
 
-      if (error) throw error
-
-      const rows = (data ?? []) as RawJoke[]
-      const uniqueIds = [
-        ...new Set([
-          ...rows.map((r) => r.user_id),
-          ...rows.flatMap((r) => (r.joke_tags ?? []).map((t) => t.user_id)),
-        ]),
-      ]
-      const profileMap = await fetchProfiles(uniqueIds)
-      // Own jokes are shown in "My Jokes" tab only — exclude from browse
-      setBrowseJokes(
-        rows
-          .filter((r) => r.user_id !== user?.id)
-          .map((r) => processRow(r, profileMap, user?.id)),
-      )
+      const rows = (payload.jokes ?? []) as Joke[]
+      setBrowseJokes(rows.filter((r) => r.user_id !== user?.id))
     } catch (err: unknown) {
       const msg = (err as { message?: string })?.message ?? 'Failed to load jokes'
       setBrowseError(
@@ -356,20 +327,13 @@ export default function JokesPage() {
     if (!user) return
     setMyLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('jokes')
-        .select(
-          'id, user_id, content, created_at, joke_reactions(id, user_id, reaction_type), joke_tags(id, user_id, content, created_at)',
-        )
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      const rows = (data ?? []) as RawJoke[]
-      const tagUserIds = rows.flatMap((r) => (r.joke_tags ?? []).map((t) => t.user_id))
-      const profileMap = await fetchProfiles([...new Set([user.id, ...tagUserIds])])
-      setMyJokes(rows.map((r) => processRow(r, profileMap, user.id)))
+      const token = await getAccessToken()
+      const headers: HeadersInit = {}
+      if (token) headers.Authorization = `Bearer ${token}`
+      const res = await fetch('/api/jokes?mine=1', { headers })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Failed to load your jokes')
+      setMyJokes((payload.jokes ?? []) as Joke[])
       setMyLoaded(true)
     } catch {
       toast.error('Failed to load your jokes')
@@ -580,12 +544,19 @@ export default function JokesPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
+      <PublicHeader />
     <div className="min-h-screen bg-background pb-28">
       <div className="mx-auto max-w-xl px-4 py-6 sm:px-6 sm:py-8">
         {/* Page header */}
         <div className="mb-5 flex items-center gap-2.5">
           <span className="text-2xl leading-none" aria-hidden>🎤</span>
-          <h1 className="text-2xl font-bold tracking-tight">Jokes</h1>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Jokes</h1>
+            <p className="text-sm text-muted-foreground">
+              One-liners from comics and fans. Performers and audience members can both post.
+            </p>
+          </div>
         </div>
 
         {/* ── Write area ──────────────────────────────────────────────────── */}
@@ -593,10 +564,17 @@ export default function JokesPage() {
           <div className="mb-5 h-[120px] animate-pulse rounded-2xl bg-muted" />
         ) : !user ? (
           <div className="mb-5 rounded-2xl border border-dashed border-muted-foreground/30 px-5 py-8 text-center">
-            <p className="mb-3 text-sm text-muted-foreground">Sign in to post and react.</p>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/login">Sign in</Link>
-            </Button>
+            <p className="mb-3 text-sm text-muted-foreground">
+              Sign in to post a joke — performers and audience members are both welcome.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button asChild size="sm">
+                <Link href="/signup">Sign up</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/login">Log in</Link>
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="mb-5 rounded-2xl border border-border bg-card shadow-sm">
@@ -649,6 +627,7 @@ export default function JokesPage() {
         )}
 
         {/* ── Tabs ────────────────────────────────────────────────────────── */}
+        {user && (
         <div className="mb-4 flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
           {(['browse', 'mine'] as const).map((t) => (
             <button
@@ -671,6 +650,7 @@ export default function JokesPage() {
             </button>
           ))}
         </div>
+        )}
 
         {/* ── Browse tab ──────────────────────────────────────────────────── */}
         {activeTab === 'browse' && (
@@ -808,6 +788,7 @@ export default function JokesPage() {
         )}
       </div>
     </div>
+    </>
   )
 }
 

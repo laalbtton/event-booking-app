@@ -42,9 +42,18 @@ export function PublicHeader() {
           />
         </Link>
 
-        <nav className="hidden sm:flex items-center gap-6 text-sm font-medium">
+        <nav className="hidden sm:flex items-center gap-5 text-sm font-medium">
           <Link href="/events" className="text-stone-300 hover:text-stone-100 transition-colors">
             Events
+          </Link>
+          <Link href="/feed" className="text-stone-300 hover:text-stone-100 transition-colors">
+            Feed
+          </Link>
+          <Link href="/performers" className="text-stone-300 hover:text-stone-100 transition-colors">
+            Performers
+          </Link>
+          <Link href="/jokes" className="text-stone-300 hover:text-stone-100 transition-colors">
+            Jokes
           </Link>
           <Link href="/communities" className="text-stone-300 hover:text-stone-100 transition-colors">
             Communities
@@ -62,11 +71,20 @@ export function PublicHeader() {
       </div>
 
       {/* Mobile nav links */}
-      <div className="flex sm:hidden items-center gap-5 px-4 pb-2 text-sm font-medium">
-        <Link href="/events" className="text-stone-300 hover:text-stone-100 transition-colors">
+      <div className="flex sm:hidden items-center gap-4 overflow-x-auto px-4 pb-2 text-sm font-medium">
+        <Link href="/events" className="shrink-0 text-stone-300 hover:text-stone-100 transition-colors">
           Events
         </Link>
-        <Link href="/communities" className="text-stone-300 hover:text-stone-100 transition-colors">
+        <Link href="/feed" className="shrink-0 text-stone-300 hover:text-stone-100 transition-colors">
+          Feed
+        </Link>
+        <Link href="/performers" className="shrink-0 text-stone-300 hover:text-stone-100 transition-colors">
+          Performers
+        </Link>
+        <Link href="/jokes" className="shrink-0 text-stone-300 hover:text-stone-100 transition-colors">
+          Jokes
+        </Link>
+        <Link href="/communities" className="shrink-0 text-stone-300 hover:text-stone-100 transition-colors">
           Communities
         </Link>
       </div>

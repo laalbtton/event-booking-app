@@ -34,6 +34,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
+import { countAttendedEvents } from '@/lib/attendedCount'
 
 type EventBooking = {
   id: string
@@ -274,8 +275,8 @@ export default function ProfilePage() {
         username: (profileData as any).username || '',
       })
 
-      // Load all three booking/invite datasets in parallel — all only need userId
-      const [bookingsResult, bookingsFullResult, ticketsResult] = await Promise.all([
+      // Load booking/invite datasets in parallel — all only need userId
+      const [bookingsResult, bookingsFullResult, ticketsResult, hostedEventsResult] = await Promise.all([
         supabase
           .from('bookings')
           .select('id, event_id, credits_used, status, attendance_status, waitlist_position, booked_at, events (id, title, date, location, status)')
@@ -293,6 +294,10 @@ export default function ProfilePage() {
           .eq('user_id', userId)
           .eq('status', 'completed')
           .order('created_at', { ascending: false }),
+        supabase
+          .from('events')
+          .select('id, date, end_time, status')
+          .or(`host_user_id.eq.${userId},created_by.eq.${userId}`),
       ])
 
       if (bookingsResult.error) throw bookingsResult.error
@@ -311,7 +316,12 @@ export default function ProfilePage() {
         event_status: b.events.status
       }))
       setEventBookings(events)
-      setAttendedCount(events.filter((e: any) => e.attendance_status === 'attended').length)
+      setAttendedCount(
+        countAttendedEvents({
+          bookings: bookingsFullResult.error ? bookingsData : bookingsFullResult.data || [],
+          hostedEvents: hostedEventsResult.error ? [] : hostedEventsResult.data || [],
+        }),
+      )
 
       if (!bookingsFullResult.error) {
         setMyBookings(bookingsFullResult.data || [])

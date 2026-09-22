@@ -1,7 +1,14 @@
 import { getPublicServerClient } from '@/lib/server/supabasePublic'
+import { getAdminClient } from '@/lib/server/supabaseAdmin'
 import { resolvePublicEventPosterUrl } from '@/lib/eventPosterDefaults'
 import type { ProfileRatingAggregates, ProfileReviewSnippet, ProfileReviewSummary, ProfileReviewSnippetRow } from '@/lib/supabase'
 import { describeRecurrence } from '@/lib/eventSeriesUtils'
+import {
+  countAttendedEvents,
+  eventHasEnded,
+  eventIsCountable,
+  type AttendedCountEvent,
+} from '@/lib/attendedCount'
 
 type EventRow = {
   id: string
@@ -390,6 +397,8 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
 export type ListPublicEventsOptions = {
   /** When true, only returns events with start date >= now (avoids past events filling the limit). */
   upcomingOnly?: boolean
+  /** When true, only returns events with start date < now, newest first. */
+  pastOnly?: boolean
 }
 
 /** Ticketed/paid events for marketing listings (excludes free-entry / open mic style events). */
@@ -414,16 +423,21 @@ export async function listPublicEvents(
   const supabase = getPublicServerClient()
 
   // 1. Fetch events with venue and host joined in one shot
+  const nowIso = new Date().toISOString()
   let eventsQuery = supabase
     .from('events')
     .select(`${EVENT_SELECT}, venues!venue_id(id, name, address, city, region, postal_code, country), profiles!host_user_id(full_name)`)
     .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
-    .order('date', { ascending: true })
-    .limit(limit)
 
   if (options?.upcomingOnly) {
-    eventsQuery = eventsQuery.gte('date', new Date().toISOString())
+    eventsQuery = eventsQuery.gte('date', nowIso).order('date', { ascending: true })
+  } else if (options?.pastOnly) {
+    eventsQuery = eventsQuery.lt('date', nowIso).order('date', { ascending: false })
+  } else {
+    eventsQuery = eventsQuery.order('date', { ascending: true })
   }
+
+  eventsQuery = eventsQuery.limit(limit)
 
   const { data: events, error: eventsError } = await eventsQuery
 
@@ -710,6 +724,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
  */
 export async function getPublicPerformerProfile(identifier: string): Promise<PublicPerformerProfile | null> {
   const supabase = getPublicServerClient()
+  // Bookings are often RLS-gated for anon; hosted-event reads should still work,
+  // but prefer service role so host/creator attendance counts are accurate.
+  const dataClient = getAdminClient() ?? supabase
 
   const isUuid = UUID_RE.test(identifier)
   const profileQuery = supabase
@@ -723,21 +740,25 @@ export async function getPublicPerformerProfile(identifier: string): Promise<Pub
   if (!profileData) return null
 
   const profileId = String(profileData.id)
-  const now = new Date().toISOString()
+  const now = new Date()
 
-  const [bookingsRes, attendedRes, aggRes, snipRes, prSummaryRes, prSnipsRes] = await Promise.all([
+  const [bookingsRes, hostedRes, aggRes, snipRes, prSummaryRes, prSnipsRes] = await Promise.all([
     // All confirmed/waitlist bookings – we split into upcoming/recent client-side
-    supabase
+    dataClient
       .from('bookings')
       .select(
         `
+        event_id,
         status,
+        booking_scope,
+        attendance_status,
         waitlist_position,
         events (
           id,
           slug,
           title,
           date,
+          end_time,
           location,
           status
         )
@@ -746,11 +767,10 @@ export async function getPublicPerformerProfile(identifier: string): Promise<Pub
       .eq('user_id', profileId)
       .in('status', ['confirmed', 'waitlist'])
       .order('booked_at', { ascending: false }),
-    supabase
-      .from('bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', profileId)
-      .eq('attendance_status', 'attended'),
+    dataClient
+      .from('events')
+      .select('id, slug, title, date, end_time, location, status')
+      .or(`host_user_id.eq.${profileId},created_by.eq.${profileId}`),
     supabase.rpc('get_profile_rating_aggregates', { p_profile_id: profileId }),
     supabase.rpc('get_profile_recent_review_snippets', { p_profile_id: profileId, p_limit: 5 }),
     supabase.rpc('get_profile_review_summary', { p_ratee_id: profileId }),
@@ -758,10 +778,13 @@ export async function getPublicPerformerProfile(identifier: string): Promise<Pub
   ])
 
   const allBookings = ((bookingsRes.data as any[]) || []).filter(
-    (row) => row.events && row.events.status !== 'cancelled',
+    (row) => row.events && eventIsCountable(row.events),
+  )
+  const hostedEvents = ((hostedRes.data as AttendedCountEvent[]) || []).filter((event) =>
+    eventIsCountable(event),
   )
 
-  const mapEvent = (row: any): PerformerEvent => ({
+  const mapBookingEvent = (row: any): PerformerEvent => ({
     id: row.events.id as string,
     slug: row.events.slug ? String(row.events.slug) : null,
     title: String(row.events.title || 'Event'),
@@ -771,16 +794,49 @@ export async function getPublicPerformerProfile(identifier: string): Promise<Pub
     waitlistPosition: row.waitlist_position ?? null,
   })
 
-  const upcomingEvents = allBookings
-    .filter((row) => new Date(row.events.date) > new Date(now))
-    .reverse()       // ascending for upcoming
-    .map(mapEvent)
+  const mapHostedEvent = (event: any): PerformerEvent => ({
+    id: String(event.id),
+    slug: event.slug ? String(event.slug) : null,
+    title: String(event.title || 'Event'),
+    date: String(event.date),
+    location: event.location ? String(event.location) : null,
+    bookingStatus: 'host',
+    waitlistPosition: null,
+  })
 
-  // Past events: descending by date, limit 3, confirmed attendance only
-  const recentEvents = allBookings
-    .filter((row) => new Date(row.events.date) <= new Date(now) && row.status === 'confirmed')
+  const bookedEventIds = new Set(
+    allBookings.map((row) => String(row.events.id)).filter(Boolean),
+  )
+
+  const hostedOnly = hostedEvents.filter((event) => event.id && !bookedEventIds.has(event.id))
+
+  const upcomingEvents = [
+    ...allBookings
+      .filter((row) => new Date(row.events.date) > now)
+      .reverse()
+      .map(mapBookingEvent),
+    ...hostedOnly
+      .filter((event) => event.date && new Date(event.date) > now)
+      .sort((a, b) => new Date(String(a.date)).getTime() - new Date(String(b.date)).getTime())
+      .map(mapHostedEvent),
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  const recentEvents = [
+    ...allBookings
+      .filter((row) => new Date(row.events.date) <= now && row.status === 'confirmed')
+      .map(mapBookingEvent),
+    ...hostedOnly
+      .filter((event) => eventHasEnded(event, now))
+      .map(mapHostedEvent),
+  ]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 3)
-    .map(mapEvent)
+
+  const attendedCount = countAttendedEvents({
+    bookings: allBookings,
+    hostedEvents,
+    now,
+  })
 
   const ratingAggregates =
     aggRes.error || aggRes.data == null ? null : parseProfileRatingAggregates(aggRes.data)
@@ -810,7 +866,7 @@ export async function getPublicPerformerProfile(identifier: string): Promise<Pub
     upcomingEvents,
     recentEvents,
     upcomingCount: upcomingEvents.length,
-    attendedCount: attendedRes.count || 0,
+    attendedCount,
     ratingAggregates,
     recentReviewSnippets,
     profileReviewSummary,

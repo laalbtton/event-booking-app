@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { Card, CardContent } from '@/components/ui/card'
@@ -13,34 +12,32 @@ import { CalendarDays, MapPin, Users, UserPlus, Mic, Search, Pencil, ChevronRigh
 import { toast } from 'sonner'
 import { formatDateTimeEastern } from '@/lib/dateUtils'
 import { resolveEventDisplayPosterUrl } from '@/lib/eventPosterDefaults'
+import { PublicHeader } from '@/components/public/PublicHeader'
 import type { FeedEvent, FeedJoke, FeedReason } from '@/lib/server/follows'
 
 type FeedFilter = 'all' | 'people' | 'communities' | 'jokes'
 
 export default function FeedPage() {
   const { authResolved, user } = useAuthBootstrap()
-  const router = useRouter()
   const [events, setEvents] = useState<FeedEvent[]>([])
   const [jokes, setJokes] = useState<FeedJoke[]>([])
   const [followingCount, setFollowingCount] = useState(0)
+  const [personalized, setPersonalized] = useState(false)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FeedFilter>('all')
 
   useEffect(() => {
     if (!authResolved) return
-    if (!user) {
-      router.push('/login')
-      return
-    }
 
     let cancelled = false
     void (async () => {
       try {
         const { data: sessionData } = await supabase.auth.getSession()
         const token = sessionData.session?.access_token
-        if (!token) throw new Error('Not authenticated')
+        const headers: HeadersInit = {}
+        if (token) headers.Authorization = `Bearer ${token}`
 
-        const res = await fetch('/api/feed', { headers: { Authorization: `Bearer ${token}` } })
+        const res = await fetch('/api/feed', { headers })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(typeof json.error === 'string' ? json.error : 'Failed to load feed')
 
@@ -48,6 +45,7 @@ export default function FeedPage() {
           setEvents((json.events ?? []) as FeedEvent[])
           setJokes((json.jokes ?? []) as FeedJoke[])
           setFollowingCount(typeof json.followingCount === 'number' ? json.followingCount : 0)
+          setPersonalized(json.personalized === true)
         }
       } catch (err: unknown) {
         if (!cancelled) toast.error(err instanceof Error ? err.message : 'Failed to load feed')
@@ -59,7 +57,7 @@ export default function FeedPage() {
     return () => {
       cancelled = true
     }
-  }, [authResolved, user, router])
+  }, [authResolved, user])
 
   const visibleEvents = useMemo(() => {
     if (filter === 'people') {
@@ -83,34 +81,46 @@ export default function FeedPage() {
 
   if (!authResolved || loading) {
     return (
-      <div className="min-h-screen bg-background pb-24 flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading your feed…</p>
-      </div>
+      <>
+        <PublicHeader />
+        <div className="min-h-screen bg-background pb-24 flex items-center justify-center">
+          <p className="text-sm text-muted-foreground">{user ? 'Loading your feed…' : 'Loading the feed…'}</p>
+        </div>
+      </>
     )
   }
 
   return (
+    <>
+      <PublicHeader />
     <div className="min-h-screen bg-background pb-24">
       <div className="max-w-3xl mx-auto px-4 py-6 sm:px-6 space-y-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold">Your feed</h1>
+            <h1 className="text-2xl font-bold">{personalized ? 'Your feed' : 'Feed'}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Upcoming events from your communities and the people you follow, plus their latest
-              jokes.
+              {personalized
+                ? 'Upcoming events from your communities and the people you follow, plus their latest jokes.'
+                : 'Upcoming shows and recent jokes from the community. Sign in to follow performers and personalize this feed.'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Button asChild variant="outline" size="icon" aria-label="Find people to follow">
-              <Link href="/feed/search">
+            <Button asChild variant="outline" size="icon" aria-label="Find performers">
+              <Link href="/performers">
                 <Search className="h-4 w-4" />
               </Link>
             </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/feed/following">
-                Following{followingCount > 0 ? ` · ${followingCount}` : ''}
-              </Link>
-            </Button>
+            {user ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/feed/following">
+                  Following{followingCount > 0 ? ` · ${followingCount}` : ''}
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/login">Sign in</Link>
+              </Button>
+            )}
           </div>
         </div>
 
@@ -123,8 +133,12 @@ export default function FeedPage() {
             <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="flex-1 min-w-0">
               {jokes.length === 1
-                ? '1 recent joke from someone you follow'
-                : `${jokes.length} recent jokes from people you follow`}
+                ? personalized
+                  ? '1 recent joke from someone you follow'
+                  : '1 recent joke'
+                : personalized
+                  ? `${jokes.length} recent jokes from people you follow`
+                  : `${jokes.length} recent jokes`}
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
           </button>
@@ -132,14 +146,18 @@ export default function FeedPage() {
 
         <div className="flex flex-wrap gap-2">
           <FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>
-            All events ({events.length})
+            {personalized ? `All events (${events.length})` : `Upcoming (${events.length})`}
           </FilterChip>
-          <FilterChip active={filter === 'people'} onClick={() => setFilter('people')}>
-            From people you follow ({peopleCount})
-          </FilterChip>
-          <FilterChip active={filter === 'communities'} onClick={() => setFilter('communities')}>
-            From my communities ({communityCount})
-          </FilterChip>
+          {personalized && (
+            <>
+              <FilterChip active={filter === 'people'} onClick={() => setFilter('people')}>
+                From people you follow ({peopleCount})
+              </FilterChip>
+              <FilterChip active={filter === 'communities'} onClick={() => setFilter('communities')}>
+                From my communities ({communityCount})
+              </FilterChip>
+            </>
+          )}
           <FilterChip active={filter === 'jokes'} onClick={() => setFilter('jokes')}>
             Jokes ({jokes.length})
           </FilterChip>
@@ -147,7 +165,7 @@ export default function FeedPage() {
 
         {filter === 'jokes' ? (
           jokes.length === 0 ? (
-            <JokesEmptyState followingCount={followingCount} />
+            <JokesEmptyState followingCount={followingCount} signedIn={!!user} />
           ) : (
             <div className="space-y-4">
               {jokes.map((joke) => (
@@ -156,7 +174,7 @@ export default function FeedPage() {
             </div>
           )
         ) : visibleEvents.length === 0 ? (
-          <EmptyState filter={filter} followingCount={followingCount} />
+          <EmptyState filter={filter} followingCount={followingCount} signedIn={!!user} />
         ) : (
           <div className="space-y-4">
             {visibleEvents.map((event) => (
@@ -166,6 +184,7 @@ export default function FeedPage() {
         )}
       </div>
     </div>
+    </>
   )
 }
 
@@ -233,7 +252,7 @@ function FeedJokeCard({ joke }: { joke: FeedJoke }) {
           </Link>
           <div className="min-w-0 flex-1">
             <Link href={profileHref} className="block font-medium text-sm truncate hover:underline">
-              {joke.authorName || 'Someone you follow'}
+              {joke.authorName || 'Someone'}
             </Link>
             <p className="text-xs text-muted-foreground">{timeAgo(joke.createdAt)}</p>
           </div>
@@ -255,24 +274,26 @@ function FeedJokeCard({ joke }: { joke: FeedJoke }) {
   )
 }
 
-function JokesEmptyState({ followingCount }: { followingCount: number }) {
+function JokesEmptyState({ followingCount, signedIn }: { followingCount: number; signedIn: boolean }) {
   return (
     <Card>
       <CardContent className="p-6 text-center space-y-3">
         <Pencil className="h-8 w-8 mx-auto text-muted-foreground" />
         <p className="font-medium">No jokes yet</p>
         <p className="text-sm text-muted-foreground">
-          {followingCount === 0
-            ? 'Follow a few comics and their jokes will show up here.'
-            : 'Nobody you follow has written a joke yet. Browse what everyone else is writing in the meantime.'}
+          {!signedIn
+            ? 'Check back soon, or open the jokes page to read and post one-liners.'
+            : followingCount === 0
+              ? 'Follow a few comics and their jokes will show up here.'
+              : 'Nobody you follow has written a joke yet. Browse what everyone else is writing in the meantime.'}
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           <Button asChild variant="outline" size="sm">
             <Link href="/jokes">Open Jokes</Link>
           </Button>
-          {followingCount === 0 && (
+          {signedIn && followingCount === 0 && (
             <Button asChild size="sm">
-              <Link href="/feed/search">Find people</Link>
+              <Link href="/performers">Find performers</Link>
             </Button>
           )}
         </div>
@@ -401,7 +422,15 @@ function FeedEventCard({ event }: { event: FeedEvent }) {
   )
 }
 
-function EmptyState({ filter, followingCount }: { filter: FeedFilter; followingCount: number }) {
+function EmptyState({
+  filter,
+  followingCount,
+  signedIn,
+}: {
+  filter: FeedFilter
+  followingCount: number
+  signedIn: boolean
+}) {
   if (filter === 'people' && followingCount === 0) {
     return (
       <Card>
@@ -409,15 +438,15 @@ function EmptyState({ filter, followingCount }: { filter: FeedFilter; followingC
           <UserPlus className="h-8 w-8 mx-auto text-muted-foreground" />
           <p className="font-medium">You&apos;re not following anyone yet</p>
           <p className="text-sm text-muted-foreground">
-            Search for someone by name, or open a performer&apos;s profile and tap Follow. When they
+            Search for a performer by name, or open their profile and tap Follow. When they
             have a gig coming up, it shows here.
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             <Button asChild size="sm">
-              <Link href="/feed/search">Find people</Link>
+              <Link href="/performers">Find performers</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href="/dashboard">Browse events</Link>
+              <Link href="/events">Browse events</Link>
             </Button>
           </div>
         </CardContent>
@@ -453,17 +482,19 @@ function EmptyState({ filter, followingCount }: { filter: FeedFilter; followingC
         <Mic className="h-8 w-8 mx-auto text-muted-foreground" />
         <p className="font-medium">Nothing coming up yet</p>
         <p className="text-sm text-muted-foreground">
-          Join a community or follow a few performers to fill your feed.
+          {signedIn
+            ? 'Join a community or follow a few performers to fill your feed.'
+            : 'Check upcoming events, or search for a performer by name.'}
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           <Button asChild size="sm">
-            <Link href="/feed/search">Find people</Link>
+            <Link href="/performers">Find performers</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
             <Link href="/communities">Browse communities</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link href="/dashboard">Browse events</Link>
+            <Link href="/events">Browse events</Link>
           </Button>
         </div>
       </CardContent>
