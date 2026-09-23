@@ -123,7 +123,7 @@ export function buildGoogleCalendarUrl(input: CalendarEventInput): string {
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
-export function buildIcsContent(input: CalendarEventInput): string {
+function buildVeventLines(input: CalendarEventInput): string[] {
   const startRaw = typeof input.startDate === 'string' ? input.startDate : input.startDate.toISOString()
   const start = resolveStartDate(input.startDate)
   const end = resolveEndDate(start, input.endDate, startRaw)
@@ -135,11 +135,6 @@ export function buildIcsContent(input: CalendarEventInput): string {
     : `event-${start.getTime()}@laalbutton.com`
 
   const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Laal Button//Event Booking//EN',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:${uid}`,
     `DTSTAMP:${formatUtcIcsDateTime(new Date())}`,
@@ -152,7 +147,41 @@ export function buildIcsContent(input: CalendarEventInput): string {
   if (location) lines.push(`LOCATION:${escapeIcsText(location)}`)
   if (eventUrl) lines.push(`URL:${eventUrl}`)
 
-  lines.push('END:VEVENT', 'END:VCALENDAR')
+  lines.push('END:VEVENT')
+  return lines
+}
+
+export function buildIcsContent(input: CalendarEventInput): string {
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Laal Button//Event Booking//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    ...buildVeventLines(input),
+    'END:VCALENDAR',
+  ]
+  return lines.join('\r\n')
+}
+
+/** Multi-event feed for subscribe-by-URL calendars (Apple / Google). */
+export function buildIcsCalendar(
+  events: CalendarEventInput[],
+  calendarName = 'This Week in Brampton',
+): string {
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//One Mic Stand//Brampton Comedy//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${escapeIcsText(calendarName)}`,
+    `X-WR-TIMEZONE:${CALENDAR_TZ}`,
+  ]
+  for (const event of events) {
+    lines.push(...buildVeventLines(event))
+  }
+  lines.push('END:VCALENDAR')
   return lines.join('\r\n')
 }
 

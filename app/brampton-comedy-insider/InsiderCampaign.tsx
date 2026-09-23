@@ -24,6 +24,9 @@ import {
   insiderCreditsKeptRoleMessage,
   trackInsiderEvent,
 } from '@/lib/foundingMembers'
+import { BramptonMicStoolLogo } from '@/components/public/BramptonMicStoolLogo'
+import { InsiderSurveyRace } from '@/components/public/InsiderSurveyRace'
+import type { InsiderSurveyStats } from '@/lib/server/insiderSurveyStats'
 import { ChevronLeft } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -73,6 +76,7 @@ type Props = {
   initialClaimed: number
   initialRemaining: number
   limit: number
+  initialSurveyStats: InsiderSurveyStats
 }
 
 const BENEFITS = [
@@ -84,7 +88,7 @@ const BENEFITS = [
   'Founding Member status',
 ]
 
-export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Props) {
+export function InsiderCampaign({ initialClaimed, initialRemaining, limit, initialSurveyStats }: Props) {
   const { authResolved, user } = useAuthBootstrap()
   const isAppUser = Boolean(authResolved && user)
 
@@ -296,6 +300,7 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
         />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.10),transparent_55%)]" />
         <div className="relative mx-auto max-w-2xl text-center">
+          <BramptonMicStoolLogo className="mb-5" />
 
           <span className="inline-flex items-center gap-2 rounded-full border border-yellow-400/40 bg-yellow-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-yellow-300">
             🎙 Founding Members Club
@@ -324,6 +329,12 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
                 {isAppUser
                   ? `Takes under a minute · up to $${CREDIT_SURVEY_TOTAL} in survey credits`
                   : `Takes under a minute · $${CREDIT_TOTAL_AVAILABLE} in comedy credits available`}
+              </p>
+              <p className="mt-4 text-sm text-stone-400">
+                Just looking for this week&apos;s shows?{' '}
+                <Link href="/brampton" className="font-semibold text-yellow-400 hover:text-yellow-300">
+                  This week in Brampton
+                </Link>
               </p>
             </div>
           )}
@@ -375,6 +386,8 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit }: Pro
           </p>
         </div>
       </section>
+
+      <InsiderSurveyRace stats={initialSurveyStats} />
 
       {/* ── FREE TICKET PROGRESS ─────────────────────────────── */}
       <section className="px-4 pt-12 pb-8">

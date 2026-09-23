@@ -19,6 +19,7 @@ export async function GET() {
     const { count } = await supabase
       .from('founding_members')
       .select('id', { count: 'exact', head: true })
+      .or('account_credit_awarded.eq.true,signup_completed.eq.true')
 
     const claimed = count ?? 0
     const remaining = Math.max(0, FOUNDING_MEMBER_LIMIT - claimed)

@@ -121,6 +121,31 @@ export default async function Home() {
         </section>
       )}
 
+      {/* ── This week in Brampton ────────────────────────────────── */}
+      <section className="py-10 px-4 bg-zinc-950 text-stone-100">
+        <div className="max-w-5xl mx-auto rounded-2xl border border-yellow-400/25 bg-gradient-to-br from-zinc-900 to-zinc-950 px-6 py-8 sm:px-8">
+          <p className="text-xs font-semibold uppercase tracking-widest text-yellow-400">Brampton</p>
+          <h2 className="mt-2 text-2xl font-bold">This week&apos;s open mics &amp; variety shows</h2>
+          <p className="mt-2 max-w-xl text-sm text-stone-400">
+            One page that always lists this week. Subscribe the calendar or get email updates.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              href="/brampton"
+              className="rounded-xl bg-yellow-400 px-5 py-2.5 text-sm font-bold text-zinc-950 hover:bg-yellow-300"
+            >
+              This week in Brampton
+            </Link>
+            <Link
+              href="/brampton-comedy-insider"
+              className="rounded-xl border border-yellow-400/50 px-5 py-2.5 text-sm font-semibold text-yellow-400 hover:bg-yellow-400 hover:text-zinc-950"
+            >
+              Join Insider
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* ── Community ─────────────────────────────────────────────── */}
       <section className="py-12 px-4 bg-background">
         <div className="max-w-5xl mx-auto">
@@ -289,6 +314,9 @@ export default async function Home() {
           <nav className="flex flex-wrap gap-5 text-sm text-muted-foreground">
             <Link href="/events" className="hover:text-foreground transition-colors">
               Events
+            </Link>
+            <Link href="/brampton" className="hover:text-foreground transition-colors">
+              Brampton
             </Link>
             <Link href="/feed" className="hover:text-foreground transition-colors">
               Feed

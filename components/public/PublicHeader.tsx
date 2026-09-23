@@ -46,6 +46,9 @@ export function PublicHeader() {
           <Link href="/events" className="text-stone-300 hover:text-stone-100 transition-colors">
             Events
           </Link>
+          <Link href="/brampton" className="text-stone-300 hover:text-stone-100 transition-colors">
+            Brampton
+          </Link>
           <Link href="/feed" className="text-stone-300 hover:text-stone-100 transition-colors">
             Feed
           </Link>
@@ -74,6 +77,9 @@ export function PublicHeader() {
       <div className="flex sm:hidden items-center gap-4 overflow-x-auto px-4 pb-2 text-sm font-medium">
         <Link href="/events" className="shrink-0 text-stone-300 hover:text-stone-100 transition-colors">
           Events
+        </Link>
+        <Link href="/brampton" className="shrink-0 text-stone-300 hover:text-stone-100 transition-colors">
+          Brampton
         </Link>
         <Link href="/feed" className="shrink-0 text-stone-300 hover:text-stone-100 transition-colors">
           Feed

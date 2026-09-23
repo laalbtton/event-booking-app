@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { getAdminClient } from '@/lib/server/supabaseAdmin'
 import { FOUNDING_MEMBER_LIMIT } from '@/lib/foundingMembers'
+import { getInsiderSurveyStats } from '@/lib/server/insiderSurveyStats'
 import { InsiderCampaign } from './InsiderCampaign'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +26,7 @@ async function getInitialSpots() {
   const { count } = await supabase
     .from('founding_members')
     .select('id', { count: 'exact', head: true })
+    .or('account_credit_awarded.eq.true,signup_completed.eq.true')
   const claimed = count ?? 0
   return {
     limit: FOUNDING_MEMBER_LIMIT,
@@ -34,13 +36,14 @@ async function getInitialSpots() {
 }
 
 export default async function BramptonComedyInsiderPage() {
-  const spots = await getInitialSpots()
+  const [spots, surveyStats] = await Promise.all([getInitialSpots(), getInsiderSurveyStats()])
 
   return (
     <InsiderCampaign
       initialClaimed={spots.claimed}
       initialRemaining={spots.remaining}
       limit={spots.limit}
+      initialSurveyStats={surveyStats}
     />
   )
 }
