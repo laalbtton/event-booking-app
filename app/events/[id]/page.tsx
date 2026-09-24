@@ -920,7 +920,8 @@ export default function EventDetailsPage() {
   const displayPosterUrl = getDisplayPosterUrl()
   const displayPosterHref =
     absolutizePosterUrl(displayPosterUrl, typeof window !== 'undefined' ? window.location.origin : '') ||
-    displayPosterUrl
+    displayPosterUrl ||
+    undefined
 
   const spotsAvailable = event.max_attendees 
     ? event.max_attendees - confirmedBookings.length 
@@ -1077,7 +1078,7 @@ export default function EventDetailsPage() {
                     caption={event.poster_caption}
                     eventDate={event.date}
                     location={venue ? `${venue.name}${venue.city ? `, ${venue.city}` : ''}` : event.location}
-                    posterUrl={displayPosterHref || displayPosterUrl}
+                    posterUrl={displayPosterHref}
                   />
                 </div>
               )}
@@ -1105,13 +1106,15 @@ export default function EventDetailsPage() {
                       caption={event.poster_caption}
                       eventDate={event.date}
                       location={venue ? `${venue.name}${venue.city ? `, ${venue.city}` : ''}` : event.location}
-                      posterUrl={displayPosterHref || displayPosterUrl}
+                      posterUrl={displayPosterHref}
                     />
                   )}
                   <div className="flex flex-wrap gap-2">
-                    <a href={displayPosterHref || displayPosterUrl} target="_blank" rel="noreferrer" download>
-                      <Button variant="outline" size="sm">Download</Button>
-                    </a>
+                    {displayPosterHref && (
+                      <a href={displayPosterHref} target="_blank" rel="noreferrer" download>
+                        <Button variant="outline" size="sm">Download</Button>
+                      </a>
+                    )}
                     <Button variant="outline" size="sm" onClick={copyPosterLink}>Copy Link</Button>
                     {event.poster_url && (userBooking || isHost || isEventCreator) && (
                       <Button
