@@ -8,6 +8,9 @@ import { PublicHeader } from '@/components/public/PublicHeader'
 import { PublicEventCard } from '@/components/public/PublicEventCard'
 import { PublicEventsFilters } from '@/components/public/PublicEventsFilters'
 import { PublicEventsSort } from '@/components/public/PublicEventsSort'
+import { PublicEventsViewToggle } from '@/components/public/PublicEventsViewToggle'
+import { PublicEventsCalendar } from '@/components/public/PublicEventsCalendar'
+import { addCalendarDaysToYmd, getEasternCalendarDateString, getEasternWeekdayIndex } from '@/lib/dateUtils'
 
 // Must be dynamic so we can read the visitor's IP for geo-sorting on every request
 export const dynamic = 'force-dynamic'
@@ -16,23 +19,23 @@ export async function generateMetadata(): Promise<Metadata> {
   return buildEventListMetadata()
 }
 
-function getDateBounds(preset: string): { from: Date; to: Date } | null {
-  const now = new Date()
+function getDateYmdBounds(preset: string): { fromYmd: string; toYmd: string } | null {
+  const todayYmd = getEasternCalendarDateString()
   if (preset === 'today') {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
-    return { from: start, to: end }
+    return { fromYmd: todayYmd, toYmd: todayYmd }
   }
   if (preset === 'this_week') {
-    const start = new Date(now)
-    const end = new Date(now)
-    end.setDate(now.getDate() + (6 - now.getDay() + 1))
-    return { from: start, to: end }
+    const dow = getEasternWeekdayIndex()
+    const daysAhead = 6 - dow + 1
+    return { fromYmd: todayYmd, toYmd: addCalendarDaysToYmd(todayYmd, daysAhead) }
   }
   if (preset === 'this_month') {
-    const start = new Date(now)
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
-    return { from: start, to: end }
+    const [y, m] = todayYmd.split('-').map(Number)
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+    return {
+      fromYmd: todayYmd,
+      toYmd: `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+    }
   }
   return null
 }
@@ -50,6 +53,7 @@ function filterAndSortEvents(
     free,
     geoCity,
     sortMode,
+    skipDatePreset,
   }: {
     city: string
     datePreset: string
@@ -57,6 +61,7 @@ function filterAndSortEvents(
     free: string
     geoCity: string | null
     sortMode: 'date' | 'near' | 'venue'
+    skipDatePreset?: boolean
   }
 ): { upcoming: PublicEventDetails[]; past: PublicEventDetails[] } {
   const now = new Date()
@@ -74,12 +79,12 @@ function filterAndSortEvents(
     })
   }
 
-  // Date preset filter
-  const dateBounds = getDateBounds(datePreset)
+  // Date preset filter (list view only — calendar uses month navigation)
+  const dateBounds = skipDatePreset ? null : getDateYmdBounds(datePreset)
   if (dateBounds) {
     filtered = filtered.filter((e) => {
-      const d = new Date(e.startDate)
-      return d >= dateBounds.from && d <= dateBounds.to
+      const ymd = getEasternCalendarDateString(e.startDate)
+      return ymd >= dateBounds.fromYmd && ymd <= dateBounds.toYmd
     })
   }
 
@@ -139,7 +144,14 @@ function filterAndSortEvents(
   return { upcoming, past }
 }
 
-type SearchParams = { city?: string; date?: string; type?: string; free?: string; sort?: string }
+type SearchParams = {
+  city?: string
+  date?: string
+  type?: string
+  free?: string
+  sort?: string
+  view?: string
+}
 
 function parseSortMode(raw: string | undefined): 'date' | 'near' | 'venue' {
   if (raw === 'near' || raw === 'venue') return raw
@@ -151,9 +163,10 @@ export default async function PublicEventsPage({
 }: {
   searchParams: Promise<SearchParams>
 }) {
-  const [params, allEvents, geo] = await Promise.all([
+  const [params, upcomingRaw, pastRaw, geo] = await Promise.all([
     searchParams,
-    listPublicEvents(100),
+    listPublicEvents(120, { upcomingOnly: true }),
+    listPublicEvents(120, { pastOnly: true }),
     getVisitorGeo(),
   ])
 
@@ -162,6 +175,8 @@ export default async function PublicEventsPage({
   const eventType = params.type || ''
   const free = params.free || ''
   const sortMode = parseSortMode(params.sort)
+  const view = params.view === 'calendar' ? 'calendar' : 'list'
+  const allEvents = [...pastRaw, ...upcomingRaw]
 
   const { upcoming, past } = filterAndSortEvents(allEvents, {
     city,
@@ -170,6 +185,7 @@ export default async function PublicEventsPage({
     free,
     geoCity: geo.city,
     sortMode,
+    skipDatePreset: view === 'calendar',
   })
 
   const hasActiveFilters = !!(city || datePreset || eventType || free)
@@ -182,9 +198,14 @@ export default async function PublicEventsPage({
       <main className="mx-auto max-w-5xl px-4 pb-24 pt-6 space-y-6">
         {/* Page heading */}
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-yellow-400">
-            {geo.city ? `Events near ${geo.city}` : 'Upcoming Events'}
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight text-yellow-400">
+              {geo.city ? `Events near ${geo.city}` : 'Upcoming Events'}
+            </h1>
+            <Suspense fallback={null}>
+              <PublicEventsViewToggle />
+            </Suspense>
+          </div>
           <p className="mt-1 text-sm text-stone-400">
             Discover comedy open mics, showcases, and live performances.
           </p>
@@ -193,52 +214,58 @@ export default async function PublicEventsPage({
         {/* Sort + filters */}
         <Suspense fallback={null}>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-            <PublicEventsSort />
+            {view === 'list' && <PublicEventsSort />}
             <div className="min-w-0 flex-1">
               <PublicEventsFilters />
             </div>
           </div>
         </Suspense>
 
-        {/* Upcoming events */}
-        {upcoming.length > 0 ? (
-          <section>
-            <h2 className="sr-only">Upcoming Events</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {upcoming.map((event) => (
-                <PublicEventCard key={event.id} event={event} cityFilter={cityFilter} />
-              ))}
-            </div>
-          </section>
+        {view === 'calendar' ? (
+          <PublicEventsCalendar events={[...upcoming, ...past]} cityFilter={cityFilter} />
         ) : (
-          <div className="rounded-xl border border-red-600/55 bg-zinc-800/40 py-16 text-center">
-            <p className="text-lg font-medium text-stone-200">No upcoming events found</p>
-            <p className="mt-2 text-sm text-stone-400">
-              {hasActiveFilters
-                ? 'Try adjusting your filters or clear them to see all events.'
-                : 'Check back soon — new events are added regularly.'}
-            </p>
-            {hasActiveFilters && (
-              <a
-                href="/events"
-                className="mt-4 inline-block text-sm font-medium text-yellow-400 underline hover:text-yellow-300"
-              >
-                Clear all filters
-              </a>
+          <>
+            {/* Upcoming events */}
+            {upcoming.length > 0 ? (
+              <section>
+                <h2 className="sr-only">Upcoming Events</h2>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {upcoming.map((event) => (
+                    <PublicEventCard key={event.id} event={event} cityFilter={cityFilter} />
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <div className="rounded-xl border border-red-600/55 bg-zinc-800/40 py-16 text-center">
+                <p className="text-lg font-medium text-stone-200">No upcoming events found</p>
+                <p className="mt-2 text-sm text-stone-400">
+                  {hasActiveFilters
+                    ? 'Try adjusting your filters or clear them to see all events.'
+                    : 'Check back soon — new events are added regularly.'}
+                </p>
+                {hasActiveFilters && (
+                  <a
+                    href="/events"
+                    className="mt-4 inline-block text-sm font-medium text-yellow-400 underline hover:text-yellow-300"
+                  >
+                    Clear all filters
+                  </a>
+                )}
+              </div>
             )}
-          </div>
-        )}
 
-        {/* Past events (shown only when no active filters) */}
-        {!hasActiveFilters && past.length > 0 && (
-          <section>
-            <h2 className="text-base font-semibold text-stone-500 mb-3">Past Events</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {past.slice(0, 12).map((event) => (
-                <PublicEventCard key={event.id} event={event} cityFilter={null} />
-              ))}
-            </div>
-          </section>
+            {/* Past events (shown only when no active filters) */}
+            {!hasActiveFilters && past.length > 0 && (
+              <section>
+                <h2 className="text-base font-semibold text-stone-500 mb-3">Past Events</h2>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {past.slice(0, 12).map((event) => (
+                    <PublicEventCard key={event.id} event={event} cityFilter={null} />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
       </main>
     </div>

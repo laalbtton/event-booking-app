@@ -234,6 +234,9 @@ export default function HostingInfoPage() {
 
         <div className="flex flex-wrap gap-3">
           <Button asChild variant="default">
+            <Link href={`/events/${resolvedId}?share=poster`}>Share poster</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href={`/events/${resolvedId}/attendance`}>Manage attendance</Link>
           </Button>
           <Button asChild variant="outline">

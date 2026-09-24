@@ -25,6 +25,7 @@ import {
   trackInsiderEvent,
 } from '@/lib/foundingMembers'
 import { BramptonMicStoolLogo } from '@/components/public/BramptonMicStoolLogo'
+import { AppStoreBadges } from '@/components/AppStoreBadges'
 import { InsiderSurveyRace } from '@/components/public/InsiderSurveyRace'
 import type { InsiderSurveyStats } from '@/lib/server/insiderSurveyStats'
 import { ChevronLeft } from 'lucide-react'
@@ -512,7 +513,8 @@ export function InsiderCampaign({ initialClaimed, initialRemaining, limit, initi
       </section>
 
       {/* ── FOOTER ───────────────────────────────────────────── */}
-      <footer className="border-t border-white/10 px-4 py-10 text-center">
+      <footer className="border-t border-white/10 px-4 py-10 text-center space-y-6">
+        <AppStoreBadges light align="center" />
         <p className="text-sm text-stone-400">Follow us on Instagram</p>
         <a
           href={INSTAGRAM_URL}

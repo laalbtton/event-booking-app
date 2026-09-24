@@ -1,6 +1,13 @@
-import { addCalendarDaysToYmd, getEasternCalendarDateString } from '@/lib/dateUtils'
+import { addCalendarDaysToYmd, EASTERN_TZ, getEasternCalendarDateString } from '@/lib/dateUtils'
 import { getSiteUrl } from '@/lib/server/emailUrl'
 import { listPublicEvents, type PublicEventDetails } from '@/lib/server/publicContent'
+
+/** Shareable newsletter signup URL — use in flyers, Instagram, WhatsApp. */
+export const BRAMPTON_EMAIL_SIGNUP_PATH = '/brampton/signup'
+
+export function bramptonEmailSignupUrl() {
+  return `${getSiteUrl()}${BRAMPTON_EMAIL_SIGNUP_PATH}`
+}
 
 export function isBramptonEvent(event: PublicEventDetails): boolean {
   const hay = [
@@ -36,10 +43,10 @@ export type BramptonWeekBundle = {
 }
 
 function formatWeekLabel(startYmd: string, endYmd: string): string {
-  const start = new Date(`${startYmd}T12:00:00`)
-  const end = new Date(`${endYmd}T12:00:00`)
-  const startStr = start.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })
-  const endStr = end.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })
+  const start = new Date(`${startYmd}T12:00:00Z`)
+  const end = new Date(`${endYmd}T12:00:00Z`)
+  const startStr = start.toLocaleDateString('en-CA', { timeZone: EASTERN_TZ, month: 'short', day: 'numeric' })
+  const endStr = end.toLocaleDateString('en-CA', { timeZone: EASTERN_TZ, month: 'short', day: 'numeric' })
   return `${startStr} – ${endStr}`
 }
 

@@ -8,6 +8,7 @@ import { StatsBand } from '@/components/public/StatsBand'
 import { listPublicEvents } from '@/lib/server/publicContent'
 import { listPublicCommunities } from '@/lib/server/publicCommunities'
 import { getPublicAppStats } from '@/lib/server/publicStats'
+import { AppStoreBadges } from '@/components/AppStoreBadges'
 
 export const revalidate = 300
 
@@ -301,7 +302,9 @@ export default async function Home() {
 
       {/* ── Footer ───────────────────────────────────────────────── */}
       <footer className="py-8 px-4 border-t border-red-600/25 bg-background">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="max-w-5xl mx-auto flex flex-col items-center gap-5">
+          <AppStoreBadges align="center" />
+          <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-4">
           <Link href="/" className="flex shrink-0 items-center" aria-label="One Mic Stand home">
             <Image
               src="/images/BlackLogoSmall_website_Top.png"
@@ -333,10 +336,14 @@ export default async function Home() {
             <Link href="/login" className="hover:text-foreground transition-colors">
               Log in
             </Link>
+            <Link href="/download" className="hover:text-foreground transition-colors">
+              Get the app
+            </Link>
             <Link href="/signup" className="hover:text-foreground transition-colors">
               Sign up
             </Link>
           </nav>
+          </div>
         </div>
       </footer>
     </>

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, Download } from 'lucide-react'
 import { toast } from 'sonner'
+import { AppStoreBadges } from '@/components/AppStoreBadges'
 import {
   getInstallPlatform,
   hasDeferredInstallPrompt,
@@ -91,12 +92,13 @@ export default function SettingsInstallPage() {
               Add to Home Screen
             </CardTitle>
             <CardDescription>
-              Install One Mic Stand to your home screen and get 5 free credits.
+              Download One Mic Stand from the App Store or Google Play — or add it to your home screen.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Button onClick={handleInstall} disabled={installActionLoading}>
-              {installActionLoading ? 'Opening...' : 'Install App'}
+          <CardContent className="space-y-4">
+            <AppStoreBadges align="start" label="Get it from the stores" />
+            <Button onClick={handleInstall} disabled={installActionLoading} variant="outline">
+              {installActionLoading ? 'Opening...' : 'Add to home screen'}
             </Button>
             {showInstallHelp && (
               <p className="text-xs text-muted-foreground">

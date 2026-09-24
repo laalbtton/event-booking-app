@@ -1,3 +1,5 @@
+import { EASTERN_TZ } from '@/lib/dateUtils'
+
 function slugifyPart(input: string): string {
   return input
     .toLowerCase()
@@ -17,8 +19,8 @@ function extractCityFromLocation(location: string): string {
 
 export function buildEventSlugBase(title: string, location: string, dateIso: string): string {
   const date = new Date(dateIso)
-  const month = date.toLocaleString('en-US', { month: 'short' }).toLowerCase()
-  const year = String(date.getUTCFullYear())
+  const month = date.toLocaleString('en-US', { timeZone: EASTERN_TZ, month: 'short' }).toLowerCase()
+  const year = date.toLocaleString('en-US', { timeZone: EASTERN_TZ, year: 'numeric' })
   const city = extractCityFromLocation(location)
 
   const parts = [slugifyPart(title), slugifyPart(city), month, year].filter(Boolean)

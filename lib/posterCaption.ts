@@ -1,3 +1,5 @@
+import { formatDateTime } from '@/lib/dateUtils'
+
 type PosterCaptionEvent = {
   title?: string | null
   date?: string | null
@@ -18,13 +20,7 @@ function formatEventDate(iso: string | null | undefined): string | null {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  return formatDateTime(d)
 }
 
 function toSafeTag(value: string): string {

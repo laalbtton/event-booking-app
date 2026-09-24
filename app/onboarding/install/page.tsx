@@ -16,6 +16,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
+import { AppStoreBadges } from '@/components/AppStoreBadges'
 
 export default function InstallOnboardingPage() {
   const router = useRouter()
@@ -102,6 +103,7 @@ export default function InstallOnboardingPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          <AppStoreBadges align="center" label="Now on the App Store and Google Play" />
           <div className="mx-auto w-52 rounded-3xl border p-3 bg-muted/20">
             <div className="rounded-2xl bg-background p-4 flex items-center justify-center">
               <Image src="/icon-192.png" alt="App icon preview" width={88} height={88} className="rounded-2xl" />

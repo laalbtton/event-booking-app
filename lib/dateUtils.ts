@@ -70,56 +70,111 @@ export function formatDigestEventDatePartsEastern(date: string | Date): { dateLi
 }
 
 /**
- * Format date with day of week and time (without seconds)
+ * Format date with day of week and time (without seconds).
+ * Always Eastern — UTC servers otherwise shift evening shows to the next weekday.
  * Example: "Wed, Jan 15, 2025 at 2:30 PM"
  */
 export function formatDateTime(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const dayName = dayNames[d.getDay()]
-  
   const dateStr = d.toLocaleDateString('en-US', {
+    timeZone: EASTERN_TZ,
+    weekday: 'short',
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
+    year: 'numeric',
   })
-  
   const timeStr = d.toLocaleTimeString('en-US', {
+    timeZone: EASTERN_TZ,
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true
+    hour12: true,
   })
-  
-  return `${dayName}, ${dateStr} at ${timeStr}`
+  return `${dateStr} at ${timeStr}`
 }
 
 /**
- * Format date with day of week (without time)
+ * Format date with day of week (without time).
+ * Always Eastern so evening events keep the correct weekday.
  * Example: "Wed, Jan 15, 2025"
  */
 export function formatDate(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const dayName = dayNames[d.getDay()]
-  
-  const dateStr = d.toLocaleDateString('en-US', {
+  return d.toLocaleDateString('en-US', {
+    timeZone: EASTERN_TZ,
+    weekday: 'short',
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
+    year: 'numeric',
   })
-  
-  return `${dayName}, ${dateStr}`
 }
 
 /**
- * Format time only (without seconds)
+ * Format time only (without seconds). Always Eastern.
  * Example: "2:30 PM"
  */
 export function formatTime(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date
   return d.toLocaleTimeString('en-US', {
+    timeZone: EASTERN_TZ,
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true
+    hour12: true,
   })
+}
+
+/** "Wednesday, September 23" in Eastern — for day group headings. */
+export function formatEventWeekdayDateEastern(date: string | Date): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return d.toLocaleDateString('en-CA', {
+    timeZone: EASTERN_TZ,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+/** "Wed, Sep 23, 2026" in Eastern — for public event cards. */
+export function formatEventDateCardEastern(date: string | Date): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return d.toLocaleDateString('en-CA', {
+    timeZone: EASTERN_TZ,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+/** "8:00 p.m." in Eastern. */
+export function formatEventTimeEastern(date: string | Date): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return d.toLocaleTimeString('en-CA', {
+    timeZone: EASTERN_TZ,
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/** "September 23, 2026" in Eastern — for OG / WhatsApp / share titles. */
+export function formatEventDateTitleEastern(date: string | Date): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return d.toLocaleDateString('en-US', {
+    timeZone: EASTERN_TZ,
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+const EASTERN_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+
+/** 0 = Sunday … 6 = Saturday, in Eastern. */
+export function getEasternWeekdayIndex(d: string | Date = new Date()): number {
+  const date = typeof d === 'string' ? new Date(d) : d
+  const wd = new Intl.DateTimeFormat('en-US', {
+    timeZone: EASTERN_TZ,
+    weekday: 'short',
+  }).format(date)
+  const idx = EASTERN_WEEKDAYS.indexOf(wd as (typeof EASTERN_WEEKDAYS)[number])
+  return idx === -1 ? 0 : idx
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
+import { AppStoreBadges } from '@/components/AppStoreBadges'
 
 /** Root app footer — hidden on marketing routes that ship their own footer. */
 export default function ConditionalAppFooter() {
@@ -17,8 +18,10 @@ export default function ConditionalAppFooter() {
   return (
     <footer className="bg-gray-800 text-white py-6 mt-auto pb-28">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-sm">© 2025 Laal Button. All rights reserved.</p>
+        <div className="flex flex-col items-center gap-5">
+          <AppStoreBadges light align="center" />
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 w-full">
+          <p className="text-sm">© {new Date().getFullYear()} Laal Button. All rights reserved.</p>
           <div className="flex gap-6">
             <Link href="/contact" className="text-sm hover:text-gray-300">
               Contact
@@ -34,6 +37,7 @@ export default function ConditionalAppFooter() {
             >
               About
             </a>
+          </div>
           </div>
         </div>
       </div>

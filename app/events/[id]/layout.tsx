@@ -11,6 +11,8 @@ import { PublicEventDateTime } from '@/components/public/PublicEventDateTime'
 import { LayoutEventSummary } from '@/components/public/LayoutEventSummary'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 import type { Metadata } from 'next'
+import { formatEventDateTitleEastern } from '@/lib/dateUtils'
+import { SharePosterPrompt } from '@/components/SharePosterPrompt'
 
 // Cache event detail pages for 5 minutes — keeps spot counts reasonably fresh
 export const revalidate = 300
@@ -61,6 +63,7 @@ export default async function EventLayout({ children, params }: Props) {
       <section className="sr-only">
         <h1>{event.title}</h1>
         <p>{event.description}</p>
+        <p>{formatEventDateTitleEastern(event.startDate)}</p>
         <p>{new Date(event.startDate).toISOString()}</p>
         {event.endDate && <p>{new Date(event.endDate).toISOString()}</p>}
         <p>{event.venue?.name || 'Venue TBA'}</p>
@@ -232,6 +235,19 @@ export default async function EventLayout({ children, params }: Props) {
           </div>
         </div>
       </LayoutEventSummary>
+
+      <SharePosterPrompt
+        eventIdOrSlug={eventSlug}
+        title={event.title}
+        caption={null}
+        eventDate={event.startDate}
+        location={
+          event.venue
+            ? `${event.venue.name}${event.venue.city ? `, ${event.venue.city}` : ''}`
+            : event.locationText
+        }
+        posterUrl={event.imageUrl}
+      />
 
       {/* The full interactive event page (client component) renders below */}
       {children}

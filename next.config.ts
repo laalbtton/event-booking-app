@@ -42,6 +42,11 @@ const nextConfig: NextConfig = {
         destination: '/laalbutton/about',
         permanent: false,
       },
+      {
+        source: '/get-app',
+        destination: '/download',
+        permanent: false,
+      },
     ]
   },
 };

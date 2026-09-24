@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import type { PublicEventDetails, PublicPerformerProfile } from '@/lib/server/publicContent'
 import type { PublicCommunity } from '@/lib/server/publicCommunities'
+import { formatEventDateTitleEastern } from '@/lib/dateUtils'
 
 const APP_NAME = 'One Mic Stand'
 
@@ -14,8 +15,9 @@ function trimTo(input: string, max: number): string {
 }
 
 function formatDateForTitle(dateIso: string): string {
-  const d = new Date(dateIso)
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  // Vercel/crawlers run in UTC. Evening ET shows become the next calendar day
+  // unless we format in Eastern — WhatsApp/iMessage use this as the preview heading.
+  return formatEventDateTitleEastern(dateIso)
 }
 
 function inferCity(event: PublicEventDetails): string {

@@ -49,6 +49,7 @@ export function PublicEventsFilters() {
       if (next.free) params.set('free', next.free)
       const sort = searchParams.get('sort')
       if (sort === 'near' || sort === 'venue') params.set('sort', sort)
+      if (searchParams.get('view') === 'calendar') params.set('view', 'calendar')
       const qs = params.toString()
       router.push(qs ? `/events?${qs}` : '/events', { scroll: false })
     },
@@ -70,11 +71,11 @@ export function PublicEventsFilters() {
     const cleared: FilterState = { city: '', datePreset: '', eventType: '', free: '' }
     setFilters(cleared)
     const sort = searchParams.get('sort')
-    if (sort === 'near' || sort === 'venue') {
-      router.push(`/events?sort=${sort}`, { scroll: false })
-    } else {
-      router.push('/events', { scroll: false })
-    }
+    const params = new URLSearchParams()
+    if (sort === 'near' || sort === 'venue') params.set('sort', sort)
+    if (searchParams.get('view') === 'calendar') params.set('view', 'calendar')
+    const qs = params.toString()
+    router.push(qs ? `/events?${qs}` : '/events', { scroll: false })
   }
 
   useEffect(() => {

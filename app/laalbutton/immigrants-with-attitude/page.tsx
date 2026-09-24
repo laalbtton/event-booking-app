@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { EASTERN_TZ } from '@/lib/dateUtils'
 import { listUpcomingSeriesEvents } from '@/lib/laalbutton/seriesEventLookup'
 import { LB_MEDIA } from '@/lib/laalbutton/media'
 
@@ -140,6 +141,7 @@ export default async function ImmigrantsWithAttitudePage() {
                   >
                     <span className="text-sm font-bold shrink-0" style={{ color: ACCENT }}>
                       {date.toLocaleDateString('en-CA', {
+                        timeZone: EASTERN_TZ,
                         weekday: 'short',
                         month: 'short',
                         day: 'numeric',

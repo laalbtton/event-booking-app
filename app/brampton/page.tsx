@@ -4,7 +4,7 @@ import { BramptonMicStoolLogo } from '@/components/public/BramptonMicStoolLogo'
 import { PublicEventCard } from '@/components/public/PublicEventCard'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { bramptonCalendarSubscribeUrls, getBramptonWeekEvents } from '@/lib/server/bramptonEvents'
-import { getEasternCalendarDateString } from '@/lib/dateUtils'
+import { formatEventWeekdayDateEastern, getEasternCalendarDateString } from '@/lib/dateUtils'
 import type { PublicEventDetails } from '@/lib/server/publicContent'
 import { BramptonEmailSubscribe } from './BramptonEmailSubscribe'
 
@@ -35,12 +35,7 @@ function groupByEasternDay(events: PublicEventDetails[]) {
       continue
     }
     index.set(ymd, groups.length)
-    const label = new Date(event.startDate).toLocaleDateString('en-CA', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-    })
-    groups.push({ ymd, label, events: [event] })
+    groups.push({ ymd, label: formatEventWeekdayDateEastern(event.startDate), events: [event] })
   }
 
   return groups
@@ -58,7 +53,7 @@ function EventGroup({ title, events }: { title: string; events: PublicEventDetai
           <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-yellow-400">
             {group.label}
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {group.events.map((event) => (
               <PublicEventCard key={event.id} event={event} cityFilter="Brampton" />
             ))}
@@ -77,10 +72,22 @@ export default async function BramptonThisWeekPage() {
     <div className="min-h-screen bg-zinc-950 text-stone-100">
       <PublicHeader />
 
-      <section className="relative overflow-hidden bg-gradient-to-br from-black via-neutral-950 to-stone-900 px-4 pt-10 pb-12 sm:pt-14 sm:pb-16">
+      <div className="border-b border-yellow-400/30 bg-zinc-900 px-4 py-3">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+          <p className="text-sm text-stone-300">Get this week’s shows by email.</p>
+          <a
+            href="#email-updates"
+            className="shrink-0 rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-950 hover:bg-yellow-300"
+          >
+            Email signup
+          </a>
+        </div>
+      </div>
+
+      <section className="relative overflow-hidden bg-gradient-to-br from-black via-neutral-950 to-stone-900 px-4 pt-8 pb-12 sm:pt-12 sm:pb-16">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.10),transparent_55%)]" />
         <div className="relative mx-auto max-w-3xl text-center">
-          <BramptonMicStoolLogo className="mb-5" />
+          <BramptonMicStoolLogo size="md" className="mb-4" />
           <span className="inline-flex items-center gap-2 rounded-full border border-yellow-400/40 bg-yellow-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-yellow-300">
             Always current
           </span>
@@ -94,8 +101,14 @@ export default async function BramptonThisWeekPage() {
 
           <div className="mt-8 flex flex-col sm:flex-row flex-wrap justify-center gap-3">
             <a
-              href={webcal}
+              href="#email-updates"
               className="rounded-xl bg-yellow-400 px-6 py-3 text-sm font-bold text-zinc-950 hover:bg-yellow-300"
+            >
+              Email me the lineup
+            </a>
+            <a
+              href={webcal}
+              className="rounded-xl border border-yellow-400/60 px-6 py-3 text-sm font-bold text-yellow-400 hover:bg-yellow-400 hover:text-zinc-950"
             >
               Subscribe in Calendar
             </a>
@@ -103,7 +116,7 @@ export default async function BramptonThisWeekPage() {
               href={google}
               target="_blank"
               rel="noreferrer"
-              className="rounded-xl border border-yellow-400/60 px-6 py-3 text-sm font-bold text-yellow-400 hover:bg-yellow-400 hover:text-zinc-950"
+              className="rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-stone-200 hover:border-white/40"
             >
               Add to Google Calendar
             </a>
@@ -117,7 +130,7 @@ export default async function BramptonThisWeekPage() {
         </div>
       </section>
 
-      <main className="mx-auto max-w-3xl px-4 py-10 space-y-12">
+      <main className="mx-auto max-w-6xl px-4 py-10 space-y-12">
         {thisWeek.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-8 text-center">
             <p className="text-lg font-semibold text-white">No Brampton shows listed for this week yet.</p>
@@ -133,7 +146,7 @@ export default async function BramptonThisWeekPage() {
 
         <section
           id="email-updates"
-          className="rounded-2xl border border-white/10 bg-white/5 px-5 py-7 sm:px-7"
+          className="scroll-mt-32 rounded-2xl border border-white/10 bg-white/5 px-5 py-7 sm:px-7"
         >
           <h2 className="text-center text-2xl font-bold text-white">Email me the lineup</h2>
           <p className="mx-auto mt-2 max-w-md text-center text-sm text-stone-400">

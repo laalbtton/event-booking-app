@@ -26,6 +26,7 @@ import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import { cn } from '@/lib/utils'
 import { NotificationsBellLink } from '@/components/NotificationsBellLink'
+import { AppStoreBadges } from '@/components/AppStoreBadges'
 import { ChevronDown, Download, Filter, Gift, Newspaper } from 'lucide-react'
 import { EventCardSkeleton } from '@/components/skeletons/EventCardSkeleton'
 import { toast } from 'sonner'
@@ -1864,11 +1865,12 @@ export default function Dashboard() {
                 <div>
                   <CardTitle className="text-base sm:text-lg font-semibold text-yellow-700 dark:text-yellow-400">Install app for quicker access</CardTitle>
                   <p className="text-sm text-stone-600 dark:text-stone-300 mt-1">
-                    Add One Mic Stand to your home screen and get 5 free credits.
+                    Download One Mic Stand on the App Store or Google Play.
                   </p>
                 </div>
                 <Download className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
               </div>
+              <AppStoreBadges align="start" label={null} />
               <div className="flex flex-wrap gap-2">
                 <Button onClick={handleInstallFromBanner} disabled={installActionLoading} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-300">
                   {installActionLoading ? 'Opening...' : 'Install App'}

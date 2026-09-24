@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { formatEventDateCardEastern } from '@/lib/dateUtils'
 import type { PerformerEvent } from '@/lib/server/publicContent'
 
 type Props = {
@@ -19,12 +20,7 @@ function EventCard({ event }: { event: PerformerEvent }) {
         {event.title}
       </Link>
       <p className="text-sm text-stone-400 mt-1">
-        {new Date(event.date).toLocaleDateString('en-CA', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-        })}
+        {formatEventDateCardEastern(event.date)}
         {event.location ? ` · ${event.location}` : ' · Venue TBA'}
       </p>
       {event.bookingStatus === 'waitlist' && event.waitlistPosition != null && (

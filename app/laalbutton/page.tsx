@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { EASTERN_TZ, formatEventTimeEastern } from '@/lib/dateUtils'
 import { listPublicEvents, sortPublicEventsForListing } from '@/lib/server/publicContent'
 import { LBIcon, LBIconBadge } from '@/components/laalbutton/LBIcons'
 import { LB_MEDIA } from '@/lib/laalbutton/media'
@@ -24,10 +25,10 @@ const serif = { fontFamily: "'DM Serif Display', Georgia, serif" } as const
 // ── Event card ───────────────────────────────────────────────────────────────
 function EventCard({ event }: { event: Awaited<ReturnType<typeof listPublicEvents>>[number] }) {
   const date = new Date(event.startDate)
-  const day = date.toLocaleDateString('en-CA', { weekday: 'short' })
-  const mon = date.toLocaleDateString('en-CA', { month: 'short' })
-  const num = date.getDate()
-  const time = date.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })
+  const day = date.toLocaleDateString('en-CA', { timeZone: EASTERN_TZ, weekday: 'short' })
+  const mon = date.toLocaleDateString('en-CA', { timeZone: EASTERN_TZ, month: 'short' })
+  const num = date.toLocaleDateString('en-CA', { timeZone: EASTERN_TZ, day: 'numeric' })
+  const time = formatEventTimeEastern(event.startDate)
 
   const href = `/events/${event.slug ?? event.id}`
   const location = event.venue?.name || event.locationText || 'Toronto'

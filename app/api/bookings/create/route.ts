@@ -6,6 +6,7 @@ import { applyVenueCreditGrants } from '@/lib/server/venueCreditGrants'
 import { notifyFollowersOfGig } from '@/lib/server/follows'
 import { promptPerformerAboutOpenRoles } from '@/lib/server/performerRoleNotify'
 import { getAudienceBookingCreditsRequired } from '@/lib/audienceBookingCredits'
+import { isWithinSharePosterSignupWindow, notifyUserToSharePoster } from '@/lib/server/sharePosterNotify'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
     const { data: event, error: eventError } = await supabase
       .from('events')
       .select(
-        'id, title, status, event_type, open_mic_type, variety_use_max_attendees, tickets_enabled, audience_enabled, audience_capacity, audience_deposit_credits, max_attendees, registration_opens_at, venue_id, location, credits_required, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents, food_coupon_expires_hours, date, end_time, thursday_socap_75_push_sent_at'
+        'id, slug, title, status, event_type, open_mic_type, variety_use_max_attendees, tickets_enabled, audience_enabled, audience_capacity, audience_deposit_credits, max_attendees, registration_opens_at, venue_id, location, credits_required, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents, food_coupon_expires_hours, date, end_time, thursday_socap_75_push_sent_at'
       )
       .eq('id', eventId)
       .single()
@@ -490,6 +491,21 @@ export async function POST(request: NextRequest) {
         role: 'performer',
       })
       await promptPerformerAboutOpenRoles(supabase, event.id, authData.user.id)
+    }
+
+    if (bookingStatus === 'confirmed' && isWithinSharePosterSignupWindow(event.date as string)) {
+      try {
+        await notifyUserToSharePoster(supabase, {
+          userId: authData.user.id,
+          eventId: event.id,
+          eventSlug: (event as { slug?: string | null }).slug,
+          eventTitle: event.title as string,
+          role: 'signup',
+          bookingId: booking.id,
+        })
+      } catch (shareErr) {
+        console.warn('share poster notify after booking:', shareErr)
+      }
     }
 
     return NextResponse.json({

@@ -2100,7 +2100,7 @@ export default function ProfilePage() {
                                   <div className="text-xs text-muted-foreground">{row.activity}</div>
                                 </td>
                                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                                  {new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  {formatDate(row.date)}
                                 </td>
                                 <td className="px-4 py-3 text-right text-muted-foreground">
                                   <div className="text-sm">{row.displayAmount > 0 ? '+' : ''}{row.displayAmount}</div>

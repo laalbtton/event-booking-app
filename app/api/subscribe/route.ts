@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { subscribeEmailUpdates } from '@/lib/server/emailSubscribe'
 
-/**
- * Light email signup for This Week in Brampton.
- * Does not award Insider credits — that stays on the membership form.
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
@@ -23,7 +19,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Could not subscribe'
-    console.error('[brampton/subscribe]', message)
+    console.error('[subscribe]', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -11,6 +11,13 @@
  */
 
 import { formatDigestEventDatePartsEastern } from '@/lib/dateUtils'
+import {
+  APP_STORE_BADGE_IMG,
+  APP_STORE_URL,
+  emailAppStoreBadgesHtml,
+  PLAY_STORE_BADGE_IMG,
+  PLAY_STORE_URL,
+} from '@/lib/appStores'
 
 type EmailAttachment = {
   filename: string
@@ -127,7 +134,7 @@ export function getBookingConfirmationEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
         </div>
       </body>
     </html>
@@ -181,7 +188,7 @@ export function getWaitlistPromotionEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
         </div>
       </body>
     </html>
@@ -233,7 +240,7 @@ export function getBookingCancellationEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
         </div>
       </body>
     </html>
@@ -288,7 +295,7 @@ export function getHostCancellationEmail(data: {
     </p>
   </div>
   <div style="text-align:center;margin-top:20px;color:#9ca3af;font-size:12px;">
-    <p>© 2025 One Mic Stand. All rights reserved.</p>
+    ${emailAppStoreBadgesHtml()}
   </div>
 </body>
 </html>`
@@ -332,7 +339,7 @@ export function getCreditPurchaseEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
         </div>
       </body>
     </html>
@@ -385,7 +392,7 @@ export function getEventCancelledEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
         </div>
       </body>
     </html>
@@ -455,7 +462,7 @@ export function getWaitlistPositionEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
         </div>
       </body>
     </html>
@@ -515,7 +522,7 @@ export function getEventReminderEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
         </div>
       </body>
     </html>
@@ -569,7 +576,7 @@ export function getRegistrationOpeningEmail(data: {
         </div>
         
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
         </div>
       </body>
     </html>
@@ -682,7 +689,7 @@ export function getPostEventFeedbackEmail(data: {
 
         <!-- Footer -->
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p style="margin: 0;">© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
           <p style="margin: 4px 0 0 0;">You received this because you attended or performed at one of our events.</p>
         </div>
 
@@ -854,7 +861,7 @@ export function getWeeklyDigestEmail(data: {
           <!-- Legal footer -->
           <tr>
             <td style="text-align:center;">
-              <p style="margin:0; font-size:12px; color:#52525b;">© 2025 One Mic Stand. All rights reserved.</p>
+              ${emailAppStoreBadgesHtml()}
               <p style="margin:4px 0 0 0; font-size:12px; color:#52525b;">
                 You received this because you are a member of at least one community on One Mic Stand.
               </p>
@@ -1030,7 +1037,7 @@ export function getBroadcastWeeklyDigestEmail(data: {
           <!-- Footer -->
           <tr>
             <td style="padding:0 0 24px 0; text-align:center;">
-              <p style="margin:0; font-size:12px; color:#52525b;">© 2025 One Mic Stand. All rights reserved.</p>
+              ${emailAppStoreBadgesHtml()}
               <p style="margin:6px 0 0 0; font-size:12px; color:#52525b;">
                 You received this because you signed up for One Mic Stand.<br>
                 <a href="{{{RESEND_UNSUBSCRIBE_URL}}}"
@@ -1100,7 +1107,7 @@ export function getTicketPurchaseEmail(data: {
           </p>
         </div>
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p style="margin: 0;">© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
         </div>
       </body>
     </html>`
@@ -1150,7 +1157,7 @@ export function getTicketRefundEmail(data: {
           </p>
         </div>
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p style="margin: 0;">© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
         </div>
       </body>
     </html>`
@@ -1198,7 +1205,7 @@ export function getPreEventReminderEmail(data: {
           <p style="font-size: 14px; color: #6b7280; margin: 24px 0 0 0; border-top: 1px solid #f3f4f6; padding-top: 20px; line-height: 1.7;">${data.footer}</p>
         </div>
         <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p style="margin: 0;">© 2025 One Mic Stand. All rights reserved.</p>
+          ${emailAppStoreBadgesHtml()}
           <p style="margin: 4px 0 0 0;">You received this because you have a confirmed registration for this event.</p>
         </div>
       </body>
@@ -1243,8 +1250,77 @@ export function getNewReviewReceivedEmail(data: {
       </div>
     </div>
     <div style="text-align:center;margin-top:20px;color:#9ca3af;font-size:12px;">
-      <p style="margin:0;">© 2025 One Mic Stand. All rights reserved.</p>
+      ${emailAppStoreBadgesHtml()}
     </div>
+  </body>
+</html>`
+}
+
+export function getAppStoresAnnouncementEmail(): string {
+  const apple = APP_STORE_URL
+  const play = PLAY_STORE_URL
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>One Mic Stand is on the App Store and Google Play</title>
+  </head>
+  <body style="margin:0;padding:0;background:#09090b;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#09090b;">
+      <tr>
+        <td align="center" style="padding:28px 12px;">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+            <tr>
+              <td style="padding:28px 28px 12px 28px;text-align:center;">
+                <p style="margin:0;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#fbbf24;font-weight:700;">One Mic Stand</p>
+                <h1 style="margin:14px 0 0 0;font-size:30px;line-height:1.2;color:#fafafa;font-weight:800;">We are live on the App Store and Google Play</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 28px 0 28px;">
+                <p style="margin:0 0 16px 0;font-size:16px;color:#e7e5e4;">Hi {{{FIRST_NAME|there}}},</p>
+                <p style="margin:0 0 16px 0;font-size:15px;line-height:1.7;color:#a8a29e;">
+                  This is a big one. One Mic Stand is now available as a real app on both the
+                  <strong style="color:#fafafa;">Apple App Store</strong> and
+                  <strong style="color:#fafafa;">Google Play</strong>.
+                </p>
+                <p style="margin:0 0 16px 0;font-size:15px;line-height:1.7;color:#a8a29e;">
+                  Browse open mics, book a spot, get reminders, and share posters — all from your phone,
+                  without opening a browser.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:8px 28px 24px 28px;">
+                <a href="${apple}" style="display:inline-block;margin:4px 6px;text-decoration:none;">
+                  <img src="${APP_STORE_BADGE_IMG}" alt="Download on the App Store" height="40" style="height:40px;width:auto;border:0;" />
+                </a>
+                <a href="${play}" style="display:inline-block;margin:4px 6px;text-decoration:none;">
+                  <img src="${PLAY_STORE_BADGE_IMG}" alt="Get it on Google Play" height="58" style="height:58px;width:auto;border:0;margin:-9px 0;" />
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 28px 28px 28px;">
+                <p style="margin:0;font-size:15px;line-height:1.7;color:#a8a29e;">
+                  If you already use the website, download the app and you are in. Same account, same credits, same community.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 28px 32px 28px;text-align:center;">
+                <p style="margin:0;font-size:12px;color:#52525b;">© ${new Date().getFullYear()} One Mic Stand. All rights reserved.</p>
+                <p style="margin:8px 0 0 0;font-size:12px;color:#52525b;">
+                  You received this because you have a One Mic Stand account.<br>
+                  <a href="{{{RESEND_UNSUBSCRIBE_URL}}}" style="color:#78716c;text-decoration:underline;">Unsubscribe</a>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>`
 }

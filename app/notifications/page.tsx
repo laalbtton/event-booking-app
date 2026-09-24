@@ -127,7 +127,7 @@ export default function NotificationsPage() {
       (notification.type === 'host_poster_reminder_5d' || notification.type === 'host_poster_reminder_24h') &&
       notification.related_event_id
     ) {
-      router.push(`/events/${notification.related_event_id}/hosting-info`)
+      router.push(`/events/${notification.related_event_id}?share=poster`)
     } else if (notification.type === 'new_follower') {
       router.push('/feed/following')
     } else if (notification.related_event_id) {
@@ -279,6 +279,8 @@ export default function NotificationsPage() {
       case 'event_updated':
         return 'border-yellow-500 bg-yellow-50'
       case 'event_reminder':
+      case 'host_poster_reminder_5d':
+      case 'host_poster_reminder_24h':
         return 'border-purple-500 bg-purple-50'
       case 'event_creator_request':
         return 'border-amber-500 bg-amber-50'

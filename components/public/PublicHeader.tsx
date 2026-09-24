@@ -61,6 +61,9 @@ export function PublicHeader() {
           <Link href="/communities" className="text-stone-300 hover:text-stone-100 transition-colors">
             Communities
           </Link>
+          <Link href="/download" className="text-stone-300 hover:text-stone-100 transition-colors">
+            Get the app
+          </Link>
         </nav>
 
         <div className="flex items-center gap-2">
@@ -92,6 +95,9 @@ export function PublicHeader() {
         </Link>
         <Link href="/communities" className="shrink-0 text-stone-300 hover:text-stone-100 transition-colors">
           Communities
+        </Link>
+        <Link href="/download" className="shrink-0 text-stone-300 hover:text-stone-100 transition-colors">
+          Get the app
         </Link>
       </div>
     </header>

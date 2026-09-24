@@ -1,21 +1,15 @@
 'use client'
 
 import Link from 'next/link'
+import { formatEventDateCardEastern, formatEventTimeEastern } from '@/lib/dateUtils'
 import type { PublicEventDetails } from '@/lib/server/publicContent'
 
 function formatEventDate(dateIso: string): string {
-  const d = new Date(dateIso)
-  return d.toLocaleDateString('en-CA', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+  return formatEventDateCardEastern(dateIso)
 }
 
 function formatEventTime(dateIso: string): string {
-  const d = new Date(dateIso)
-  return d.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })
+  return formatEventTimeEastern(dateIso)
 }
 
 function getEventTypeLabel(eventType: string | null, openMicType: string | null): string {

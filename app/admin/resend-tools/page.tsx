@@ -17,6 +17,8 @@ export default function AdminResendToolsPage() {
   const [backfillResult, setBackfillResult] = useState<string>('')
   const [digestLoading, setDigestLoading] = useState(false)
   const [digestResult, setDigestResult] = useState<string>('')
+  const [announceLoading, setAnnounceLoading] = useState(false)
+  const [announceResult, setAnnounceResult] = useState<string>('')
 
   const getToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession()
@@ -90,6 +92,32 @@ export default function AdminResendToolsPage() {
     }
   }
 
+  async function handleSendAppAnnouncement() {
+    if (
+      !confirm(
+        'This emails everyone on the Resend audience that One Mic Stand is now on the App Store and Google Play. Send it now?',
+      )
+    ) {
+      return
+    }
+    setAnnounceLoading(true)
+    setAnnounceResult('')
+    try {
+      const token = await getToken()
+      const res = await fetch('/api/admin/send-app-store-announcement', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data?.error) throw new Error(data?.error || `Request failed (${res.status})`)
+      setAnnounceResult(`✅ Announcement sent (id: ${data.broadcastId || 'n/a'}).`)
+    } catch (err) {
+      setAnnounceResult(`❌ ${err instanceof Error ? err.message : 'Send failed'}`)
+    } finally {
+      setAnnounceLoading(false)
+    }
+  }
+
   return (
     <div className="max-w-2xl space-y-6">
       <div>
@@ -132,6 +160,24 @@ export default function AdminResendToolsPage() {
             {digestLoading ? 'Sending…' : 'Send digest now'}
           </Button>
           {digestResult && <p className="text-sm text-gray-700">{digestResult}</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Mail className="h-4 w-4" /> App Store + Google Play announcement
+          </CardTitle>
+          <CardDescription>
+            One-time milestone email to the full Resend audience with App Store and Google Play download badges.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button onClick={handleSendAppAnnouncement} disabled={announceLoading}>
+            <Send className="h-4 w-4" />
+            {announceLoading ? 'Sending…' : 'Send store announcement'}
+          </Button>
+          {announceResult && <p className="text-sm text-gray-700">{announceResult}</p>}
         </CardContent>
       </Card>
     </div>

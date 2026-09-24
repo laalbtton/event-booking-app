@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { EASTERN_TZ } from '@/lib/dateUtils'
 import { listUpcomingSeriesEvents } from '@/lib/laalbutton/seriesEventLookup'
 import { LBIconBadge } from '@/components/laalbutton/LBIcons'
 import { LB_MEDIA } from '@/lib/laalbutton/media'
@@ -127,6 +128,7 @@ export default async function RotiKapdaAurComedyPage() {
               >
                 <p className="text-xs text-[#6b5030] mb-1">
                   {new Date(e.startDate).toLocaleDateString('en-CA', {
+                    timeZone: EASTERN_TZ,
                     weekday: 'long',
                     year: 'numeric',
                     month: 'long',

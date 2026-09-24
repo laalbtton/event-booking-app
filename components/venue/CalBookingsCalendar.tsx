@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { useSwipeNavigate } from '@/lib/hooks/useSwipeNavigate'
+import { EASTERN_TZ, formatEventTimeEastern, getEasternCalendarDateString } from '@/lib/dateUtils'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -84,25 +85,34 @@ function getMonthCells(year: number, month: number) {
 }
 
 function minsFromMidnight(iso: string): number {
-  const d = new Date(iso)
-  return d.getHours() * 60 + d.getMinutes()
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: EASTERN_TZ,
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  }).formatToParts(new Date(iso))
+  const hourRaw = Number(parts.find((p) => p.type === 'hour')?.value ?? 0)
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0)
+  const hour = hourRaw === 24 ? 0 : hourRaw
+  return hour * 60 + minute
 }
 
 function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
+  return formatEventTimeEastern(iso)
 }
 
 function fmtDateFull(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
+    timeZone: EASTERN_TZ,
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   })
+}
+
+function localDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function bookingChipCls(b: BookingEntry): string {
@@ -195,7 +205,8 @@ export function CalBookingsCalendar({ venueId, showDetails = false }: Props) {
   )
 
   function bookingsOn(day: Date): BookingEntry[] {
-    return bookings.filter((b) => isSameDay(new Date(b.startTime), day))
+    const dayKey = localDateKey(day)
+    return bookings.filter((b) => getEasternCalendarDateString(b.startTime) === dayKey)
   }
 
   const totalSlots = (HOUR_END - HOUR_START) * 2

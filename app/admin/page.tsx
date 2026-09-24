@@ -48,7 +48,7 @@ export default function AdminPage() {
             <SettingsListRow href="/admin/communities" icon={Globe} title="Communities" description="Manage communities" />
           </div>
           <div className="px-4 py-1 pb-2">
-            <SettingsListRow href="/admin/resend-tools" icon={Mail} title="Resend Tools" description="Backfill audience & send digest" />
+            <SettingsListRow href="/admin/resend-tools" icon={Mail} title="Resend Tools" description="Backfill audience, digest, and store announcement" />
           </div>
         </CardContent>
       </Card>

@@ -932,7 +932,7 @@ export function CommunityInteractive({
                     <div>
                       <p className="text-sm font-medium">{ev.title}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {new Date(ev.date).toLocaleDateString('en-CA', { dateStyle: 'medium' })}
+                        {new Date(ev.date).toLocaleDateString('en-CA', { timeZone: 'America/New_York', dateStyle: 'medium' })}
                         {ev.profiles?.full_name ? ` · by ${ev.profiles.full_name}` : ''}
                       </p>
                     </div>

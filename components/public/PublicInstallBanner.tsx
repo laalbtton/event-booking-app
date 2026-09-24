@@ -7,6 +7,7 @@ import {
   hasDeferredInstallPrompt,
   triggerDeferredInstallPrompt,
 } from '@/lib/installPromptClient'
+import { AppStoreBadges } from '@/components/AppStoreBadges'
 
 const DISMISS_KEY = 'public_install_banner_dismissed'
 
@@ -65,17 +66,18 @@ export function PublicInstallBanner() {
               </button>
             </div>
           ) : (
-            <div className="text-sm space-y-1">
+            <div className="text-sm space-y-2">
               <p className="font-medium text-stone-200">Get the app</p>
               <p className="text-stone-400 text-xs">
-                Add One Mic Stand to your home screen for the best experience — no app store required.
+                One Mic Stand is on the App Store and Google Play.
               </p>
+              <AppStoreBadges align="start" label={null} />
               <button
                 type="button"
                 onClick={handleInstall}
                 className="text-xs font-medium text-yellow-400 underline hover:text-yellow-300 mt-1"
               >
-                {platform === 'ios' ? 'Show me how' : 'Add to Home Screen'}
+                {platform === 'ios' ? 'Or add from Safari' : 'Or add to Home Screen'}
               </button>
             </div>
           )}

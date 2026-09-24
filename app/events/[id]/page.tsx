@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/dateUtils'
@@ -36,10 +36,12 @@ import {
   resolveEventDisplayPosterUrl,
 } from '@/lib/eventPosterDefaults'
 import { getAudienceCreditsToDebit } from '@/lib/audienceBookingCredits'
+import { PosterShareActions } from '@/components/PosterShareActions'
 
 
 type EventDetails = {
   id: string
+  slug?: string | null
   title: string
   description: string
   theme: string | null
@@ -147,6 +149,8 @@ export default function EventDetailsPage() {
   const [varietyOptions, setVarietyOptions] = useState<VarietyArtOption[]>([])
   const [selectedVarietyOptionId, setSelectedVarietyOptionId] = useState('')
   const [posterExpanded, setPosterExpanded] = useState(false)
+  const [sharePosterMode, setSharePosterMode] = useState(false)
+  const posterSectionRef = useRef<HTMLDivElement>(null)
   const [showChat, setShowChat] = useState(false)
   const [chatNotifEnabled, setChatNotifEnabled] = useState(false)
   const [ticketInfo, setTicketInfo] = useState<{ name: string; price_cents: number; quantity: number; sold: number } | null>(null)
@@ -313,27 +317,6 @@ export default function EventDetailsPage() {
     return match?.name || null
   }
 
-  async function sharePoster() {
-    const posterUrl = getDisplayPosterUrl()
-    if (!event || !posterUrl) return
-    const absolute =
-      absolutizePosterUrl(posterUrl, typeof window !== 'undefined' ? window.location.origin : '') ||
-      posterUrl
-    try {
-      if (typeof navigator !== 'undefined' && navigator.share) {
-        await navigator.share({
-          title: `${event.title} poster`,
-          text: event.poster_caption || `Check out this event poster for ${event.title}`,
-          url: absolute,
-        })
-        return
-      }
-      copyPosterLink()
-    } catch {
-      copyPosterLink()
-    }
-  }
-
   async function toggleEventAutoPost(enabled: boolean) {
     try {
       setPrefLoading(true)
@@ -422,7 +405,16 @@ export default function EventDetailsPage() {
       const clean = window.location.pathname
       window.history.replaceState({}, '', clean)
     }
+    if (params.get('share') === 'poster') {
+      setSharePosterMode(true)
+      setPosterExpanded(true)
+    }
   }, [])
+
+  useEffect(() => {
+    if (!sharePosterMode || loading) return
+    posterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [sharePosterMode, loading])
 
   async function loadEventDetails() {
     setLoading(true)
@@ -473,7 +465,8 @@ export default function EventDetailsPage() {
       setEvent(eventData)
       const resolvedEventId = eventData.id as string
       if ((eventData as any).slug && eventId !== (eventData as any).slug) {
-        router.replace(`/events/${(eventData as any).slug}`)
+        const search = typeof window !== 'undefined' ? window.location.search : ''
+        router.replace(`/events/${(eventData as any).slug}${search}`)
       }
 
       // Load recurrence description if this is part of a series
@@ -1056,15 +1049,38 @@ export default function EventDetailsPage() {
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="-mx-4 sm:mx-0">
         {/* Poster Section - at top, collapsible caption + buttons */}
-        {displayPosterUrl && (
-          <Card className="mb-6 rounded-none sm:rounded-lg border-x-0 sm:border-x">
+        {(displayPosterUrl || sharePosterMode) && (
+          <Card
+            ref={posterSectionRef}
+            id="event-poster"
+            className="mb-6 rounded-none sm:rounded-lg border-x-0 sm:border-x"
+          >
             <CardContent className="p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={displayPosterUrl}
-                alt={`${event.title} poster`}
-                className="w-full max-h-[500px] object-contain rounded border bg-muted/30"
-              />
+              {displayPosterUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={displayPosterUrl}
+                  alt={`${event.title} poster`}
+                  className="w-full max-h-[500px] object-contain rounded border bg-muted/30"
+                />
+              )}
+              {sharePosterMode && (
+                <div className="mt-4 space-y-3 rounded-lg border border-yellow-400/40 bg-yellow-400/10 p-3">
+                  <p className="text-sm font-semibold text-foreground">Share this poster</p>
+                  <p className="text-xs text-muted-foreground">
+                    One tap opens your share sheet. WhatsApp is always available even when it is missing from the list.
+                  </p>
+                  <PosterShareActions
+                    emphasize
+                    eventIdOrSlug={event.slug || event.id}
+                    title={event.title}
+                    caption={event.poster_caption}
+                    eventDate={event.date}
+                    location={venue ? `${venue.name}${venue.city ? `, ${venue.city}` : ''}` : event.location}
+                    posterUrl={displayPosterHref || displayPosterUrl}
+                  />
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setPosterExpanded((prev) => !prev)}
@@ -1082,12 +1098,21 @@ export default function EventDetailsPage() {
                   {event.poster_caption && (
                     <p className="text-sm text-muted-foreground whitespace-pre-wrap">{event.poster_caption}</p>
                   )}
+                  {!sharePosterMode && (
+                    <PosterShareActions
+                      eventIdOrSlug={event.slug || event.id}
+                      title={event.title}
+                      caption={event.poster_caption}
+                      eventDate={event.date}
+                      location={venue ? `${venue.name}${venue.city ? `, ${venue.city}` : ''}` : event.location}
+                      posterUrl={displayPosterHref || displayPosterUrl}
+                    />
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <a href={displayPosterHref || displayPosterUrl} target="_blank" rel="noreferrer" download>
                       <Button variant="outline" size="sm">Download</Button>
                     </a>
                     <Button variant="outline" size="sm" onClick={copyPosterLink}>Copy Link</Button>
-                    <Button variant="outline" size="sm" onClick={sharePoster}>Share</Button>
                     {event.poster_url && (userBooking || isHost || isEventCreator) && (
                       <Button
                         variant={eventAutoPostEnabled ? 'default' : 'outline'}

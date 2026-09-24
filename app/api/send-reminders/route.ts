@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/notifications'
 import { sendEventReminderEmail } from '@/lib/emailService'
 import { sendPushToUser } from '@/lib/server/push'
+import { notifyUserToSharePoster, sharePosterDeepLink } from '@/lib/server/sharePosterNotify'
 
 // Service role key for server-side operations (bypasses RLS). Built per request
 // rather than at import so `next build` can load this route without env vars.
@@ -215,81 +216,91 @@ export async function GET(request: NextRequest) {
     const twoWeeksAhead = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
     const { data: upcomingHostEvents, error: hostEventsError } = await supabase
       .from('events')
-      .select('id, title, date, host_user_id, created_by, status')
+      .select('id, slug, title, date, host_user_id, created_by, status')
       .gte('date', now.toISOString())
       .lte('date', twoWeeksAhead.toISOString())
       .not('status', 'in', '("cancelled","archived","draft","private","pending_approval")')
 
+    let signupPosterNudge = 0
+
     if (!hostEventsError && upcomingHostEvents?.length) {
       for (const ev of upcomingHostEvents) {
         const hostId = (ev.host_user_id as string | null) || (ev.created_by as string | null)
-        if (!hostId) continue
-
         const eventDate = new Date(ev.date as string)
         if (Number.isNaN(eventDate.getTime())) continue
         const hoursUntil = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60)
+        const sharePath = sharePosterDeepLink((ev.slug as string | null) || ev.id)
 
-        const sendHostPosterReminder = async (
-          type: 'host_poster_reminder_5d' | 'host_poster_reminder_24h',
-          bucket: 'five' | 'dayBefore'
-        ) => {
+        if (hostId && hoursUntil >= 100 && hoursUntil <= 150) {
           const { data: existing } = await supabase
             .from('notifications')
             .select('id')
             .eq('user_id', hostId)
             .eq('related_event_id', ev.id)
-            .eq('type', type)
+            .eq('type', 'host_poster_reminder_5d')
             .maybeSingle()
 
-          if (existing) return
-
-          const title =
-            type === 'host_poster_reminder_5d'
-              ? 'Time to share your event poster'
-              : 'Share your event poster'
-          const message =
-            type === 'host_poster_reminder_5d'
-              ? `"${ev.title}" is about five days away. Share your event poster to build attendance.`
-              : `"${ev.title}" is about a day away. Share your event poster again so it stays top of mind.`
-
-          const { error: insErr } = await supabase.from('notifications').insert({
-            user_id: hostId,
-            type,
-            title,
-            message,
-            related_event_id: ev.id,
-            related_booking_id: null,
-          })
-
-          if (insErr) {
-            console.error('host poster reminder insert:', insErr)
-            return
+          if (!existing) {
+            const title = 'Time to share your event poster'
+            const message = `"${ev.title}" is about five days away. Tap to open the poster and share it in one tap.`
+            const { error: insErr } = await supabase.from('notifications').insert({
+              user_id: hostId,
+              type: 'host_poster_reminder_5d',
+              title,
+              message,
+              related_event_id: ev.id,
+              related_booking_id: null,
+            })
+            if (!insErr) {
+              hostPosterFiveDay += 1
+              try {
+                await sendPushToUser(
+                  supabase,
+                  hostId,
+                  { title, body: message, data: { url: sharePath, route: sharePath } },
+                  'event_reminders'
+                )
+              } catch (pushErr) {
+                console.error('host poster 5d push:', pushErr)
+              }
+            }
           }
-
-          try {
-            await sendPushToUser(
-              supabase,
-              hostId,
-              {
-                title,
-                body: message,
-                data: { url: `/events/${ev.id}/hosting-info` },
-              },
-              'event_reminders'
-            )
-          } catch (pushErr) {
-            console.error('host poster push:', pushErr)
-          }
-
-          if (bucket === 'five') hostPosterFiveDay += 1
-          else hostPosterTwentyFourHour += 1
         }
 
-        if (hoursUntil >= 100 && hoursUntil <= 150) {
-          await sendHostPosterReminder('host_poster_reminder_5d', 'five')
-        }
         if (hoursUntil >= 18 && hoursUntil <= 36) {
-          await sendHostPosterReminder('host_poster_reminder_24h', 'dayBefore')
+          if (hostId) {
+            const sent = await notifyUserToSharePoster(supabase, {
+              userId: hostId,
+              eventId: ev.id,
+              eventSlug: ev.slug as string | null,
+              eventTitle: ev.title as string,
+              role: 'host',
+            })
+            if (sent) hostPosterTwentyFourHour += 1
+          }
+
+          const { data: signups, error: signupErr } = await supabase
+            .from('bookings')
+            .select('id, user_id')
+            .eq('event_id', ev.id)
+            .eq('status', 'confirmed')
+
+          if (signupErr) {
+            console.error('share poster signups query:', signupErr)
+          } else {
+            for (const booking of signups || []) {
+              if (!booking.user_id || booking.user_id === hostId) continue
+              const sent = await notifyUserToSharePoster(supabase, {
+                userId: booking.user_id,
+                eventId: ev.id,
+                eventSlug: ev.slug as string | null,
+                eventTitle: ev.title as string,
+                role: 'signup',
+                bookingId: booking.id,
+              })
+              if (sent) signupPosterNudge += 1
+            }
+          }
         }
       }
     } else if (hostEventsError) {
@@ -302,9 +313,10 @@ export async function GET(request: NextRequest) {
       hostPosterReminders: {
         fiveDay: hostPosterFiveDay,
         twentyFourHour: hostPosterTwentyFourHour,
+        signupShare: signupPosterNudge,
       },
       errors: errors.length > 0 ? errors : undefined,
-      message: `Sent ${remindersSent} attendee reminder${remindersSent !== 1 ? 's' : ''}; ${hostPosterFiveDay + hostPosterTwentyFourHour} host poster nudge(s)`,
+      message: `Sent ${remindersSent} attendee reminder${remindersSent !== 1 ? 's' : ''}; ${hostPosterFiveDay + hostPosterTwentyFourHour} host poster nudge(s); ${signupPosterNudge} signup share nudge(s)`,
     })
   } catch (error: any) {
     console.error('Error in send-reminders route:', error)

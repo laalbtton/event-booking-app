@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { EASTERN_TZ } from '@/lib/dateUtils'
 import { listUpcomingSeriesEvents } from '@/lib/laalbutton/seriesEventLookup'
 import { LBFeatureRow } from '@/components/laalbutton/LBIcons'
 import { LB_MEDIA } from '@/lib/laalbutton/media'
@@ -152,7 +153,7 @@ export default async function PunjabisInTechPage() {
                 className="block rounded-xl border border-[#2a1a0e] bg-[#120c06] hover:border-[#f5a623]/40 p-5 transition-all"
               >
                 <p className="text-xs text-[#6b5030] mb-1">
-                  {new Date(e.startDate).toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  {new Date(e.startDate).toLocaleDateString('en-CA', { timeZone: EASTERN_TZ, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
                 <p className="font-bold text-[#e8d9c4] text-sm">{e.title}</p>
               </Link>
