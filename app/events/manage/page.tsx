@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/lib/supabase'
@@ -17,18 +17,27 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
-import { QrCode, Link as LinkIcon, Image as ImageIcon, Trash2, MoreVertical, Copy, Edit, X, Users } from 'lucide-react'
+import { QrCode, Link as LinkIcon, Image as ImageIcon, Trash2, MoreVertical, Copy, Edit, X, Users, CalendarDays, LayoutList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { appendSlugSuffix, buildEventSlugBase } from '@/lib/seo/slug'
 import { MAX_CAPTION_CHARS } from '@/lib/posterCaption'
 import { savePosterUpdate, uploadPosterImage, validatePosterFile } from '@/lib/posterUpload'
 import { toast } from 'sonner'
 import RecurrencePicker, { type RecurrenceConfig } from '@/components/RecurrencePicker'
+import { EventsMonthCalendar } from '@/components/EventsMonthCalendar'
+import { CancelEventDialog, type SeriesCancelScope } from '@/components/CancelEventDialog'
 
 type Venue = {
   id: string
   name: string
   address: string
+}
+
+function matchesManageListTab(event: Event, tab: 'upcoming' | 'past') {
+  const cancelled = event.status === 'cancelled'
+  const isFuture = new Date(event.date) >= new Date()
+  if (tab === 'upcoming') return isFuture && !cancelled
+  return !isFuture || cancelled
 }
 
 export default function EventManagementPage() {
@@ -41,6 +50,9 @@ export default function EventManagementPage() {
   const [submitting, setSubmitting] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
+  const [eventsView, setEventsView] = useState<'list' | 'calendar'>('list')
+  const [cancelTarget, setCancelTarget] = useState<Event | null>(null)
+  const [cancelling, setCancelling] = useState(false)
   const [venues, setVenues] = useState<Venue[]>([])
   const [posterUploadingId, setPosterUploadingId] = useState<string | null>(null)
   const [posterCaptionDraft, setPosterCaptionDraft] = useState<{
@@ -1186,18 +1198,15 @@ export default function EventManagementPage() {
     }
   }
 
-  async function handleCancelEvent(eventId: string, eventTitle: string) {
-    const shouldProceed = await confirm({
-      title: 'Cancel event?',
-      message: `Cancel "${eventTitle}" and refund all attendees? This cannot be undone.`,
-      confirmText: 'Yes, cancel event',
-      cancelText: 'Keep event',
-      variant: 'destructive',
-    })
-    if (!shouldProceed) {
-      return
-    }
+  async function handleCancelEvent(event: Event) {
+    setOpenMenuId(null)
+    setCancelTarget(event)
+  }
 
+  async function submitCancelEvent(scope: SeriesCancelScope) {
+    if (!cancelTarget) return
+
+    setCancelling(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
@@ -1208,7 +1217,10 @@ export default function EventManagementPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ eventId }),
+        body: JSON.stringify({
+          eventId: cancelTarget.id,
+          seriesScope: cancelTarget.series_id ? scope : 'this',
+        }),
       })
 
       if (!response.ok) {
@@ -1219,14 +1231,23 @@ export default function EventManagementPage() {
       const data = await response.json()
       if (data.alreadyCancelled) {
         toast.info('This event is already cancelled.')
+        setCancelTarget(null)
         return
       }
 
-      toast.success('Event cancelled and refunds processed.')
+      const cancelledEvents = Number(data.cancelledEvents || 1)
+      toast.success(
+        cancelledEvents > 1
+          ? `${cancelledEvents} events cancelled and refunds processed.`
+          : 'Event cancelled and refunds processed.'
+      )
+      setCancelTarget(null)
       loadEvents()
     } catch (error: any) {
       console.error('Error cancelling event:', error)
       toast.error('Error: ' + error.message)
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -1441,6 +1462,36 @@ export default function EventManagementPage() {
     }
   }
 
+  const calendarItems = useMemo(
+    () =>
+      events
+        .filter((event) => event.status !== 'cancelled')
+        .map((event) => {
+        const vid = event.venue_id
+        const venueName = vid ? venues.find((v) => v.id === vid)?.name : null
+        const venueLine =
+          venueName ||
+          (event.location || '').split(',')[0]?.trim() ||
+          event.location ||
+          'Venue'
+        const badge =
+          event.status === 'cancelled'
+            ? 'Cancelled'
+            : event.status === 'pending_approval'
+              ? 'Pending'
+              : undefined
+        return {
+          id: event.id,
+          title: event.title,
+          startDate: event.date,
+          href: `/events/manage/${event.id}`,
+          subtitle: venueLine,
+          badge,
+        }
+      }),
+    [events, venues]
+  )
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background pb-20">
@@ -1472,26 +1523,64 @@ export default function EventManagementPage() {
           </Button>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs + list/calendar toggle */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'upcoming' | 'past')} className="mb-6">
-          <TabsList>
-            <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
-            <TabsTrigger value="past">Past Events</TabsTrigger>
-          </TabsList>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {eventsView === 'list' ? (
+              <TabsList>
+                <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
+                <TabsTrigger value="past">Past Events</TabsTrigger>
+              </TabsList>
+            ) : (
+              <p className="text-sm text-muted-foreground">Past and upcoming events on one calendar</p>
+            )}
+            <div
+              className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5 shrink-0 self-start"
+              role="tablist"
+              aria-label="Events view"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={eventsView === 'list'}
+                onClick={() => setEventsView('list')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-md px-3 h-9 text-sm font-medium transition-colors',
+                  eventsView === 'list'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <LayoutList className="h-4 w-4" />
+                List
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={eventsView === 'calendar'}
+                onClick={() => setEventsView('calendar')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-md px-3 h-9 text-sm font-medium transition-colors',
+                  eventsView === 'calendar'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <CalendarDays className="h-4 w-4" />
+                Calendar
+              </button>
+            </div>
+          </div>
 
-          {/* Events Grid */}
+          {eventsView === 'calendar' ? (
+            <div className="mt-6">
+              <EventsMonthCalendar events={calendarItems} />
+            </div>
+          ) : (
           <TabsContent value={activeTab} className="mt-6">
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {events
-                .filter((event) => {
-                  const eventDate = new Date(event.date)
-                  const now = new Date()
-                  if (activeTab === 'upcoming') {
-                    return eventDate >= now
-                  } else {
-                    return eventDate < now
-                  }
-                })
+                .filter((event) => matchesManageListTab(event, activeTab))
                 .sort((a, b) => {
                   const dateA = new Date(a.date).getTime()
                   const dateB = new Date(b.date).getTime()
@@ -1670,7 +1759,7 @@ export default function EventManagementPage() {
                                     className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-destructive hover:bg-muted"
                                     onClick={() => {
                                       setOpenMenuId(null)
-                                      void handleCancelEvent(event.id, event.title)
+                                      void handleCancelEvent(event)
                                     }}
                                   >
                                     <X className="h-4 w-4" />
@@ -1687,15 +1776,7 @@ export default function EventManagementPage() {
                 })}
             </div>
 
-            {events.filter((event) => {
-              const eventDate = new Date(event.date)
-              const now = new Date()
-              if (activeTab === 'upcoming') {
-                return eventDate >= now
-              } else {
-                return eventDate < now
-              }
-            }).length === 0 && (
+            {events.filter((event) => matchesManageListTab(event, activeTab)).length === 0 && (
               <Card className="shadow-sm">
                 <CardContent className="p-8 text-center">
                   <p className="text-lg font-medium text-muted-foreground">
@@ -1707,7 +1788,19 @@ export default function EventManagementPage() {
               </Card>
             )}
           </TabsContent>
+          )}
         </Tabs>
+
+        <CancelEventDialog
+          open={!!cancelTarget}
+          eventTitle={cancelTarget?.title || ''}
+          isSeries={!!cancelTarget?.series_id}
+          submitting={cancelling}
+          onOpenChange={(open) => {
+            if (!open && !cancelling) setCancelTarget(null)
+          }}
+          onConfirm={(scope) => void submitCancelEvent(scope)}
+        />
 
         {/* Create Event Modal */}
         {showCreateForm && (

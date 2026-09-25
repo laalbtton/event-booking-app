@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils'
 import { MAX_CAPTION_CHARS } from '@/lib/posterCaption'
 import { savePosterUpdate, uploadPosterImage, validatePosterFile } from '@/lib/posterUpload'
 import { toast } from 'sonner'
+import { CancelEventDialog, type SeriesCancelScope } from '@/components/CancelEventDialog'
 
 type Venue = { id: string; name: string; address: string }
 
@@ -83,6 +84,8 @@ export default function EventManageDetailPage() {
     { id: string; full_name: string | null }[]
   >([])
   const [showChangeHostModal, setShowChangeHostModal] = useState(false)
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [selectedNewHostId, setSelectedNewHostId] = useState('')
   const [changingHost, setChangingHost] = useState(false)
 
@@ -325,14 +328,12 @@ export default function EventManageDetailPage() {
 
   async function handleCancelEvent() {
     if (!event) return
-    const shouldProceed = await confirm({
-      title: 'Cancel event?',
-      message: `Cancel "${event.title}" and refund all attendees? This cannot be undone.`,
-      confirmText: 'Yes, cancel event',
-      cancelText: 'Keep event',
-      variant: 'destructive',
-    })
-    if (!shouldProceed) return
+    setShowCancelDialog(true)
+  }
+
+  async function submitCancelEvent(scope: SeriesCancelScope) {
+    if (!event) return
+    setCancelling(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
@@ -342,7 +343,10 @@ export default function EventManageDetailPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ eventId: event.id }),
+        body: JSON.stringify({
+          eventId: event.id,
+          seriesScope: event.series_id ? scope : 'this',
+        }),
       })
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
@@ -351,12 +355,21 @@ export default function EventManageDetailPage() {
       const data = await response.json()
       if (data.alreadyCancelled) {
         toast.info('This event is already cancelled.')
+        setShowCancelDialog(false)
         return
       }
-      toast.success('Event cancelled and refunds processed.')
+      const cancelledEvents = Number(data.cancelledEvents || 1)
+      toast.success(
+        cancelledEvents > 1
+          ? `${cancelledEvents} events cancelled and refunds processed.`
+          : 'Event cancelled and refunds processed.'
+      )
+      setShowCancelDialog(false)
       router.push('/events/manage')
     } catch (error: any) {
       toast.error(error.message || 'Failed to cancel')
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -752,6 +765,19 @@ export default function EventManageDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {event && (
+        <CancelEventDialog
+          open={showCancelDialog}
+          eventTitle={event.title}
+          isSeries={!!event.series_id}
+          submitting={cancelling}
+          onOpenChange={(open) => {
+            if (!open && !cancelling) setShowCancelDialog(false)
+          }}
+          onConfirm={(scope) => void submitCancelEvent(scope)}
+        />
+      )}
     </div>
   )
 }
