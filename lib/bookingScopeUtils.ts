@@ -11,6 +11,13 @@ export function isAudienceBookingScope(scope: BookingScopeLike): boolean {
   return scope === 'audience'
 }
 
+export function userIsEventHost(
+  event: { host_user_id?: string | null },
+  userId: string | null | undefined
+): boolean {
+  return !!userId && !!event.host_user_id && event.host_user_id === userId
+}
+
 export function userIntendsAudienceBooking(userRole: string | null | undefined): boolean {
   return userRole === 'audience'
 }

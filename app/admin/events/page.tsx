@@ -184,7 +184,7 @@ export default function AdminEventsPage() {
         slots: Number(item.slot_capacity || 0),
       }))
       .filter((item) => item.name.length > 0)
-    if (normalized.length === 0) return { ok: false, error: 'Add at least one art type for variety open mic.' }
+    if (normalized.length === 0) return { ok: true }
     if (normalized.length > 5) return { ok: false, error: 'You can add up to 5 art types.' }
     if (!formData.variety_use_max_attendees && normalized.some((item) => !Number.isFinite(item.slots) || item.slots < 1)) {
       return { ok: false, error: 'Each art type needs at least 1 slot.' }
@@ -211,6 +211,9 @@ export default function AdminEventsPage() {
       }))
       .filter((item) => item.art_type_name.length > 0)
       .slice(0, 5)
+    if (cleaned.length === 0) {
+      cleaned.push({ art_type_name: 'Open', slot_capacity: maxAttendeesForVariety })
+    }
     const { error: deleteError } = await supabase.from('event_art_types').delete().eq('event_id', eventId)
     if (deleteError) return new Error(deleteError.message)
     if (cleaned.length > 0) {

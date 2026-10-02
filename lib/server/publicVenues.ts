@@ -43,6 +43,7 @@ export async function listPublicVenues(): Promise<PublicVenue[]> {
       .select(
         'id, slug, name, address, city, region, country, description, google_review_url, website_url, parking_options, accessibility, food_drinks_available, drinks_available',
       )
+      .eq('status', 'approved')
       .order('name', { ascending: true }),
     supabase
       .from('events')

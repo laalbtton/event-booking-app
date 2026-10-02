@@ -24,13 +24,23 @@ type FilterState = {
   free: string
 }
 
-export function PublicEventsFilters() {
+type Props = {
+  basePath?: string
+  defaultCity?: string
+  defaultDate?: string
+}
+
+export function PublicEventsFilters({
+  basePath = '/events',
+  defaultCity = '',
+  defaultDate = '',
+}: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
   const [filters, setFilters] = useState<FilterState>({
-    city: searchParams.get('city') || '',
-    datePreset: searchParams.get('date') || '',
+    city: searchParams.get('city') || defaultCity,
+    datePreset: searchParams.get('date') || defaultDate,
     eventType: searchParams.get('type') || '',
     free: searchParams.get('free') || '',
   })
@@ -51,9 +61,9 @@ export function PublicEventsFilters() {
       if (sort === 'near' || sort === 'venue') params.set('sort', sort)
       if (searchParams.get('view') === 'calendar') params.set('view', 'calendar')
       const qs = params.toString()
-      router.push(qs ? `/events?${qs}` : '/events', { scroll: false })
+      router.push(qs ? `${basePath}?${qs}` : basePath, { scroll: false })
     },
-    [router, searchParams]
+    [router, searchParams, basePath]
   )
 
   function update(key: keyof FilterState, value: string) {
@@ -68,14 +78,14 @@ export function PublicEventsFilters() {
   }
 
   function clearAll() {
-    const cleared: FilterState = { city: '', datePreset: '', eventType: '', free: '' }
+    const cleared: FilterState = {
+      city: defaultCity,
+      datePreset: defaultDate,
+      eventType: '',
+      free: '',
+    }
     setFilters(cleared)
-    const sort = searchParams.get('sort')
-    const params = new URLSearchParams()
-    if (sort === 'near' || sort === 'venue') params.set('sort', sort)
-    if (searchParams.get('view') === 'calendar') params.set('view', 'calendar')
-    const qs = params.toString()
-    router.push(qs ? `/events?${qs}` : '/events', { scroll: false })
+    applyFilters(cleared)
   }
 
   useEffect(() => {

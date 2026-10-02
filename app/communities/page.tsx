@@ -5,7 +5,7 @@ import { buildCommunityListMetadata } from '@/lib/seo/metadata'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { CommunitiesTabs } from './CommunitiesTabs'
 
-export const revalidate = 300
+export const dynamic = 'force-dynamic'
 
 export async function generateMetadata(): Promise<Metadata> {
   return buildCommunityListMetadata()

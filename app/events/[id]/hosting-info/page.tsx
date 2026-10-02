@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChevronLeft, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import EventRecapPhotos from '@/components/EventRecapPhotos'
 
 type EventRow = {
   id: string
@@ -231,6 +232,8 @@ export default function HostingInfoPage() {
             ))}
           </CardContent>
         </Card>
+
+        {event.id && <EventRecapPhotos eventId={event.id} />}
 
         <div className="flex flex-wrap gap-3">
           <Button asChild variant="default">

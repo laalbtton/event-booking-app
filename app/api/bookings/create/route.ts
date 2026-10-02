@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     const { data: event, error: eventError } = await supabase
       .from('events')
       .select(
-        'id, slug, title, status, event_type, open_mic_type, variety_use_max_attendees, tickets_enabled, audience_enabled, audience_capacity, audience_deposit_credits, max_attendees, registration_opens_at, venue_id, location, credits_required, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents, food_coupon_expires_hours, date, end_time, thursday_socap_75_push_sent_at'
+        'id, slug, title, status, event_type, open_mic_type, variety_use_max_attendees, tickets_enabled, audience_enabled, audience_capacity, audience_deposit_credits, max_attendees, registration_opens_at, venue_id, location, credits_required, food_coupon_enabled, spot_fee_credits, food_coupon_value_cents, food_coupon_expires_hours, date, end_time, thursday_socap_75_push_sent_at, host_user_id, created_by'
       )
       .eq('id', eventId)
       .single()
@@ -102,6 +102,13 @@ export async function POST(request: NextRequest) {
     }
     if (event.registration_opens_at && new Date() < new Date(event.registration_opens_at)) {
       return NextResponse.json({ error: 'Registration is not open yet' }, { status: 400 })
+    }
+
+    if (event.host_user_id === authData.user.id) {
+      return NextResponse.json(
+        { error: "You're hosting this event, so you don't need to book a performer slot." },
+        { status: 400 }
+      )
     }
 
     if (profile.role === 'audience' && !event.audience_enabled) {
@@ -167,26 +174,35 @@ export async function POST(request: NextRequest) {
     const requiresArtTypeSelection = !isAudienceBooking && isVarietyOpenMic
     let selectedArtTypeId: string | null = null
     let selectedArtTypeCapacity: number | null = null
+    let varietyHasConfiguredSlots = false
 
     if (requiresArtTypeSelection) {
-      if (!eventArtTypeId || typeof eventArtTypeId !== 'string') {
-        return NextResponse.json({ error: 'Please select an art type before booking.' }, { status: 400 })
-      }
-      const { data: artTypeRow, error: artTypeError } = await supabase
+      const { data: configuredTypes, error: configuredTypesError } = await supabase
         .from('event_art_types')
         .select('id, slot_capacity')
-        .eq('id', eventArtTypeId)
         .eq('event_id', event.id)
-        .maybeSingle()
-      if (artTypeError || !artTypeRow) {
-        return NextResponse.json({ error: 'Invalid art type selected for this event.' }, { status: 400 })
+
+      if (configuredTypesError) {
+        return NextResponse.json({ error: configuredTypesError.message }, { status: 500 })
       }
-      selectedArtTypeId = artTypeRow.id
-      selectedArtTypeCapacity = Number(artTypeRow.slot_capacity || 0)
+
+      varietyHasConfiguredSlots = (configuredTypes || []).length > 0
+
+      if (varietyHasConfiguredSlots) {
+        if (!eventArtTypeId || typeof eventArtTypeId !== 'string') {
+          return NextResponse.json({ error: 'Please select an art type before booking.' }, { status: 400 })
+        }
+        const artTypeRow = (configuredTypes || []).find((row) => row.id === eventArtTypeId)
+        if (!artTypeRow) {
+          return NextResponse.json({ error: 'Invalid art type selected for this event.' }, { status: 400 })
+        }
+        selectedArtTypeId = artTypeRow.id
+        selectedArtTypeCapacity = Number(artTypeRow.slot_capacity || 0)
+      }
     }
 
     const useGlobalVarietyCapacity =
-      requiresArtTypeSelection && !!(event as any).variety_use_max_attendees
+      requiresArtTypeSelection && (!!(event as any).variety_use_max_attendees || !varietyHasConfiguredSlots)
     const performerCapacity = useGlobalVarietyCapacity
       ? event.max_attendees
       : (selectedArtTypeCapacity ?? event.max_attendees)
@@ -201,12 +217,8 @@ export async function POST(request: NextRequest) {
       .eq('status', 'confirmed')
       .eq('booking_scope', capacityScope)
 
-    if (!isAudienceBooking) {
-      if (selectedArtTypeId && !useGlobalVarietyCapacity) {
-        confirmedCountQuery = confirmedCountQuery.eq('event_art_type_id', selectedArtTypeId)
-      } else if (!selectedArtTypeId) {
-        confirmedCountQuery = confirmedCountQuery.is('event_art_type_id', null)
-      }
+    if (!isAudienceBooking && selectedArtTypeId && !useGlobalVarietyCapacity) {
+      confirmedCountQuery = confirmedCountQuery.eq('event_art_type_id', selectedArtTypeId)
     }
 
     const { count: confirmedCount, error: confirmedCountError } = await confirmedCountQuery

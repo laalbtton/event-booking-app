@@ -452,7 +452,8 @@ export default function Dashboard() {
 
     if (artError) throw new Error(artError.message)
     if (!artRows || artRows.length === 0) {
-      throw new Error('This variety event has no configured art type slots.')
+      await handleBookEvent(event, '__fallback__')
+      return
     }
 
     const { data: bookingRows, error: bookingError } = await supabase
@@ -1353,6 +1354,9 @@ export default function Dashboard() {
       if (event.status === 'cancelled') {
         throw new Error('This event has been cancelled')
       }
+      if (event.host_user_id === profile?.id) {
+        throw new Error("You're hosting this event, so you don't need to book a performer slot.")
+      }
       if (
         userRole !== 'audience' &&
         event.event_type === 'open_mic' &&
@@ -1460,7 +1464,10 @@ export default function Dashboard() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ eventId: event.id, eventArtTypeId: selectedArtTypeId || null }),
+        body: JSON.stringify({
+          eventId: event.id,
+          eventArtTypeId: selectedArtTypeId && selectedArtTypeId !== '__fallback__' ? selectedArtTypeId : null,
+        }),
       })
 
       const result = await response.json().catch(() => ({}))
@@ -2192,7 +2199,7 @@ export default function Dashboard() {
                       </div>
                       <div className="grid gap-0 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {bucketEvents.map((event) => {
-                  const isAudienceUser = userRole === 'audience'
+                  const isHostOfEvent = event.host_user_id === profile?.id
                   const activeBooking = findActiveBookingForEvent(myBookings, event.id)
                   const hasMatchingScopeBooking =
                     !!activeBooking && bookingMatchesUserIntent(activeBooking.booking_scope, userRole)
@@ -2364,6 +2371,10 @@ export default function Dashboard() {
                                       Go to booking
                                     </Link>
                                   </Button>
+                                ) : isHostOfEvent ? (
+                                  <p className="text-xs text-muted-foreground max-w-[11rem] text-right">
+                                    You&apos;re hosting this event, so you don&apos;t need to book a slot.
+                                  </p>
                                 ) : hasCrossScopeBooking && activeBooking?.id ? (
                                   <div
                                     className="flex items-center gap-2 shrink-0"

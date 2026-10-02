@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromAuthHeader } from '@/lib/server/supabaseAdmin'
-import { applySeriesUpdate, type UpdateScope } from '@/lib/server/eventSeries'
+import { applySeriesUpdate, type UpdateScope, type VarietyArtTypeInput } from '@/lib/server/eventSeries'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authHeader = req.headers.get('authorization')
@@ -43,11 +43,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!isOwner && !isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { eventId, occurrenceNumber, scope, patch } = body as {
+  const { eventId, occurrenceNumber, scope, patch, artTypes } = body as {
     eventId: string
     occurrenceNumber: number
     scope: UpdateScope
     patch: Record<string, unknown>
+    artTypes?: VarietyArtTypeInput[] | null
   }
 
   if (!eventId || occurrenceNumber == null || !scope || !patch) {
@@ -55,10 +56,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   try {
-    await applySeriesUpdate(eventId, seriesId, occurrenceNumber, scope, patch)
+    await applySeriesUpdate(eventId, seriesId, occurrenceNumber, scope, patch, artTypes)
     return NextResponse.json({ ok: true })
-  } catch (err: any) {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to update series'
     console.error('event-series PATCH error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

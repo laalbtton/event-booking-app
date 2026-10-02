@@ -235,7 +235,7 @@ export default function EventManagementPage() {
       .filter((item) => item.name.length > 0)
 
     if (normalized.length === 0) {
-      return { ok: false, error: 'Add at least one art performance type for variety arts.' }
+      return { ok: true }
     }
     if (normalized.length > 5) {
       return { ok: false, error: 'You can configure up to 5 art performance types.' }
@@ -274,6 +274,14 @@ export default function EventManagementPage() {
       }))
       .filter((item) => item.art_type_name.length > 0)
       .slice(0, 5)
+
+    if (cleaned.length === 0) {
+      cleaned.push({
+        id: undefined,
+        art_type_name: 'Open',
+        slot_capacity: maxAttendeesForVariety,
+      })
+    }
 
     const { error: deleteError } = await supabase.from('event_art_types').delete().eq('event_id', eventId)
     if (deleteError) return new Error(deleteError.message)
@@ -648,6 +656,18 @@ export default function EventManagementPage() {
             theme: formData.theme || null,
             duration_minutes: durationMinutes,
             start_from: new Date(formData.date).toISOString(),
+            art_types: isVarietyOpenMic
+              ? (varietyArtTypes
+                  .map((item) => ({
+                    art_type_name: item.art_type_name.trim(),
+                    slot_capacity: formData.variety_use_max_attendees
+                      ? Math.max(1, Number(formData.max_attendees || 1))
+                      : Math.max(1, Number(item.slot_capacity || 1)),
+                  }))
+                  .filter((item) => item.art_type_name.length > 0)
+                  .slice(0, 5))
+              : [],
+            variety_use_max_attendees: isVarietyOpenMic ? !!formData.variety_use_max_attendees : false,
           }),
         })
 
@@ -656,7 +676,7 @@ export default function EventManagementPage() {
           throw new Error(errBody.error || 'Failed to create recurring series')
         }
 
-        const { seriesId, eventIds } = await res.json()
+        const { eventIds } = await res.json()
         toast.success(`Recurring series created with ${eventIds?.length ?? 0} upcoming occurrences!`)
         setShowCreateForm(false)
         setCreateStep('details')
@@ -749,21 +769,6 @@ export default function EventManagementPage() {
           console.error('Error saving ticket price:', ticketError)
           throw ticketError
         }
-      }
-
-      // Assign creator as attending by default (non-blocking)
-      try {
-        await supabase
-          .from('bookings')
-          .insert({
-            user_id: user.id,
-            event_id: data.id,
-            credits_used: 0,
-            status: 'confirmed',
-            attendance_status: null,
-          })
-      } catch (bookingError) {
-        console.warn('Failed to auto-book creator as attendee:', bookingError)
       }
 
       if (communitySubmissionEnabled && userRole !== 'admin') {
@@ -1101,6 +1106,17 @@ export default function EventManagementPage() {
             occurrenceNumber: occNum,
             scope: seriesEditScope,
             patch: eventData,
+            artTypes: isVarietyOpenMic
+              ? varietyArtTypes
+                  .map((item) => ({
+                    art_type_name: item.art_type_name.trim(),
+                    slot_capacity: formData.variety_use_max_attendees
+                      ? Math.max(1, Number(formData.max_attendees || 1))
+                      : Math.max(1, Number(item.slot_capacity || 1)),
+                  }))
+                  .filter((item) => item.art_type_name.length > 0)
+                  .slice(0, 5)
+              : undefined,
           }),
         })
         if (!res.ok) {

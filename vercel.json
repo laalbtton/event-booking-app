@@ -13,6 +13,10 @@
       "schedule": "0 10 * * *"
     },
     {
+      "path": "/api/recap-autopost/worker",
+      "schedule": "20 * * * *"
+    },
+    {
       "path": "/api/events/notify-open-roles",
       "schedule": "0 16 * * *"
     }

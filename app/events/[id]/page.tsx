@@ -29,6 +29,7 @@ import { toast } from 'sonner'
 import { ExpandableEventDescription } from '@/components/public/ExpandableEventDescription'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
 import EventChat from '@/components/EventChat'
+import EventRecapPhotos from '@/components/EventRecapPhotos'
 import PerformerRolesCard from '@/components/PerformerRolesCard'
 import { AddToCalendarButtons } from '@/components/AddToCalendarButtons'
 import {
@@ -738,6 +739,9 @@ export default function EventDetailsPage() {
       if (eventData.status === 'cancelled') {
         throw new Error('This event has been cancelled')
       }
+      if (eventData.host_user_id === currentUser?.id) {
+        throw new Error("You're hosting this event, so you don't need to book a performer slot.")
+      }
 
       if (eventData.registration_opens_at) {
         const registrationOpensAt = new Date(eventData.registration_opens_at)
@@ -773,11 +777,10 @@ export default function EventDetailsPage() {
         (eventData as any).open_mic_type === 'variety_arts_open_mic' &&
         !selectedArtTypeId
       ) {
-        if (!varietyOptions.length) {
-          throw new Error('This variety event has no configured art type slots.')
+        if (varietyOptions.length > 0) {
+          setVarietyDialogOpen(true)
+          return
         }
-        setVarietyDialogOpen(true)
-        return
       }
 
       const now = new Date()
@@ -1161,6 +1164,14 @@ export default function EventDetailsPage() {
           </Card>
         )}
 
+        {currentUser &&
+          (isHost ||
+            isEventCreator ||
+            profile?.role === 'admin' ||
+            userBooking?.status === 'confirmed') && (
+            <EventRecapPhotos eventId={(event as any).id || eventId} />
+          )}
+
         {/* Optional performer roles — comedy / legacy open mics only, and only
             shown to confirmed performers so they can claim a slot. */}
         {currentUser && (
@@ -1478,6 +1489,24 @@ export default function EventDetailsPage() {
                   <a href={event.external_ticket_url} target="_blank" rel="noreferrer">
                     <Button size="sm" variant="outline">Buy Tickets</Button>
                   </a>
+                ) : isAlreadyBooked && userBooking?.id ? (
+                  <div className="flex flex-col items-end gap-2">
+                    <Button asChild size="sm" variant="default">
+                      <Link href={`/bookings/${userBooking.id}`}>Go to booking</Link>
+                    </Button>
+                    {!isPast && event.status !== 'cancelled' && (
+                      <AddToCalendarButtons event={event} layout="row" />
+                    )}
+                  </div>
+                ) : isHost ? (
+                  <div className="flex flex-col items-end gap-2 max-w-xs text-right">
+                    <p className="text-sm text-gray-700">
+                      You&apos;re hosting this event, so you don&apos;t need to book a performer slot.
+                    </p>
+                    {!isPast && event.status !== 'cancelled' && (
+                      <AddToCalendarButtons event={event} layout="row" />
+                    )}
+                  </div>
                 ) : !isRegistrationOpen ? (
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-orange-600 border-orange-600">
@@ -1491,15 +1520,6 @@ export default function EventDetailsPage() {
                     >
                       {alertSet ? 'Alert Set' : settingAlert ? 'Setting...' : 'Alert Me'}
                     </Button>
-                  </div>
-                ) : isAlreadyBooked && userBooking?.id ? (
-                  <div className="flex flex-col items-end gap-2">
-                    <Button asChild size="sm" variant="default">
-                      <Link href={`/bookings/${userBooking.id}`}>Go to booking</Link>
-                    </Button>
-                    {!isPast && event.status !== 'cancelled' && (
-                      <AddToCalendarButtons event={event} layout="row" />
-                    )}
                   </div>
                 ) : hasCrossScopeBooking && userBooking?.id ? (
                   <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">

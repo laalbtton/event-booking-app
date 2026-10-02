@@ -160,6 +160,7 @@ export type Event = {
   poster_url?: string | null
   poster_caption?: string | null
   poster_updated_at?: string | null
+  recap_caption?: string | null
   date: string
   end_time: string | null
   venue_id?: string | null
@@ -429,14 +430,32 @@ export type SocialPostJob = {
   user_id: string
   event_id: string
   provider: SocialProvider
+  job_type?: 'poster' | 'recap_carousel'
   poster_url: string
   poster_caption: string | null
+  payload?: Record<string, unknown>
   status: SocialPostJobStatus
   idempotency_key: string
   attempt_count: number
   last_error: string | null
   scheduled_for: string
   processed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EventRecapPhotoStatus = 'pending' | 'posting' | 'posted' | 'deleted' | 'failed'
+
+export type EventRecapPhoto = {
+  id: string
+  event_id: string
+  uploaded_by: string
+  storage_path: string
+  public_url: string
+  sort_order: number
+  status: EventRecapPhotoStatus
+  posted_at: string | null
+  deleted_at: string | null
   created_at: string
   updated_at: string
 }

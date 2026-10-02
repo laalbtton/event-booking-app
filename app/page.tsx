@@ -327,9 +327,6 @@ export default async function Home() {
             <Link href="/performers" className="hover:text-foreground transition-colors">
               Performers
             </Link>
-            <Link href="/jokes" className="hover:text-foreground transition-colors">
-              Jokes
-            </Link>
             <Link href="/communities" className="hover:text-foreground transition-colors">
               Communities
             </Link>

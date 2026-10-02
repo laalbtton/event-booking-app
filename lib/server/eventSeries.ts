@@ -286,6 +286,8 @@ export async function generateOccurrences(
 
   const ids = (inserted ?? []).map((r: { id: string }) => r.id)
 
+  await copySeriesArtTypesToEvents(db, seriesId, ids)
+
   // Link each new occurrence to the creator's communities (same as the regular event create flow)
   if (series.created_by && ids.length > 0) {
     for (const id of ids) {
@@ -386,6 +388,75 @@ export async function extendAllActiveSeries(): Promise<
 
 export type UpdateScope = 'this' | 'this_and_following' | 'all'
 
+export type VarietyArtTypeInput = {
+  art_type_name: string
+  slot_capacity: number
+}
+
+const DEFAULT_VARIETY_ART_TYPE = 'Open'
+
+function normalizeArtTypes(artTypes: VarietyArtTypeInput[]): VarietyArtTypeInput[] {
+  const cleaned = artTypes
+    .map((item) => ({
+      art_type_name: item.art_type_name.trim(),
+      slot_capacity: Math.max(1, Number(item.slot_capacity) || 1),
+    }))
+    .filter((item) => item.art_type_name.length > 0)
+    .slice(0, 5)
+  if (cleaned.length === 0) {
+    return [{ art_type_name: DEFAULT_VARIETY_ART_TYPE, slot_capacity: 12 }]
+  }
+  return cleaned
+}
+
+export async function syncArtTypesForEvents(
+  db: NonNullable<ReturnType<typeof getAdminClient>>,
+  eventIds: string[],
+  artTypes: VarietyArtTypeInput[]
+) {
+  if (eventIds.length === 0) return
+  const rows = normalizeArtTypes(artTypes)
+  const { error: deleteError } = await db.from('event_art_types').delete().in('event_id', eventIds)
+  if (deleteError) throw new Error(`Failed to clear art types: ${deleteError.message}`)
+  const { error: insertError } = await db.from('event_art_types').insert(
+    eventIds.flatMap((eventId) =>
+      rows.map((item) => ({
+        event_id: eventId,
+        art_type_name: item.art_type_name,
+        slot_capacity: item.slot_capacity,
+      }))
+    )
+  )
+  if (insertError) throw new Error(`Failed to save art types: ${insertError.message}`)
+}
+
+async function copySeriesArtTypesToEvents(
+  db: NonNullable<ReturnType<typeof getAdminClient>>,
+  seriesId: string,
+  eventIds: string[]
+) {
+  if (eventIds.length === 0) return
+  const { data: sourceEvent } = await db
+    .from('events')
+    .select('id')
+    .eq('series_id', seriesId)
+    .not('id', 'in', `(${eventIds.join(',')})`)
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!sourceEvent?.id) return
+
+  const { data: sourceTypes } = await db
+    .from('event_art_types')
+    .select('art_type_name, slot_capacity')
+    .eq('event_id', sourceEvent.id)
+    .order('created_at', { ascending: true })
+
+  if (!sourceTypes || sourceTypes.length === 0) return
+  await syncArtTypesForEvents(db, eventIds, sourceTypes)
+}
+
 // Fields that are unique to each occurrence and must never be bulk-applied.
 // Applying e.g. the same `slug` to multiple rows would hit a unique constraint.
 const PER_OCCURRENCE_FIELDS = new Set([
@@ -420,7 +491,8 @@ export async function applySeriesUpdate(
   seriesId: string,
   occurrenceNumber: number,
   scope: UpdateScope,
-  patch: Record<string, unknown>
+  patch: Record<string, unknown>,
+  artTypes?: VarietyArtTypeInput[] | null
 ): Promise<void> {
   const db = getAdminClient()
   if (!db) throw new Error('Missing Supabase admin credentials')
@@ -431,54 +503,62 @@ export async function applySeriesUpdate(
       .from('events')
       .update({ ...patch, series_overridden: true, updated_at: new Date().toISOString() })
       .eq('id', eventId)
-    return
-  }
-
-  // Build the series template patch (template fields only)
-  const seriesPatch: Record<string, unknown> = {}
-  for (const key of Object.keys(patch)) {
-    if (SERIES_TEMPLATE_FIELDS.has(key)) seriesPatch[key] = patch[key]
-  }
-
-  // Build the bulk event patch — strip per-occurrence fields and series-only fields
-  const bulkEventPatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  for (const key of Object.keys(patch)) {
-    if (!PER_OCCURRENCE_FIELDS.has(key) && !SERIES_TEMPLATE_FIELDS.has(key)) {
-      bulkEventPatch[key] = patch[key]
-    } else if (SERIES_TEMPLATE_FIELDS.has(key) && !PER_OCCURRENCE_FIELDS.has(key)) {
-      // Template fields are safe to copy to individual event rows too (title, description, etc.)
-      bulkEventPatch[key] = patch[key]
+  } else {
+    // Build the series template patch (template fields only)
+    const seriesPatch: Record<string, unknown> = {}
+    for (const key of Object.keys(patch)) {
+      if (SERIES_TEMPLATE_FIELDS.has(key)) seriesPatch[key] = patch[key]
     }
-  }
-  // Remove the series-specific keys that don't exist on events rows
-  delete bulkEventPatch.duration_minutes
-  delete bulkEventPatch.start_time_local
 
-  if (scope === 'all') {
+    // Build the bulk event patch — strip per-occurrence fields and series-only fields
+    const bulkEventPatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    for (const key of Object.keys(patch)) {
+      if (!PER_OCCURRENCE_FIELDS.has(key) && !SERIES_TEMPLATE_FIELDS.has(key)) {
+        bulkEventPatch[key] = patch[key]
+      } else if (SERIES_TEMPLATE_FIELDS.has(key) && !PER_OCCURRENCE_FIELDS.has(key)) {
+        // Template fields are safe to copy to individual event rows too (title, description, etc.)
+        bulkEventPatch[key] = patch[key]
+      }
+    }
+    // Remove the series-specific keys that don't exist on events rows
+    delete bulkEventPatch.duration_minutes
+    delete bulkEventPatch.start_time_local
+
     if (Object.keys(seriesPatch).length > 0) {
       await db.from('event_series').update({ ...seriesPatch, updated_at: new Date().toISOString() }).eq('id', seriesId)
     }
-    if (Object.keys(bulkEventPatch).length > 1) { // > 1 because updated_at is always present
+
+    if (scope === 'all') {
+      if (Object.keys(bulkEventPatch).length > 1) { // > 1 because updated_at is always present
+        await db
+          .from('events')
+          .update(bulkEventPatch)
+          .eq('series_id', seriesId)
+          .eq('series_overridden', false)
+      }
+    } else if (Object.keys(bulkEventPatch).length > 1) {
       await db
         .from('events')
         .update(bulkEventPatch)
         .eq('series_id', seriesId)
         .eq('series_overridden', false)
+        .gte('series_occurrence_number', occurrenceNumber)
     }
-    return
   }
 
-  // 'this_and_following'
-  if (Object.keys(seriesPatch).length > 0) {
-    await db.from('event_series').update({ ...seriesPatch, updated_at: new Date().toISOString() }).eq('id', seriesId)
-  }
-  if (Object.keys(bulkEventPatch).length > 1) {
-    await db
-      .from('events')
-      .update(bulkEventPatch)
-      .eq('series_id', seriesId)
-      .eq('series_overridden', false)
-      .gte('series_occurrence_number', occurrenceNumber)
+  if (artTypes) {
+    const eventIds = new Set<string>([eventId])
+    if (scope !== 'this') {
+      let query = db.from('events').select('id').eq('series_id', seriesId).eq('series_overridden', false)
+      if (scope === 'this_and_following') {
+        query = query.gte('series_occurrence_number', occurrenceNumber)
+      }
+      const { data: scopedEvents } = await query
+      for (const row of scopedEvents || []) {
+        if (row.id) eventIds.add(row.id)
+      }
+    }
+    await syncArtTypesForEvents(db, Array.from(eventIds), artTypes)
   }
 }
 

@@ -21,9 +21,11 @@ function getEventTypeLabel(eventType: string | null, openMicType: string | null)
 type Props = {
   event: PublicEventDetails
   cityFilter?: string | null
+  /** Compact horizontal rows from the md breakpoint up; cards stay stacked on mobile. */
+  compactOnDesktop?: boolean
 }
 
-export function PublicEventCard({ event, cityFilter }: Props) {
+export function PublicEventCard({ event, cityFilter, compactOnDesktop = false }: Props) {
   const href = `/events/${event.slug || event.id}`
   const dateStr = formatEventDate(event.startDate)
   const timeStr = formatEventTime(event.startDate)
@@ -37,11 +39,19 @@ export function PublicEventCard({ event, cityFilter }: Props) {
   return (
     <Link
       href={href}
-      className="group block rounded-xl border border-red-600/55 bg-zinc-900 text-stone-100 shadow-sm hover:shadow-lg hover:border-red-500/80 transition-all overflow-hidden"
+      className={`group overflow-hidden rounded-xl border border-red-600/55 bg-zinc-900 text-stone-100 shadow-sm hover:shadow-lg hover:border-red-500/80 transition-all ${
+        compactOnDesktop ? 'block md:flex md:flex-row md:items-stretch' : 'block'
+      }`}
     >
-      {/* Event image — square aspect ratio with object-contain when poster exists; compact fixed height when no poster */}
+      {/* Event image — square on mobile cards; thumbnail on compact desktop rows */}
       {event.imageUrl ? (
-        <div className="relative w-full aspect-square overflow-hidden bg-zinc-800">
+        <div
+          className={`relative overflow-hidden bg-zinc-800 ${
+            compactOnDesktop
+              ? 'w-full aspect-square md:aspect-auto md:w-28 md:h-28 md:shrink-0'
+              : 'w-full aspect-square'
+          }`}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={event.imageUrl}
@@ -75,7 +85,13 @@ export function PublicEventCard({ event, cityFilter }: Props) {
           )}
         </div>
       ) : (
-        <div className="relative h-40 w-full flex items-center justify-center bg-zinc-800">
+        <div
+          className={`relative flex items-center justify-center bg-zinc-800 ${
+            compactOnDesktop
+              ? 'h-40 w-full md:h-28 md:w-28 md:shrink-0'
+              : 'h-40 w-full'
+          }`}
+        >
           <svg className="h-12 w-12 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
@@ -87,7 +103,7 @@ export function PublicEventCard({ event, cityFilter }: Props) {
         </div>
       )}
 
-      <div className="p-4 space-y-2">
+      <div className={`p-4 space-y-2 min-w-0 ${compactOnDesktop ? 'md:flex-1 md:py-3' : ''}`}>
         {/* Type badge + free/ticketed */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-400/15 text-yellow-400">

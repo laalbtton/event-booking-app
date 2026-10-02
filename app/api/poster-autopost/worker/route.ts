@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
       .from('social_post_jobs')
       .select('id, user_id, event_id, provider, poster_url, poster_caption, attempt_count')
       .eq('status', 'pending')
+      .eq('job_type', 'poster')
       .lte('scheduled_for', nowIso)
       .order('created_at', { ascending: true })
       .limit(BATCH_SIZE)

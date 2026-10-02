@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromAuthHeader } from '@/lib/server/supabaseAdmin'
-import { generateOccurrences } from '@/lib/server/eventSeries'
+import { generateOccurrences, syncArtTypesForEvents, type VarietyArtTypeInput } from '@/lib/server/eventSeries'
 
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
     theme,
     // start_from: the first event's date (used to seed occurrence generation)
     start_from,
+    art_types,
+    variety_use_max_attendees,
   } = body
 
   if (!recurrence_type || !start_time_local || !title || !start_from) {
@@ -92,6 +94,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const eventIds = await generateOccurrences(series.id, seedDate, horizon_weeks + 2)
+    const artTypes = Array.isArray(art_types) ? (art_types as VarietyArtTypeInput[]) : []
+    if (eventIds.length > 0 && (artTypes.length > 0 || open_mic_type === 'variety_arts_open_mic')) {
+      await syncArtTypesForEvents(supabase, eventIds, artTypes)
+    }
+    if (eventIds.length > 0 && typeof variety_use_max_attendees === 'boolean') {
+      await supabase
+        .from('events')
+        .update({ variety_use_max_attendees })
+        .in('id', eventIds)
+    }
     return NextResponse.json({ seriesId: series.id, eventIds })
   } catch (err) {
     console.error('event-series POST: generateOccurrences error', err)
