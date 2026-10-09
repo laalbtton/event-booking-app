@@ -460,6 +460,57 @@ export type EventRecapPhoto = {
   updated_at: string
 }
 
+/** How a founding_members row entered the email list. */
+export type FoundingMemberSource = 'insider_campaign' | 'brampton_email' | 'event_signup_sheet'
+
+/** Canonical marketing email list (Brampton Comedy Insider + sign-up sheets). */
+export type FoundingMember = {
+  id: string
+  first_name: string | null
+  email: string
+  phone: string | null
+  profile_user_id: string | null
+  signup_completed: boolean
+  preferences_completed: boolean
+  email_updates_opt_in: boolean
+  whatsapp_updates_opt_in: boolean
+  app_account_activated: boolean
+  total_credits_earned: number
+  // Audience sign-up sheet import fields
+  source: FoundingMemberSource | string | null
+  source_event_id: string | null
+  import_batch_id: string | null
+  imported_at: string | null
+  consent_text: string | null
+  consent_recorded_at: string | null
+  language_preferences: string[]
+  welcome_sent_at: string | null
+  last_attended_event_id: string | null
+  last_attended_at: string | null
+  attended_event_count: number
+  created_at: string
+  updated_at: string
+}
+
+/** One pasted / uploaded sign-up sheet. */
+export type AudienceSignupImport = {
+  id: string
+  event_id: string | null
+  created_by: string | null
+  consent_text: string | null
+  row_count: number
+  added_count: number
+  existing_count: number
+  invalid_count: number
+  matched_profile_count: number
+  welcome_broadcast_id: string | null
+  welcome_sent_at: string | null
+  welcome_recipient_count: number | null
+  welcome_send_mode: 'broadcast' | 'transactional' | null
+  created_at: string
+  updated_at: string
+}
+
 export type SocialPostAttempt = {
   id: string
   job_id: string

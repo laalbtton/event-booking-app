@@ -9,6 +9,7 @@
 import { getAdminClient } from '@/lib/server/supabaseAdmin'
 import { EASTERN_TZ } from '@/lib/dateUtils'
 import { ensureApprovedCommunityLinksForEvent } from '@/lib/server/ensureEventCommunityLinks'
+import { appendSlugSuffix, buildEventSlugBase } from '@/lib/seo/slug'
 export { describeRecurrence } from '@/lib/eventSeriesUtils'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -280,13 +281,14 @@ export async function generateOccurrences(
   const { data: inserted, error: insertErr } = await db
     .from('events')
     .insert(rows)
-    .select('id')
+    .select('id, title, location, date')
 
   if (insertErr) throw new Error(`Failed to insert occurrences: ${insertErr.message}`)
 
   const ids = (inserted ?? []).map((r: { id: string }) => r.id)
 
-  await copySeriesArtTypesToEvents(db, seriesId, ids)
+  await assignUniqueSlugsToEvents(db, inserted ?? [])
+  await copySeriesArtTypesToEvents(db, seriesId, ids, series.open_mic_type)
 
   // Link each new occurrence to the creator's communities (same as the regular event create flow)
   if (series.created_by && ids.length > 0) {
@@ -430,30 +432,56 @@ export async function syncArtTypesForEvents(
   if (insertError) throw new Error(`Failed to save art types: ${insertError.message}`)
 }
 
+async function assignUniqueSlugsToEvents(
+  db: NonNullable<ReturnType<typeof getAdminClient>>,
+  events: { id: string; title?: string | null; location?: string | null; date?: string | null }[]
+) {
+  for (const event of events) {
+    if (!event?.id || !event.date) continue
+    const base = buildEventSlugBase(event.title || 'event', event.location || '', event.date)
+    let candidate = base
+    let attempt = 0
+    while (attempt < 25) {
+      const { data } = await db.from('events').select('id').eq('slug', candidate).neq('id', event.id).limit(1)
+      if (!data || data.length === 0) break
+      attempt += 1
+      candidate = appendSlugSuffix(base, String(attempt))
+    }
+    if (attempt >= 25) candidate = appendSlugSuffix(base, event.id.slice(0, 8))
+    const { error } = await db.from('events').update({ slug: candidate }).eq('id', event.id)
+    if (error) {
+      console.warn(`generateOccurrences: slug failed for event ${event.id}:`, error.message)
+    }
+  }
+}
+
 async function copySeriesArtTypesToEvents(
   db: NonNullable<ReturnType<typeof getAdminClient>>,
   seriesId: string,
-  eventIds: string[]
+  eventIds: string[],
+  openMicType?: string | null
 ) {
   if (eventIds.length === 0) return
-  const { data: sourceEvent } = await db
+  const skip = new Set(eventIds)
+  const { data: siblings } = await db
     .from('events')
     .select('id')
     .eq('series_id', seriesId)
-    .not('id', 'in', `(${eventIds.join(',')})`)
     .order('date', { ascending: false })
-    .limit(1)
-    .maybeSingle()
 
-  if (!sourceEvent?.id) return
+  const sourceEvent = (siblings || []).find((row) => !skip.has(row.id))
 
-  const { data: sourceTypes } = await db
-    .from('event_art_types')
-    .select('art_type_name, slot_capacity')
-    .eq('event_id', sourceEvent.id)
-    .order('created_at', { ascending: true })
+  let sourceTypes: VarietyArtTypeInput[] = []
+  if (sourceEvent?.id) {
+    const { data } = await db
+      .from('event_art_types')
+      .select('art_type_name, slot_capacity')
+      .eq('event_id', sourceEvent.id)
+      .order('created_at', { ascending: true })
+    sourceTypes = (data || []) as VarietyArtTypeInput[]
+  }
 
-  if (!sourceTypes || sourceTypes.length === 0) return
+  if (sourceTypes.length === 0 && openMicType !== 'variety_arts_open_mic') return
   await syncArtTypesForEvents(db, eventIds, sourceTypes)
 }
 

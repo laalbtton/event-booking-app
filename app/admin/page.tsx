@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 import { SettingsListRow } from '@/components/SettingsListRow'
 import { Card, CardContent } from '@/components/ui/card'
-import { Users, Building2, CalendarCheck, CreditCard, FileText, Globe, Mail } from 'lucide-react'
+import { Users, Building2, CalendarCheck, CreditCard, FileText, Globe, Mail, ClipboardPaste } from 'lucide-react'
 
 export default function AdminPage() {
   const router = useRouter()
@@ -46,6 +46,9 @@ export default function AdminPage() {
           </div>
           <div className="px-4 py-1">
             <SettingsListRow href="/admin/communities" icon={Globe} title="Communities" description="Manage communities" />
+          </div>
+          <div className="px-4 py-1">
+            <SettingsListRow href="/admin/audience-import" icon={ClipboardPaste} title="Sign-up Sheets" description="Import audience emails and send the post-show welcome" />
           </div>
           <div className="px-4 py-1 pb-2">
             <SettingsListRow href="/admin/resend-tools" icon={Mail} title="Resend Tools" description="Backfill audience, digest, and store announcement" />

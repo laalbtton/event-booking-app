@@ -18,7 +18,16 @@ type Member = {
   signup_completed: boolean
   preferences_completed: boolean
   email_updates_opt_in: boolean
+  source: string | null
+  language_preferences: string[] | null
+  attended_event_count: number | null
   created_at: string
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  event_signup_sheet: 'Sign-up sheet',
+  insider_campaign: 'Insider',
+  brampton_email: 'Brampton web',
 }
 
 export default function AdminFoundingMembersPage() {
@@ -85,6 +94,7 @@ export default function AdminFoundingMembersPage() {
 
   const completed = members.filter((m) => m.preferences_completed).length
   const optedIn = members.filter((m) => m.email_updates_opt_in).length
+  const fromSheets = members.filter((m) => m.source === 'event_signup_sheet').length
 
   return (
     <div>
@@ -109,7 +119,7 @@ export default function AdminFoundingMembersPage() {
         <StatCard label="Total Members" value={total} />
         <StatCard label="Preferences Done" value={completed} />
         <StatCard label="Email Opt-In" value={optedIn} />
-        <StatCard label="Spots Left (of 500)" value={Math.max(0, 500 - total)} />
+        <StatCard label="From Sign-up Sheets" value={fromSheets} />
       </div>
 
       {error && (
@@ -127,6 +137,8 @@ export default function AdminFoundingMembersPage() {
               <th className="px-4 py-3">City</th>
               <th className="px-4 py-3">Age</th>
               <th className="px-4 py-3">Comedy Prefs</th>
+              <th className="px-4 py-3">Languages</th>
+              <th className="px-4 py-3">Source</th>
               <th className="px-4 py-3">Price</th>
               <th className="px-4 py-3">Credits</th>
               <th className="px-4 py-3">Signup</th>
@@ -137,13 +149,13 @@ export default function AdminFoundingMembersPage() {
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={12} className="px-4 py-8 text-center text-gray-400">
                   Loading…
                 </td>
               </tr>
             ) : members.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={12} className="px-4 py-8 text-center text-gray-400">
                   No founding members yet.
                 </td>
               </tr>
@@ -158,6 +170,13 @@ export default function AdminFoundingMembersPage() {
                   <td className="whitespace-nowrap px-4 py-3">{m.age_range || '—'}</td>
                   <td className="max-w-xs px-4 py-3 text-xs">
                     {m.comedy_preferences?.length ? m.comedy_preferences.join(', ') : '—'}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-xs">
+                    {m.language_preferences?.length ? m.language_preferences.join(', ') : '—'}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-xs">
+                    {m.source ? SOURCE_LABELS[m.source] || m.source : '—'}
+                    {m.attended_event_count ? ` · ${m.attended_event_count} show${m.attended_event_count === 1 ? '' : 's'}` : ''}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">{m.ticket_price_range || '—'}</td>
                   <td className="whitespace-nowrap px-4 py-3 font-semibold">

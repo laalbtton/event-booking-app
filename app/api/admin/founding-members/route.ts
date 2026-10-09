@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase
       .from('founding_members')
       .select(
-        'id, first_name, email, city, age_range, canada_status, comedy_preferences, event_interests, ticket_price_range, attendance_frequency, downtown_brampton_interest, favorite_comedians, total_credits_earned, signup_completed, preferences_completed, email_updates_opt_in, created_at',
+        'id, first_name, email, city, age_range, canada_status, comedy_preferences, event_interests, ticket_price_range, attendance_frequency, downtown_brampton_interest, favorite_comedians, total_credits_earned, signup_completed, preferences_completed, email_updates_opt_in, source, language_preferences, attended_event_count, welcome_sent_at, created_at',
       )
       .order('created_at', { ascending: false })
 

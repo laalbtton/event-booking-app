@@ -58,10 +58,86 @@ function getSegmentId(): string | null {
   return cleaned
 }
 
+/**
+ * Optional second segment used as a short-lived "post-show welcome" queue.
+ * Imported sign-up-sheet contacts are added here, one Broadcast goes out, and
+ * they are removed again — so the free plan's 3-segment cap is never hit.
+ */
+export function getWelcomeSegmentId(): string | null {
+  const raw = process.env.RESEND_WELCOME_SEGMENT_ID
+  if (!raw) return null
+  const cleaned = raw.trim().replace(/^['"]|['"]$/g, '').trim()
+  if (!cleaned) return null
+  if (!UUID_RE.test(cleaned)) {
+    console.error('[resendAudience] RESEND_WELCOME_SEGMENT_ID does not look like a valid UUID.')
+  }
+  return cleaned
+}
+
 /** Masks a segment/audience id for safe logging (not a secret, but keep logs tidy). */
 function maskId(id: string): string {
   if (id.length <= 10) return id
   return `${id.slice(0, 6)}…${id.slice(-4)} (len=${id.length})`
+}
+
+/** Add an existing contact (by email) to an extra segment. Never throws. */
+export async function addContactToSegment(email: string, segmentId: string): Promise<UpsertContactResult> {
+  try {
+    const resend = getResend()
+    if (!resend) return { success: false, error: 'missing env var(s): RESEND_API_KEY' }
+    const { error } = await resend.contacts.segments.add({ email, segmentId })
+    if (error) {
+      console.error('[resendAudience] addContactToSegment failed:', error)
+      return { success: false, error: error.message || error.name || 'Unknown Resend error' }
+    }
+    return { success: true }
+  } catch (err) {
+    console.error('[resendAudience] addContactToSegment threw:', err)
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+  }
+}
+
+/** Remove a contact (by email) from one segment only — the contact itself stays. Never throws. */
+export async function removeContactFromSegment(email: string, segmentId: string): Promise<UpsertContactResult> {
+  try {
+    const resend = getResend()
+    if (!resend) return { success: false, error: 'missing env var(s): RESEND_API_KEY' }
+    const { error } = await resend.contacts.segments.remove({ email, segmentId })
+    if (error) {
+      console.error('[resendAudience] removeContactFromSegment failed:', error)
+      return { success: false, error: error.message || error.name || 'Unknown Resend error' }
+    }
+    return { success: true }
+  } catch (err) {
+    console.error('[resendAudience] removeContactFromSegment threw:', err)
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+  }
+}
+
+/** List every contact email currently in a segment (paginates). Returns [] on failure. */
+export async function listSegmentContactEmails(segmentId: string): Promise<string[]> {
+  const resend = getResend()
+  if (!resend) return []
+  const emails: string[] = []
+  let after: string | undefined
+  try {
+    for (let page = 0; page < 50; page += 1) {
+      const { data, error } = await resend.contacts.list({ segmentId, limit: 100, ...(after ? { after } : {}) })
+      if (error || !data) {
+        if (error) console.error('[resendAudience] listSegmentContactEmails failed:', error)
+        break
+      }
+      for (const c of data.data || []) {
+        if (c.email) emails.push(c.email.toLowerCase())
+      }
+      if (!data.has_more || data.data.length === 0) break
+      after = data.data[data.data.length - 1]?.id
+      if (!after) break
+    }
+  } catch (err) {
+    console.error('[resendAudience] listSegmentContactEmails threw:', err)
+  }
+  return emails
 }
 
 /** Result of an upsertContact call — callers (e.g. the backfill job) need this
@@ -80,6 +156,7 @@ export type UpsertContactResult = { success: true } | { success: false; error: s
 export async function upsertContact(
   email: string,
   firstName?: string | null,
+  extraSegmentIds: string[] = [],
 ): Promise<UpsertContactResult> {
   try {
     const missing = getMissingBroadcastConfig()
@@ -90,12 +167,13 @@ export async function upsertContact(
     }
     const resend = getResend()!
     const segmentId = getSegmentId()!
+    const segmentIds = Array.from(new Set([segmentId, ...extraSegmentIds.filter(Boolean)]))
 
     const { error } = await resend.contacts.create({
       email,
       firstName: firstName ?? undefined,
       unsubscribed: false,
-      segments: [{ id: segmentId }],
+      segments: segmentIds.map((id) => ({ id })),
     })
 
     if (error) {
@@ -150,6 +228,10 @@ export async function sendBroadcast(opts: {
   subject: string
   html: string
   fromName?: string
+  /** Target a different segment than RESEND_SEGMENT_ID (e.g. the welcome queue). */
+  segmentId?: string
+  /** Internal label shown in the Resend dashboard. */
+  name?: string
 }): Promise<string | null> {
   const missing = getMissingBroadcastConfig()
   if (missing.length > 0) {
@@ -161,7 +243,7 @@ export async function sendBroadcast(opts: {
   }
 
   const resend = getResend()!
-  const segmentId = getSegmentId()!
+  const segmentId = opts.segmentId || getSegmentId()!
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@laalbutton.com'
   const fromName = opts.fromName || 'One Mic Stand'
   const from = `${fromName} <${fromEmail}>`
@@ -179,6 +261,7 @@ export async function sendBroadcast(opts: {
       from,
       subject: opts.subject,
       html: opts.html,
+      ...(opts.name ? { name: opts.name } : {}),
     })
 
     if (error) {
