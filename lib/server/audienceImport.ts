@@ -32,6 +32,8 @@ export type ImportBatchResult = {
   invalidCount: number
   matchedProfileCount: number
   resendFailures: number
+  /** Distinct Resend error messages from this run (first few). */
+  sampleErrors: string[]
   welcomeSegmentConfigured: boolean
   rows: ImportResultRow[]
 }
@@ -44,6 +46,10 @@ function mergeLanguages(existing: unknown, incoming: string[]): string[] {
   const out = asStringArray(existing)
   for (const l of incoming) if (!out.includes(l)) out.push(l)
   return out
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -114,6 +120,10 @@ export async function importAudienceRows(
   let existingCount = 0
   let matchedProfileCount = 0
   let resendFailures = 0
+  const sampleErrors: string[] = []
+  const noteError = (message: string | undefined) => {
+    if (message && sampleErrors.length < 3 && !sampleErrors.includes(message)) sampleErrors.push(message)
+  }
 
   for (const row of rows) {
     const existing = existingByEmail.get(row.email)
@@ -171,19 +181,19 @@ export async function importAudienceRows(
       continue
     }
 
-    // Resend: main list + welcome queue. contacts.create is an upsert for the
-    // main segment; for an already-existing contact the extra segment is not
-    // always applied, so add it explicitly too (idempotent).
+    // Main list first. The welcome queue is a separate add so a bad or missing
+    // welcome segment can never block the contact from the weekly digest.
     const firstName = row.name ? row.name.split(' ')[0] : existing?.first_name || null
-    const upsert = await upsertContact(row.email, firstName, welcomeSegmentId ? [welcomeSegmentId] : [])
+    const upsert = await upsertContact(row.email, firstName)
     let resendSynced = upsert.success
     let resendError: string | undefined = upsert.success ? undefined : upsert.error
+    if (!upsert.success) noteError(upsert.error)
     if (upsert.success && welcomeSegmentId) {
       const add = await addContactToSegment(row.email, welcomeSegmentId)
-      resendSynced = add.success
-      if (!add.success) resendError = add.error
+      if (!add.success) noteError(`Welcome queue: ${add.error}`)
     }
     if (!resendSynced) resendFailures += 1
+    await sleep(250)
 
     results.push({
       email: row.email,
@@ -212,7 +222,42 @@ export async function importAudienceRows(
     invalidCount: opts.invalidCount,
     matchedProfileCount,
     resendFailures,
+    sampleErrors,
     welcomeSegmentConfigured: !!welcomeSegmentId,
     rows: results,
   }
+}
+
+/** Push an already-imported batch to Resend again (main list, then welcome queue). */
+export async function resyncBatchToResend(
+  supabase: SupabaseClient,
+  batchId: string,
+): Promise<{ synced: number; failed: number; sampleErrors: string[] }> {
+  const { data: members, error } = await supabase
+    .from('founding_members')
+    .select('email, first_name')
+    .eq('import_batch_id', batchId)
+  if (error) throw new Error(error.message)
+  const rows = (members || []) as Array<{ email: string; first_name: string | null }>
+  if (rows.length === 0) throw new Error('No contacts in this batch')
+
+  const welcomeSegmentId = getWelcomeSegmentId()
+  let synced = 0
+  let failed = 0
+  const sampleErrors: string[] = []
+  for (const row of rows) {
+    const upsert = await upsertContact(row.email, row.first_name)
+    if (upsert.success) {
+      synced += 1
+      if (welcomeSegmentId) {
+        const add = await addContactToSegment(row.email, welcomeSegmentId)
+        if (!add.success && sampleErrors.length < 3) sampleErrors.push(`Welcome queue: ${add.error}`)
+      }
+    } else {
+      failed += 1
+      if (upsert.error && sampleErrors.length < 3 && !sampleErrors.includes(upsert.error)) sampleErrors.push(upsert.error)
+    }
+    await sleep(250)
+  }
+  return { synced, failed, sampleErrors }
 }

@@ -14,7 +14,7 @@ import {
   type ColumnMapping,
   type ParsedTable,
 } from '@/lib/audienceImport'
-import { ClipboardPaste, Eye, FileUp, Mail, Send, Upload } from 'lucide-react'
+import { ClipboardPaste, Eye, FileUp, Mail, RefreshCw, Send, Upload } from 'lucide-react'
 
 type RecentEvent = { id: string; title: string; date: string; venueName: string | null }
 
@@ -41,6 +41,7 @@ type ImportResult = {
   invalidCount: number
   matchedProfileCount: number
   resendFailures: number
+  sampleErrors?: string[]
   welcomeSegmentConfigured: boolean
 }
 
@@ -64,7 +65,7 @@ function fmtDate(iso: string | null) {
   })
 }
 
-export default function AdminAudienceImportPage() {
+export function AudienceSignupImport({ lockedEventId }: { lockedEventId?: string }) {
   const [events, setEvents] = useState<RecentEvent[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
   const [welcomeSegmentConfigured, setWelcomeSegmentConfigured] = useState<boolean | null>(null)
@@ -80,6 +81,7 @@ export default function AdminAudienceImportPage() {
   const [lastResult, setLastResult] = useState<ImportResult | null>(null)
 
   const [sendingBatchId, setSendingBatchId] = useState<string | null>(null)
+  const [retryingBatchId, setRetryingBatchId] = useState<string | null>(null)
   const [sendMessage, setSendMessage] = useState<string>('')
   const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -93,7 +95,8 @@ export default function AdminAudienceImportPage() {
     setLoadingMeta(true)
     try {
       const token = await getToken()
-      const res = await fetch('/api/admin/audience-import', { headers: { Authorization: `Bearer ${token}` } })
+      const qs = lockedEventId ? `?eventId=${encodeURIComponent(lockedEventId)}` : ''
+      const res = await fetch(`/api/admin/audience-import${qs}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
       setEvents(data.events || [])
@@ -107,9 +110,10 @@ export default function AdminAudienceImportPage() {
     } finally {
       setLoadingMeta(false)
     }
-  }, [getToken])
+  }, [getToken, lockedEventId])
 
   useEffect(() => {
+    if (lockedEventId) setEventId(lockedEventId)
     loadMeta()
     try {
       const saved = window.localStorage.getItem(CONSENT_STORAGE_KEY)
@@ -180,7 +184,9 @@ export default function AdminAudienceImportPage() {
       setLastResult(r)
       setImportMessage(
         `✅ Imported: ${r.addedCount} new, ${r.existingCount} already on the list (updated), ${r.matchedProfileCount} matched an app account` +
-          (r.resendFailures > 0 ? `, ${r.resendFailures} failed to sync to Resend` : '') +
+          (r.resendFailures > 0
+            ? `, ${r.resendFailures} failed to sync to Resend${r.sampleErrors?.[0] ? ` — ${r.sampleErrors[0]}` : ''}`
+            : '') +
           '.',
       )
       setRawText('')
@@ -190,6 +196,30 @@ export default function AdminAudienceImportPage() {
       setImportMessage(`❌ ${err instanceof Error ? err.message : 'Import failed'}`)
     } finally {
       setImporting(false)
+    }
+  }
+
+  async function handleRetryResend(batch: Batch) {
+    setRetryingBatchId(batch.id)
+    setSendMessage('')
+    try {
+      const token = await getToken()
+      const res = await fetch(`/api/admin/audience-import/${batch.id}/retry-resend`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data?.error) throw new Error(data?.error || `Request failed (${res.status})`)
+      const r = data.result as { synced: number; failed: number; sampleErrors: string[] }
+      setSendMessage(
+        r.failed > 0
+          ? `❌ Synced ${r.synced}, ${r.failed} still failed${r.sampleErrors?.[0] ? ` — ${r.sampleErrors[0]}` : ''}.`
+          : `✅ Synced ${r.synced} ${r.synced === 1 ? 'contact' : 'contacts'} to Resend.`,
+      )
+    } catch (err) {
+      setSendMessage(`❌ ${err instanceof Error ? err.message : 'Resend sync failed'}`)
+    } finally {
+      setRetryingBatchId(null)
     }
   }
 
@@ -270,10 +300,10 @@ export default function AdminAudienceImportPage() {
             <select
               value={eventId}
               onChange={(e) => setEventId(e.target.value)}
-              disabled={loadingMeta}
+              disabled={loadingMeta || !!lockedEventId}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white text-sm"
             >
-              <option value="">— No specific event —</option>
+              {!lockedEventId && <option value="">— No specific event —</option>}
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
                   {fmtDate(ev.date)} · {ev.title}
@@ -470,6 +500,10 @@ export default function AdminAudienceImportPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <Button variant="outline" size="sm" onClick={() => handleRetryResend(b)} disabled={retryingBatchId === b.id}>
+                      <RefreshCw className={`h-4 w-4 ${retryingBatchId === b.id ? 'animate-spin' : ''}`} />
+                      {retryingBatchId === b.id ? 'Syncing…' : 'Sync to Resend'}
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => handlePreview(b.id)} disabled={previewLoading}>
                       <Eye className="h-4 w-4" /> Preview
                     </Button>
@@ -500,4 +534,8 @@ export default function AdminAudienceImportPage() {
       </Card>
     </div>
   )
+}
+
+export default function AdminAudienceImportPage() {
+  return <AudienceSignupImport />
 }

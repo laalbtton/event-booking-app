@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prepareRows, type AudienceRowInput, type ColumnMapping } from '@/lib/audienceImport'
-import { requireAdmin } from '@/lib/server/adminAuth'
+import { isAdminUserId, requireAudienceImporter } from '@/lib/server/adminAuth'
 import { importAudienceRows } from '@/lib/server/audienceImport'
 import { getWelcomeSegmentId } from '@/lib/server/resendAudience'
 
@@ -8,29 +8,39 @@ export const dynamic = 'force-dynamic'
 
 /** Admin: recent past events (for the "which show was this sheet from?" picker) + import batches. */
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin(request)
+  const eventId = new URL(request.url).searchParams.get('eventId')
+  const auth = await requireAudienceImporter(request, eventId)
   if (!auth.ok) return auth.response
-  const { supabase } = auth
+  const { supabase, userId } = auth
+  const admin = await isAdminUserId(supabase, userId)
 
   try {
     const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
     const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    let eventsQuery = supabase
+      .from('events')
+      .select('id, title, date, location, venues(name)')
+      .neq('status', 'cancelled')
+      .order('date', { ascending: false })
+      .limit(60)
+    // Hosts only ever see the event they came from. Admins browsing the
+    // admin page get the last 90 days.
+    if (eventId) eventsQuery = eventsQuery.eq('id', eventId)
+    else eventsQuery = eventsQuery.gte('date', since).lte('date', until)
+
+    let batchesQuery = supabase
+      .from('audience_signup_imports')
+      .select(
+        'id, event_id, consent_text, row_count, added_count, existing_count, invalid_count, matched_profile_count, welcome_sent_at, welcome_recipient_count, welcome_send_mode, welcome_broadcast_id, created_at, events(title, date)',
+      )
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (eventId) batchesQuery = batchesQuery.eq('event_id', eventId)
+    else if (!admin) batchesQuery = batchesQuery.eq('event_id', '00000000-0000-0000-0000-000000000000')
+
     const [{ data: events, error: eventsError }, { data: batches, error: batchesError }] = await Promise.all([
-      supabase
-        .from('events')
-        .select('id, title, date, location, venues(name)')
-        .gte('date', since)
-        .lte('date', until)
-        .neq('status', 'cancelled')
-        .order('date', { ascending: false })
-        .limit(60),
-      supabase
-        .from('audience_signup_imports')
-        .select(
-          'id, event_id, consent_text, row_count, added_count, existing_count, invalid_count, matched_profile_count, welcome_sent_at, welcome_recipient_count, welcome_send_mode, welcome_broadcast_id, created_at, events(title, date)',
-        )
-        .order('created_at', { ascending: false })
-        .limit(50),
+      eventsQuery,
+      batchesQuery,
     ])
     if (eventsError) throw eventsError
     // A missing table (migration not applied yet) should not hide the rest of the page.
@@ -70,7 +80,15 @@ type ImportBody = {
 
 /** Admin: import one pasted / uploaded sign-up sheet. */
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin(request)
+  const authHeaderBody = request.clone()
+  let requestedEventId: string | null = null
+  try {
+    const peek = (await authHeaderBody.json()) as { eventId?: string | null }
+    requestedEventId = peek.eventId || null
+  } catch {
+    requestedEventId = null
+  }
+  const auth = await requireAudienceImporter(request, requestedEventId)
   if (!auth.ok) return auth.response
   const { supabase, userId } = auth
 

@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { ChevronLeft, Clock, User, Copy, ChevronDown, MessageCircle, Users, Mail, Send, Eye, Star, MessageSquare, X, MoreVertical } from 'lucide-react'
+import { ChevronLeft, Clock, User, Copy, ChevronDown, MessageCircle, Users, Mail, Send, Eye, Star, MessageSquare, X, MoreVertical, ClipboardPaste } from 'lucide-react'
 import PerformerRolesCard from '@/components/PerformerRolesCard'
 import { PERFORMER_ROLE_LABELS } from '@/lib/performerRoles'
 import type { EventPerformerRoleKey } from '@/lib/supabase'
@@ -1653,6 +1653,12 @@ export default function AttendancePage() {
             >
               <Users className="h-4 w-4" />
               Communities
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" asChild>
+              <Link href={`/events/${resolvedId}/audience-signup`}>
+                <ClipboardPaste className="h-4 w-4" />
+                Add sign-up sheet
+              </Link>
             </Button>
           </div>
         </div>

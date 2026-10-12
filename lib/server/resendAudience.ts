@@ -177,8 +177,25 @@ export async function upsertContact(
     })
 
     if (error) {
+      const message = error.message || error.name || 'Unknown Resend error'
+      // create is not always an upsert — an address already on the list should
+      // still count as synced, then get its name/segments refreshed.
+      if (/already exists/i.test(message)) {
+        const updated = await resend.contacts.update({ email, firstName: firstName ?? undefined, unsubscribed: false })
+        if (updated.error && !/already/i.test(updated.error.message || '')) {
+          console.error('[resendAudience] upsertContact update failed:', updated.error)
+        }
+        for (const id of segmentIds) {
+          const added = await resend.contacts.segments.add({ email, segmentId: id })
+          if (added.error && !/already/i.test(added.error.message || '')) {
+            console.error('[resendAudience] upsertContact segment add failed:', added.error)
+            return { success: false, error: added.error.message || message }
+          }
+        }
+        return { success: true }
+      }
       console.error('[resendAudience] upsertContact failed:', error)
-      return { success: false, error: error.message || error.name || 'Unknown Resend error' }
+      return { success: false, error: message }
     }
     return { success: true }
   } catch (err) {
