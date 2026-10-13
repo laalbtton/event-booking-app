@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/recap-autopost/worker",
-      "schedule": "20 11 * * *"
+      "schedule": "0 11 * * *"
     },
     {
       "path": "/api/events/notify-open-roles",
