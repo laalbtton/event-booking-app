@@ -51,6 +51,12 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSContactsUsageDescription</key>
+	<string>Laal Button uses your contacts only when you choose to import a person into your invite list.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>instagram</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

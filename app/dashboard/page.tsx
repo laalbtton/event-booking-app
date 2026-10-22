@@ -27,7 +27,7 @@ import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider
 import { cn } from '@/lib/utils'
 import { NotificationsBellLink } from '@/components/NotificationsBellLink'
 import { AppStoreBadges } from '@/components/AppStoreBadges'
-import { ChevronDown, Download, Filter, Gift, Newspaper } from 'lucide-react'
+import { BookUser, ChevronDown, Download, Filter, Gift, Newspaper } from 'lucide-react'
 import { EventCardSkeleton } from '@/components/skeletons/EventCardSkeleton'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
@@ -1958,6 +1958,26 @@ export default function Dashboard() {
                   <span className="block text-sm font-semibold text-foreground">Promotions</span>
                   <span className="block text-xs text-muted-foreground truncate">
                     Earn credits with active offers
+                  </span>
+                </span>
+              </span>
+              <ChevronDown className="h-4 w-4 -rotate-90 text-muted-foreground shrink-0" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="w-full justify-between h-auto py-3 px-4"
+          >
+            <Link href="/crm">
+              <span className="flex items-center gap-2.5 min-w-0">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                  <BookUser className="h-4 w-4 text-muted-foreground" />
+                </span>
+                <span className="text-left min-w-0">
+                  <span className="block text-sm font-semibold text-foreground">CRM</span>
+                  <span className="block text-xs text-muted-foreground truncate">
+                    People you&apos;ve met — tag, filter, invite
                   </span>
                 </span>
               </span>

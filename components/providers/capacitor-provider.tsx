@@ -171,7 +171,12 @@ export function CapacitorProvider() {
 
           // ── Regular deep link (notification taps, shared links, etc.) ───
           const url = new URL(event.url)
-          router.push(url.pathname + url.search + url.hash)
+          // Custom-scheme links like com.laalbutton.app://crm?quickadd=1 parse
+          // the first segment as the host; fold it back into the path so
+          // widgets/shortcuts can target any in-app route.
+          const isCustomScheme = !/^https?:$/.test(url.protocol)
+          const path = isCustomScheme && url.host ? `/${url.host}${url.pathname === '/' ? '' : url.pathname}` : url.pathname
+          router.push(path + url.search + url.hash)
         } catch {
           // Malformed URL — ignore.
         }

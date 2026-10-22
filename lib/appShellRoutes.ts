@@ -20,6 +20,7 @@ export const APP_SHELL_ROUTE_PREFIXES = [
   '/brampton-comedy-insider',
   '/venues',
   '/communities',
+  '/crm',
 ] as const
 
 export function matchesAppShellRoute(pathname: string | null): boolean {

@@ -41,4 +41,13 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- CRM "Import from phone": only used when the user taps the button; we open the system picker and never enumerate the address book. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Lets AppLauncher.canOpenUrl detect the Instagram app for deep links (Android 11+ package visibility). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="instagram" />
+        </intent>
+    </queries>
 </manifest>

@@ -23,7 +23,7 @@ import {
   triggerDeferredInstallPrompt,
   type InstallPlatform,
 } from '@/lib/installPromptClient'
-import { ChevronLeft, ChevronDown, ChevronUp, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode, RefreshCw, Terminal, UserPlus, Trash2 } from 'lucide-react'
+import { BookUser, ChevronLeft, ChevronDown, ChevronUp, Download, LogOut, Settings2, Moon, Bell, HelpCircle, Instagram, User, Users, Wrench, Megaphone, QrCode, RefreshCw, Terminal, UserPlus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { signOutAndCleanup } from '@/lib/authClient'
 import { useConfirmDialog } from '@/components/providers/confirm-dialog-provider'
@@ -622,6 +622,9 @@ export default function SettingsPage() {
               </div>
               <div className="px-4 py-1">
                 <SettingsListRow href="/feed/following" icon={UserPlus} title="Following" description="People whose gigs show in your feed" />
+              </div>
+              <div className="px-4 py-1">
+                <SettingsListRow href="/crm" icon={BookUser} title="CRM" description="Your private invite list — tags, filters, export" />
               </div>
               {canCommunityCommands && (
                 <div className="px-4 py-1">

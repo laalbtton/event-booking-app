@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "build:android": "next build && npx cap sync android",
     "build:ios": "next build && npx cap sync ios",
     "open:android": "npx cap open android",
@@ -18,10 +19,16 @@
     "assets:native": "capacitor-assets generate --android --ios --iconBackgroundColor \"#ffffff\""
   },
   "dependencies": {
+    "@capacitor-community/contacts": "^8.0.0",
     "@capacitor/app": "^8.1.0",
+    "@capacitor/app-launcher": "^8.0.1",
     "@capacitor/browser": "^8.0.3",
+    "@capacitor/clipboard": "^8.0.1",
     "@capacitor/core": "^8.3.4",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/haptics": "^8.0.2",
     "@capacitor/push-notifications": "^8.1.1",
+    "@capacitor/share": "^8.0.3",
     "@capacitor/status-bar": "^8.0.2",
     "@radix-ui/react-accordion": "^1.2.15",
     "@radix-ui/react-avatar": "^1.1.11",
@@ -49,7 +56,8 @@
     "sonner": "^2.0.7",
     "stripe": "^16.7.0",
     "tailwind-merge": "^3.4.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.4",
@@ -65,6 +73,7 @@
     "eslint-config-next": "16.1.1",
     "playwright": "^1.49.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }
