@@ -11,7 +11,7 @@ Both paths use the Facebook Lead ID and the same app delivery ledger. If the sam
 
 ## 1. Apply the database migration
 
-Run `sql/facebook_lead_deliveries_migration.sql` in the Supabase SQL editor.
+Run `sql/facebook_lead_deliveries_migration.sql`, then `sql/sms_opt_out_migration.sql`, in the Supabase SQL editor.
 
 ## 2. Configure Vercel
 
@@ -31,11 +31,12 @@ META_LEAD_CONSENT_FIELDS=consent,contact_consent,email_sms_consent
 TWILIO_ACCOUNT_SID=<Twilio account SID>
 TWILIO_AUTH_TOKEN=<Twilio auth token>
 TWILIO_FROM_NUMBER=<E.164 Twilio number, for example +14165550100>
+SMS_CONSENT_WEBHOOK_SECRET=<a third random secret used by Pabbly inbound SMS>
 ```
 
 If using a Twilio Messaging Service, set `TWILIO_MESSAGING_SERVICE_SID` instead of `TWILIO_FROM_NUMBER`.
 
-The existing `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, Supabase, and site URL variables are also used.
+The existing `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, Supabase, and site URL variables are also used. The inbound Pabbly workflow posts Twilio replies to `/api/integrations/twilio/consent`; STOP-like keywords suppress the normalized phone number and START/UNSTOP restores consent.
 
 ## 3. Configure Meta's direct webhook
 
@@ -43,10 +44,10 @@ After deploying:
 
 1. In Meta Developer Dashboard, open **Webhooks → Page**.
 2. Set Callback URL to:
-   `https://app.laalbutton.com/api/integrations/meta/webhook`
+  `https://app.laalbutton.com/api/integrations/meta/webhook`
 3. Enter the exact value of `META_WEBHOOK_VERIFY_TOKEN` as the Verify token.
 4. Click **Verify and save**.
-5. Subscribe to the Page webhook field named **`leadgen`** using the same Graph API version configured in Vercel.
+5. Subscribe to the Page webhook field named `leadgen` using the same Graph API version configured in Vercel.
 6. Connect/subscribe the Facebook Page to this app and grant the app CRM access in Meta Business Settings/Leads Access Manager.
 7. Use Meta's Lead Ads Testing Tool to create one test lead.
 

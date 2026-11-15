@@ -29,7 +29,13 @@ export const facebookLeadSchema = z.object({
 })
 
 export type FacebookLeadInput = z.input<typeof facebookLeadSchema>
-type DeliveryStatus = 'pending' | 'sent' | 'failed' | 'skipped_missing' | 'skipped_no_consent'
+type DeliveryStatus =
+  | 'pending'
+  | 'sent'
+  | 'failed'
+  | 'skipped_missing'
+  | 'skipped_no_consent'
+  | 'skipped_opted_out'
 
 function leadKey(input: z.output<typeof facebookLeadSchema>): string {
   if (input.leadId) return input.leadId
@@ -173,17 +179,28 @@ export async function processFacebookLead(rawLead: unknown) {
         smsStatus = 'failed'
         smsError = 'Phone number is invalid'
       } else {
-        const result = await sendLeadWelcomeSms({
-          phone: parsed.data.phone,
-          name: lead.name,
-          idempotencyKey: `facebook-lead-sms-${delivery.id}`,
-        })
-        if (result.ok) {
-          smsStatus = 'sent'
-          smsSentAt = new Date().toISOString()
+        const { data: suppression, error: suppressionError } = await db
+          .from('sms_suppressions')
+          .select('opted_out')
+          .eq('phone', parsed.data.phone)
+          .maybeSingle()
+        if (suppressionError) throw suppressionError
+
+        if (suppression?.opted_out) {
+          smsStatus = 'skipped_opted_out'
         } else {
-          smsStatus = 'failed'
-          smsError = shortError(result.error)
+          const result = await sendLeadWelcomeSms({
+            phone: parsed.data.phone,
+            name: lead.name,
+            idempotencyKey: `facebook-lead-sms-${delivery.id}`,
+          })
+          if (result.ok) {
+            smsStatus = 'sent'
+            smsSentAt = new Date().toISOString()
+          } else {
+            smsStatus = 'failed'
+            smsError = shortError(result.error)
+          }
         }
       }
     }
