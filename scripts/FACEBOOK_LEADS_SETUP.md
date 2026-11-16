@@ -19,6 +19,7 @@ Set these Production environment variables, then redeploy:
 
 ```text
 FACEBOOK_LEADS_WEBHOOK_SECRET=<random secret used only by Apps Script>
+HISTORICAL_LEADS_WEBHOOK_SECRET=<separate secret for temporary one-time backfills>
 FACEBOOK_LEADS_CRM_OWNER_ID=<auth.users UUID of the admin who owns CRM contacts>
 FACEBOOK_LEADS_SMS_SENDER=pabbly
 

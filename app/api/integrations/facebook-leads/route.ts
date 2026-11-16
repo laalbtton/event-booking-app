@@ -6,12 +6,21 @@ import { processFacebookLead } from '@/lib/server/processFacebookLead'
 export const dynamic = 'force-dynamic'
 
 function authorized(request: Request): boolean {
-  const expected = process.env.FACEBOOK_LEADS_WEBHOOK_SECRET
   const received = request.headers.get('x-lead-webhook-secret')
-  if (!expected || !received) return false
-  const a = Buffer.from(expected)
-  const b = Buffer.from(received)
-  return a.length === b.length && timingSafeEqual(a, b)
+  if (!received) return false
+  const receivedBuffer = Buffer.from(received)
+  const acceptedSecrets = [
+    process.env.FACEBOOK_LEADS_WEBHOOK_SECRET,
+    process.env.HISTORICAL_LEADS_WEBHOOK_SECRET,
+  ].filter((secret): secret is string => Boolean(secret))
+
+  return acceptedSecrets.some((secret) => {
+    const expectedBuffer = Buffer.from(secret)
+    return (
+      expectedBuffer.length === receivedBuffer.length &&
+      timingSafeEqual(expectedBuffer, receivedBuffer)
+    )
+  })
 }
 
 export async function POST(request: Request) {
