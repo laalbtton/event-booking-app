@@ -27,7 +27,7 @@ export const facebookLeadSchema = z.object({
   adName: z.string().trim().max(300).optional().nullable(),
   consent: consentValue.default(false),
   /** Restricted to callers holding the Sheet webhook secret; used for one-time historical backfills. */
-  sendSmsViaApp: z.boolean().optional().default(false),
+  sendSmsViaApp: consentValue.default(false),
 })
 
 export type FacebookLeadInput = z.input<typeof facebookLeadSchema>
