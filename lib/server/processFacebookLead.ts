@@ -36,6 +36,7 @@ type DeliveryStatus =
   | 'skipped_missing'
   | 'skipped_no_consent'
   | 'skipped_opted_out'
+  | 'skipped_external'
 
 function leadKey(input: z.output<typeof facebookLeadSchema>): string {
   if (input.leadId) return input.leadId
@@ -164,7 +165,10 @@ export async function processFacebookLead(rawLead: unknown) {
   let smsSentAt: string | null = delivery.sms_sent_at
   let smsError: string | null = null
   if (smsStatus !== 'sent') {
-    if (!lead.consent) {
+    const smsSender = process.env.FACEBOOK_LEADS_SMS_SENDER || 'pabbly'
+    if (smsSender === 'pabbly') {
+      smsStatus = 'skipped_external'
+    } else if (!lead.consent) {
       smsStatus = 'skipped_no_consent'
     } else if (!lead.phone) {
       smsStatus = 'skipped_missing'

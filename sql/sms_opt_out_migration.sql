@@ -29,6 +29,7 @@ ALTER TABLE public.facebook_lead_deliveries
       'failed',
       'skipped_missing',
       'skipped_no_consent',
-      'skipped_opted_out'
+      'skipped_opted_out',
+      'skipped_external'
     )
   );
