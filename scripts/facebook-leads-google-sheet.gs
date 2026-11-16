@@ -21,6 +21,7 @@ function onOpen() {
     .createMenu('Lead CRM')
     .addItem('Configure connection', 'configureLeadSync')
     .addItem('Process new leads now', 'processNewFacebookLeads')
+    .addItem('Process historical CSV (email + SMS)', 'processHistoricalFacebookLeads')
     .addItem('Install 1-minute trigger', 'installLeadSyncTrigger')
     .addToUi()
 }
@@ -61,6 +62,21 @@ function installLeadSyncTrigger() {
 }
 
 function processNewFacebookLeads() {
+  processFacebookLeads_(false)
+}
+
+function processHistoricalFacebookLeads() {
+  const ui = SpreadsheetApp.getUi()
+  const response = ui.alert(
+    'Send historical welcome messages?',
+    'This sends one real email and SMS to every eligible row with blank statuses. Use only a dedicated historical-leads sheet whose rows explicitly consented.',
+    ui.ButtonSet.YES_NO,
+  )
+  if (response !== ui.Button.YES) return
+  processFacebookLeads_(true)
+}
+
+function processFacebookLeads_(sendSmsViaApp) {
   const lock = LockService.getScriptLock()
   if (!lock.tryLock(1000)) return
 
@@ -101,6 +117,7 @@ function processNewFacebookLeads() {
           'marketing_consent',
           'email_sms_consent',
         ]),
+        sendSmsViaApp: Boolean(sendSmsViaApp),
       }
 
       if (!payload.name) {

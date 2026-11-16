@@ -26,6 +26,8 @@ export const facebookLeadSchema = z.object({
   campaignName: z.string().trim().max(300).optional().nullable(),
   adName: z.string().trim().max(300).optional().nullable(),
   consent: consentValue.default(false),
+  /** Restricted to callers holding the Sheet webhook secret; used for one-time historical backfills. */
+  sendSmsViaApp: z.boolean().optional().default(false),
 })
 
 export type FacebookLeadInput = z.input<typeof facebookLeadSchema>
@@ -165,7 +167,9 @@ export async function processFacebookLead(rawLead: unknown) {
   let smsSentAt: string | null = delivery.sms_sent_at
   let smsError: string | null = null
   if (smsStatus !== 'sent') {
-    const smsSender = process.env.FACEBOOK_LEADS_SMS_SENDER || 'pabbly'
+    const smsSender = lead.sendSmsViaApp
+      ? 'app'
+      : process.env.FACEBOOK_LEADS_SMS_SENDER || 'pabbly'
     if (smsSender === 'pabbly') {
       smsStatus = 'skipped_external'
     } else if (!lead.consent) {

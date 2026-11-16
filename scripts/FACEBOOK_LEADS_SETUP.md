@@ -77,6 +77,18 @@ Import or paste the Meta CSV into the first tab, preserve the header row, and ad
 
 Do not remove Meta's Lead ID column. It is what prevents a CSV/Sheet lead from being sent again if the direct webhook also received it.
 
+### One-time historical email + SMS backfill
+
+Use a separate Google Sheet and do not install its one-minute trigger:
+
+1. Import the Meta Leads Manager CSV into the first tab.
+2. Preserve the Facebook Lead ID, name, email, and phone columns.
+3. Add a `consent` column with `TRUE` only for leads covered by the form's explicit email/SMS disclosure.
+4. Add the Apps Script, configure the app URL/secret, and reload the Sheet.
+5. Select **Lead CRM → Process historical CSV (email + SMS)** and confirm.
+
+The app imports/matches each CRM contact, checks the phone suppression ledger, sends each missing channel once, and writes the results back. Existing delivery-ledger entries prevent duplicate sends. Do not use this historical command on the continuously synchronized live-leads Sheet.
+
 ## 5. Test
 
 Add one test row with your own email and phone and set `consent` to `TRUE`. Use **Lead CRM → Process new leads now**. Confirm:
