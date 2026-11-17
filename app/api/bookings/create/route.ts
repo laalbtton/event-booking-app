@@ -49,7 +49,7 @@ function isSocapName(value: string | null | undefined) {
 }
 
 async function handleFreeBookedShowRsvp(params: {
-  supabase: ReturnType<NonNullable<typeof getAdminClient>>
+  supabase: NonNullable<ReturnType<typeof getAdminClient>>
   userId: string
   event: {
     id: string
