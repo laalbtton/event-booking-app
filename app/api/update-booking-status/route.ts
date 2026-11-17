@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { promptPerformerAboutOpenRoles } from '@/lib/server/performerRoleNotify'
+import { spotsForBooking, sumConfirmedAudienceSpots } from '@/lib/bookingPartySize'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, event_id, user_id, status, waitlist_position, booking_scope, event_art_type_id')
+      .select('id, event_id, user_id, status, waitlist_position, booking_scope, event_art_type_id, party_size')
       .eq('id', bookingId)
       .single()
 
@@ -90,37 +91,55 @@ export async function POST(request: NextRequest) {
           ? Math.max(0, Number((event as any).audience_capacity || 0))
           : event.max_attendees
 
-      let countQuery = supabase
-        .from('bookings')
-        .select('id', { count: 'exact', head: true })
-        .eq('event_id', booking.event_id)
-        .eq('status', 'confirmed')
-        .eq('booking_scope', bookingScope)
+      let confirmedCount = 0
 
-      if (isVarietyPerformer && booking.event_art_type_id && !useGlobalVarietyCapacity) {
-        const { data: artTypeRow, error: artTypeError } = await supabase
-          .from('event_art_types')
-          .select('slot_capacity')
-          .eq('id', booking.event_art_type_id)
-          .eq('event_id', booking.event_id)
-          .maybeSingle()
-        if (artTypeError || !artTypeRow) {
-          return NextResponse.json({ error: 'Invalid art type bucket for this booking' }, { status: 400 })
+      if (bookingScope === 'audience') {
+        const { spots, error: countError } = await sumConfirmedAudienceSpots(supabase, booking.event_id)
+        if (countError) {
+          return NextResponse.json({ error: countError.message }, { status: 500 })
         }
-        capacity = Number(artTypeRow.slot_capacity || 0)
-        countQuery = countQuery.eq('event_art_type_id', booking.event_art_type_id)
-      } else if (!isVarietyPerformer) {
-        countQuery = countQuery.is('event_art_type_id', null)
+        confirmedCount = spots
+      } else {
+        let countQuery = supabase
+          .from('bookings')
+          .select('id', { count: 'exact', head: true })
+          .eq('event_id', booking.event_id)
+          .eq('status', 'confirmed')
+          .eq('booking_scope', bookingScope)
+
+        if (isVarietyPerformer && booking.event_art_type_id && !useGlobalVarietyCapacity) {
+          const { data: artTypeRow, error: artTypeError } = await supabase
+            .from('event_art_types')
+            .select('slot_capacity')
+            .eq('id', booking.event_art_type_id)
+            .eq('event_id', booking.event_id)
+            .maybeSingle()
+          if (artTypeError || !artTypeRow) {
+            return NextResponse.json({ error: 'Invalid art type bucket for this booking' }, { status: 400 })
+          }
+          capacity = Number(artTypeRow.slot_capacity || 0)
+          countQuery = countQuery.eq('event_art_type_id', booking.event_art_type_id)
+        } else if (!isVarietyPerformer) {
+          countQuery = countQuery.is('event_art_type_id', null)
+        }
+
+        const { count, error: countError } = await countQuery
+
+        if (countError) {
+          return NextResponse.json({ error: countError.message }, { status: 500 })
+        }
+
+        confirmedCount = count ?? 0
       }
 
-      const { count, error: countError } = await countQuery
+      const incomingSpots =
+        bookingScope === 'audience' && booking.status !== 'confirmed' ? spotsForBooking(booking) : 0
+      const wouldExceed =
+        bookingScope === 'audience'
+          ? capacity !== null && confirmedCount + incomingSpots > capacity
+          : capacity !== null && confirmedCount >= capacity
 
-      if (countError) {
-        return NextResponse.json({ error: countError.message }, { status: 500 })
-      }
-
-      const confirmedCount = count ?? 0
-      if (capacity !== null && confirmedCount >= capacity) {
+      if (wouldExceed) {
         if (bookingScope === 'performer' && !isVarietyPerformer && event.max_attendees !== null) {
           await supabase
             .from('events')

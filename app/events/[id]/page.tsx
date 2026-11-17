@@ -38,6 +38,9 @@ import {
 } from '@/lib/eventPosterDefaults'
 import { getAudienceCreditsToDebit } from '@/lib/audienceBookingCredits'
 import { PosterShareActions } from '@/components/PosterShareActions'
+import { FreeRsvpButtons } from '@/components/FreeRsvpButtons'
+import { isFreeBookedShowRsvp, isFreeTicketTier, type FreeRsvpIntent } from '@/lib/freeEventRsvp'
+import { spotsForBooking, sumAudienceSpots } from '@/lib/bookingPartySize'
 
 
 type EventDetails = {
@@ -161,6 +164,8 @@ export default function EventDetailsPage() {
   const [myTicketPurchases, setMyTicketPurchases] = useState<{ id: string; quantity: number; total_cents: number }[]>([])
   const [recurrenceDescription, setRecurrenceDescription] = useState<string | null>(null)
   const [applyCreditsToTickets, setApplyCreditsToTickets] = useState(true)
+  const [rsvpLoading, setRsvpLoading] = useState<FreeRsvpIntent | null>(null)
+  const [audienceRsvpCounts, setAudienceRsvpCounts] = useState({ going: 0, interested: 0 })
 
 
   function copyPublicLink() {
@@ -530,7 +535,7 @@ export default function EventDetailsPage() {
           .order('waitlist_position', { ascending: true }),
         supabase
           .from('bookings')
-          .select('id', { count: 'exact', head: true })
+          .select('booking_scope, party_size')
           .eq('event_id', resolvedEventId)
           .eq('booking_scope', 'audience')
           .in('status', ['confirmed', 'waitlist']),
@@ -553,6 +558,7 @@ export default function EventDetailsPage() {
       if (!venueResult.error && venueResult.data) setVenue(venueResult.data as VenueDetails)
       if (!hostResult.error && hostResult.data) setHostProfile(hostResult.data)
       if (!ticketResult.error && ticketResult.data) setTicketInfo(ticketResult.data as any)
+      else setTicketInfo(null)
 
       if (confirmedResult.error) throw confirmedResult.error
       const confirmedData = confirmedResult.data || []
@@ -564,7 +570,7 @@ export default function EventDetailsPage() {
       const performerWaitlist = waitlistData.filter((b: any) => b.booking_scope !== 'audience')
       setWaitlistBookings(performerWaitlist as any)
 
-      setAudienceExpectedCount(audienceCountResult.count || 0)
+      setAudienceExpectedCount(sumAudienceSpots((audienceCountResult.data || []) as { booking_scope?: string | null; party_size?: number | null }[]))
 
       if (isVariety && artTypesResult.data) {
         const options = artTypesResult.data.map((row: any) => {
@@ -597,7 +603,7 @@ export default function EventDetailsPage() {
             .select('id, status, booking_scope')
             .eq('event_id', resolvedEventId)
             .eq('user_id', user.id)
-            .in('status', ['confirmed', 'waitlist'])
+            .in('status', ['confirmed', 'waitlist', 'interested'])
             .order('booked_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
@@ -632,6 +638,18 @@ export default function EventDetailsPage() {
         setEventAutoPostEnabled(!!prefResult.data?.auto_post_enabled)
         setLiveModeEnabled(liveStateResult.data?.enabled === true)
         setMyTicketPurchases((ticketPurchasesResult.data || []) as { id: string; quantity: number; total_cents: number }[])
+
+        const { data: rsvpRows } = await supabase
+          .from('bookings')
+          .select('status, party_size')
+          .eq('event_id', resolvedEventId)
+          .eq('booking_scope', 'audience')
+          .in('status', ['confirmed', 'interested'])
+        const going = (rsvpRows || [])
+          .filter((r: { status: string }) => r.status === 'confirmed')
+          .reduce((sum: number, r: { party_size?: number | null }) => sum + spotsForBooking(r), 0)
+        const interested = (rsvpRows || []).filter((r: { status: string }) => r.status === 'interested').length
+        setAudienceRsvpCounts({ going, interested })
 
         if (alertResult.error) {
           const missingTable = alertResult.error.code === '42P01' || alertResult.error.message?.includes('registration_alerts')
@@ -681,10 +699,60 @@ export default function EventDetailsPage() {
         return
       }
 
+      if (data.completedFree) {
+        toast.success("You're going — free ticket confirmed.")
+        setTicketSuccess(true)
+        setTicketLoading(false)
+        loadEventDetails()
+        return
+      }
+
       window.location.href = data.url
     } catch (err: any) {
       toast.error(err.message || 'Could not start checkout')
       setTicketLoading(false)
+    }
+  }
+
+  async function handleFreeRsvp(intent: FreeRsvpIntent) {
+    if (!event || !profile) {
+      toast.error('Please log in to RSVP')
+      return
+    }
+    if (isPerformerSignedUpForEvent) {
+      toast.error('You already have a performer spot for this event.')
+      return
+    }
+
+    setRsvpLoading(intent)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/bookings/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ eventId: event.id, rsvpIntent: intent }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Failed to save RSVP')
+
+      await loadEventDetails()
+      if (intent === 'interested') {
+        toast.success("You're marked as interested. We can notify you later.")
+      } else if (result.bookingStatus === 'waitlist') {
+        toast.success("You're on the waitlist.")
+      } else {
+        toast.success("You're going!")
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Could not save RSVP')
+    } finally {
+      setRsvpLoading(null)
     }
   }
 
@@ -964,13 +1032,6 @@ export default function EventDetailsPage() {
     creditsRequiredForButton,
   )
   const bookingLabel = isFull ? 'Join Waitlist' : isAudienceUser ? 'Reserve Spot' : 'Book Event'
-  const showAudienceTicketCta =
-    !!ticketInfo && event.tickets_enabled && !event.external_event && !isPerformerSignedUpForEvent
-  const showOwnedTickets =
-    !!ticketInfo &&
-    event.tickets_enabled &&
-    !event.external_event &&
-    (myTicketPurchases.length > 0 || ticketSuccess)
   const now = new Date()
   const startTime = new Date(event.date)
   const endTime = event.end_time
@@ -978,6 +1039,31 @@ export default function EventDetailsPage() {
     : new Date(new Date(event.date).getTime() + 2 * 60 * 60 * 1000)
   const isInProgress = startTime <= now && now < endTime
   const isPast = endTime <= now
+  const isFreeTicketedShow = isFreeTicketTier(ticketInfo) && event.tickets_enabled && !event.external_event
+  const isFreeRsvpShow = isFreeBookedShowRsvp(event, ticketInfo)
+  const audienceRsvp = userBooking?.booking_scope === 'audience' ? userBooking : null
+  const isGoingRsvp =
+    audienceRsvp?.status === 'confirmed' || myTicketPurchases.length > 0 || ticketSuccess
+  const isWaitlistedRsvp = audienceRsvp?.status === 'waitlist'
+  const isInterestedRsvp = audienceRsvp?.status === 'interested'
+  const canAudienceRsvp =
+    event.event_type === 'booked_show' &&
+    !isHost &&
+    !isEventCreator &&
+    !isPerformerSignedUpForEvent &&
+    !isPast &&
+    event.status !== 'cancelled'
+  const showAudienceTicketCta =
+    !!ticketInfo &&
+    event.tickets_enabled &&
+    !event.external_event &&
+    !isPerformerSignedUpForEvent &&
+    !isFreeTicketedShow
+  const showOwnedTickets =
+    !!ticketInfo &&
+    event.tickets_enabled &&
+    !event.external_event &&
+    (myTicketPurchases.length > 0 || ticketSuccess)
   const useGlobalVarietyCapacity =
     event.event_type === 'open_mic' &&
     (event as any).open_mic_type === 'variety_arts_open_mic' &&
@@ -1252,14 +1338,25 @@ export default function EventDetailsPage() {
                 </div>
 
                 {(event.event_type === 'booked_show' || event.tickets_enabled) ? (
-                  (ticketInfo || (event.tickets_enabled && !isAudienceUser)) && (
+                  ticketInfo ? (
                     <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
                       <span className="mr-2">🎟️</span>
-                      {ticketInfo ? (
-                        <span><strong className="font-semibold">Tickets:</strong> ${(ticketInfo.price_cents / 100).toFixed(2)} CAD · {Math.max(0, ticketInfo.quantity - ticketInfo.sold)} remaining</span>
-                      ) : (
-                        <span><strong className="font-semibold">Tickets:</strong> {event.external_event ? 'External' : 'Available'}</span>
-                      )}
+                      <span>
+                        <strong className="font-semibold">{isFreeTicketedShow ? 'Free tickets:' : 'Tickets:'}</strong>{' '}
+                        {isFreeTicketedShow ? 'Free' : `$${(ticketInfo.price_cents / 100).toFixed(2)} CAD`}
+                        {' · '}
+                        {Math.max(0, ticketInfo.quantity - ticketInfo.sold)} remaining
+                      </span>
+                    </div>
+                  ) : event.tickets_enabled ? (
+                    <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
+                      <span className="mr-2">🎟️</span>
+                      <span><strong className="font-semibold">Tickets:</strong> {event.external_event ? 'External' : 'Available'}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center text-sm md:text-base text-gray-900 dark:text-foreground">
+                      <span className="mr-2">🎟️</span>
+                      <span><strong className="font-semibold">Admission:</strong> Free RSVP</span>
                     </div>
                   )
                 ) : (
@@ -1475,10 +1572,56 @@ export default function EventDetailsPage() {
                     </div>
                   )}
 
+                  {canAudienceRsvp && (isFreeRsvpShow || isFreeTicketedShow) && (
+                    <FreeRsvpButtons
+                      going={isGoingRsvp}
+                      interested={isInterestedRsvp}
+                      waitlisted={isWaitlistedRsvp}
+                      bookingId={audienceRsvp?.id}
+                      goingCount={audienceRsvpCounts.going}
+                      interestedCount={audienceRsvpCounts.interested}
+                      loading={isFreeTicketedShow && rsvpLoading === 'going' ? null : rsvpLoading}
+                      disabled={ticketLoading}
+                      onGoing={() => {
+                        if (isFreeTicketedShow) {
+                          if (ticketInfo && Math.max(0, ticketInfo.quantity - ticketInfo.sold) <= 0) {
+                            toast.error('Free tickets are gone')
+                            return
+                          }
+                          void handleBuyTickets()
+                          return
+                        }
+                        void handleFreeRsvp('going')
+                      }}
+                      onInterested={() => void handleFreeRsvp('interested')}
+                    />
+                  )}
+
+                  {canAudienceRsvp &&
+                    !isFreeRsvpShow &&
+                    !isFreeTicketedShow &&
+                    !isGoingRsvp &&
+                    !isWaitlistedRsvp &&
+                    event.tickets_enabled &&
+                    !event.external_event && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={isInterestedRsvp ? 'secondary' : 'outline'}
+                        disabled={!!rsvpLoading}
+                        onClick={() => void handleFreeRsvp('interested')}
+                        className={isInterestedRsvp ? 'border-yellow-400 bg-yellow-400/15 text-yellow-800 dark:text-yellow-300' : undefined}
+                      >
+                        {rsvpLoading === 'interested' ? 'Saving…' : 'Interested'}
+                      </Button>
+                    )}
+
                   {event.event_type === 'booked_show' &&
-                    !(ticketInfo && event.tickets_enabled && !event.external_event) &&
-                    !isAudienceUser && (
-                      <Badge variant="outline">Invite only</Badge>
+                    event.external_event &&
+                    !isAudienceUser &&
+                    !isHost &&
+                    !isEventCreator && (
+                      <Badge variant="outline">External tickets</Badge>
                     )}
 
                   {/* Open mic: performer booking (and free audience path when not ticketed) */}
@@ -1716,13 +1859,13 @@ export default function EventDetailsPage() {
       )}
 
       {/* Booking strip - fixed above nav when user has a booking */}
-      {userBooking && (
+      {userBooking && ['confirmed', 'waitlist'].includes(userBooking.status) && (
         <Link
           href={`/bookings/${userBooking.id}`}
           className="fixed left-0 right-0 z-40 flex items-center justify-center py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm shadow-lg"
           style={{ bottom: 'calc(4rem + var(--app-safe-bottom, 0px))' }}
         >
-          Go to booking
+          {userBooking.status === 'waitlist' ? 'View waitlist RSVP' : 'Go to booking'}
         </Link>
       )}
 

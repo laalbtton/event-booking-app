@@ -36,6 +36,7 @@ type BookingWithProfile = {
   attendance_status: string | null
   no_show_penalty_charged_at?: string | null
   audience_checkin_code?: string | null
+  party_size?: number | null
   booked_at: string
   waitlist_position?: number | null
   profiles: {
@@ -135,6 +136,7 @@ export default function AttendancePage() {
   const [event, setEvent] = useState<EventDetails | null>(null)
   const [bookings, setBookings] = useState<BookingWithProfile[]>([])
   const [audienceBookings, setAudienceBookings] = useState<BookingWithProfile[]>([])
+  const [interestedBookings, setInterestedBookings] = useState<BookingWithProfile[]>([])
   const [waitlistBookings, setWaitlistBookings] = useState<BookingWithProfile[]>([])
   const [attendeeTab, setAttendeeTab] = useState<'performers' | 'audience'>('performers')
   const [audienceFilter, setAudienceFilter] = useState<'all' | 'checked_in' | 'not_arrived'>('all')
@@ -556,6 +558,7 @@ export default function AttendancePage() {
           attendance_status,
           no_show_penalty_charged_at,
           audience_checkin_code,
+          party_size,
           booked_at,
           waitlist_position,
           event_art_types:event_art_type_id (
@@ -606,6 +609,7 @@ export default function AttendancePage() {
           attendance_status,
           no_show_penalty_charged_at,
           audience_checkin_code,
+          party_size,
           booked_at,
           waitlist_position,
           event_art_types:event_art_type_id (
@@ -626,6 +630,46 @@ export default function AttendancePage() {
       if (waitlistError) throw waitlistError
       const performerWaitlist = (waitlistData || []).filter((b: any) => b.booking_scope !== 'audience')
       setWaitlistBookings(performerWaitlist as any)
+
+      const { data: interestedData, error: interestedError } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          user_id,
+          credits_used,
+          status,
+          booking_scope,
+          event_art_type_id,
+          attendance_status,
+          no_show_penalty_charged_at,
+          audience_checkin_code,
+          party_size,
+          booked_at,
+          waitlist_position,
+          event_art_types:event_art_type_id (
+            id,
+            art_type_name
+          ),
+          profiles (
+            id,
+            full_name,
+            email
+          )
+        `)
+        .eq('event_id', resolvedEventId)
+        .eq('status', 'interested')
+        .eq('booking_scope', 'audience')
+        .order('booked_at', { ascending: false })
+
+      if (interestedError) {
+        const missingStatus =
+          interestedError.message?.includes('interested') ||
+          interestedError.code === '23514'
+        if (!missingStatus) throw interestedError
+        setInterestedBookings([])
+      } else {
+        setInterestedBookings((interestedData || []) as any)
+      }
 
       if (eventData.food_coupon_enabled) {
         const { data: redeemedVouchers, error: redeemedError } = await supabase
@@ -2263,7 +2307,7 @@ export default function AttendancePage() {
         <Card>
           <CardHeader className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <CardTitle>{attendeeTab === 'performers' ? `Confirmed Bookings (${bookings.length})` : `Audience (${audienceBookings.length})`}</CardTitle>
+              <CardTitle>{attendeeTab === 'performers' ? `Confirmed Bookings (${bookings.length})` : `Audience (${audienceBookings.reduce((sum, booking) => sum + Math.max(1, Number(booking.party_size || 1)), 0)} spots)`}</CardTitle>
               {attendeeTab === 'performers' && (
                 <Button variant="outline" size="icon" onClick={copyAttendanceList} aria-label="Copy attendance list">
                   <Copy className="h-4 w-4" />
@@ -2589,6 +2633,7 @@ export default function AttendancePage() {
                                   </Link>
                                   <p className="text-xs text-muted-foreground truncate">
                                     {booking.audience_checkin_code || 'No check-in code'}
+                                    {Number(booking.party_size || 1) > 1 ? ` · ${booking.party_size} spots` : ''}
                                   </p>
                                 </div>
                                 <Switch
@@ -2602,6 +2647,33 @@ export default function AttendancePage() {
                           })}
                         </div>
                       )}
+
+                      <div className="pt-4 border-t space-y-2">
+                        <p className="text-sm font-semibold">Interested ({interestedBookings.length})</p>
+                        <p className="text-xs text-muted-foreground">
+                          People who tapped Interested. They are not going yet and do not count toward capacity.
+                        </p>
+                        {interestedBookings.length === 0 ? (
+                          <p className="text-muted-foreground text-center py-4 text-sm">No one has marked Interested yet.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {interestedBookings.map((booking) => (
+                              <div key={booking.id} className="flex items-center gap-3 p-3 rounded-lg border border-yellow-200 bg-yellow-50/50 dark:border-yellow-900/40 dark:bg-yellow-950/20">
+                                <div className="flex-1 min-w-0">
+                                  <Link
+                                    href={`/profile/${booking.profiles.id}`}
+                                    className="font-medium text-blue-600 hover:text-blue-800 hover:underline block truncate"
+                                  >
+                                    {booking.profiles.full_name || 'No name'}
+                                  </Link>
+                                  <p className="text-xs text-muted-foreground truncate">{booking.profiles.email}</p>
+                                </div>
+                                <Badge variant="outline" className="text-yellow-700 border-yellow-500">Interested</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </>
                   )
                 })()}

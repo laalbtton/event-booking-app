@@ -278,8 +278,9 @@ export type Booking = {
   event_art_type_id?: string | null
   credits_used: number
   booked_at: string
-  status: string
+  status: string // 'confirmed' | 'cancelled' | 'waitlist' | 'interested'
   booking_scope?: 'performer' | 'audience'
+  party_size?: number
   waitlist_position: number | null
   attendance_status: string | null // 'attended', 'no_show', or null (confirmed)
   attendance_marked_at?: string | null

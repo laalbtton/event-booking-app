@@ -59,6 +59,8 @@ import {
 } from '@/lib/bookingScopeUtils'
 import { resolveEventDisplayPosterUrl } from '@/lib/eventPosterDefaults'
 import { getAudienceBookingCreditsRequired, getAudienceCreditsToDebit } from '@/lib/audienceBookingCredits'
+import { FreeRsvpButtons } from '@/components/FreeRsvpButtons'
+import { isFreeBookedShowRsvp, isFreeTicketTier, type FreeRsvpIntent } from '@/lib/freeEventRsvp'
 
 /** Same Brampton/Toronto default posters as the public site when no custom poster. */
 function getDashboardEventPosterUrl(
@@ -175,6 +177,7 @@ export default function Dashboard() {
   const [respondingInvite, setRespondingInvite] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [bookingLoading, setBookingLoading] = useState<string | null>(null)
+  const [rsvpLoading, setRsvpLoading] = useState<{ eventId: string; intent: FreeRsvpIntent } | null>(null)
   const [optimisticBookings, setOptimisticBookings] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -1159,7 +1162,7 @@ export default function Dashboard() {
           .from('bookings')
           .select('*, events (*)')
           .eq('user_id', userId)
-          .in('status', ['confirmed', 'waitlist', 'cancelled']),
+          .in('status', ['confirmed', 'waitlist', 'cancelled', 'interested']),
         supabase
           .from('event_invites')
           .select('event_id, status')
@@ -1508,6 +1511,74 @@ export default function Dashboard() {
       }
     } finally {
       setBookingLoading(null)
+    }
+  }
+
+  async function handleFreeRsvp(event: Event, intent: FreeRsvpIntent) {
+    if (!profile) return
+    setRsvpLoading({ eventId: event.id, intent })
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/bookings/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ eventId: event.id, rsvpIntent: intent }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Failed to save RSVP')
+
+      await loadData(profile.id, null)
+      if (intent === 'interested') {
+        toast.success("You're marked as interested. We can notify you later.")
+      } else if (result.bookingStatus === 'waitlist') {
+        toast.success("You're on the waitlist.")
+      } else {
+        toast.success("You're going!")
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Could not save RSVP')
+    } finally {
+      setRsvpLoading(null)
+    }
+  }
+
+  async function handleClaimFreeTicket(event: Event) {
+    if (!profile) return
+    setRsvpLoading({ eventId: event.id, intent: 'going' })
+    try {
+      const response = await fetch('/api/stripe/ticket-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: event.id,
+          quantity: 1,
+          userId: profile.id,
+          email: profile.email,
+          useCredits: false,
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Could not claim free ticket')
+      if (data.completedFree) {
+        toast.success("You're going — free ticket confirmed.")
+        await loadData(profile.id, null)
+        return
+      }
+      if (data.url) {
+        window.location.href = data.url
+        return
+      }
+      throw new Error('Could not claim free ticket')
+    } catch (error: any) {
+      toast.error(error.message || 'Could not claim free ticket')
+    } finally {
+      setRsvpLoading(null)
     }
   }
 
@@ -2311,7 +2382,7 @@ export default function Dashboard() {
                                 <span>📅</span>
                                 <span>{formatDateTime(event.date)}</span>
                               </div>
-                              {event.max_attendees && spotsLeft !== null && (
+                              {event.max_attendees && spotsLeft !== null && confirmedCount > 0 && (
                                 <div className="whitespace-nowrap">
                                   👥 {spotsLeft} / {event.max_attendees} spots left
                                 </div>
@@ -2509,6 +2580,18 @@ export default function Dashboard() {
                             const remaining = ticket ? Math.max(0, ticket.quantity - ticket.sold) : null
                             const soldOut = ticket != null && remaining === 0
                             const myTicket = myTicketsByEvent[event.id]
+                            const audienceRsvp = myBookings.find(
+                              (b) =>
+                                b.event_id === event.id &&
+                                b.booking_scope === 'audience' &&
+                                ['confirmed', 'waitlist', 'interested'].includes(b.status),
+                            )
+                            const freeRsvp = isFreeBookedShowRsvp(event, ticket || null)
+                            const freeTicketed = !!ticket && isFreeTicketTier(ticket) && !!event.tickets_enabled && !event.external_event
+                            const going = !!myTicket || audienceRsvp?.status === 'confirmed'
+                            const waitlisted = audienceRsvp?.status === 'waitlist'
+                            const interested = audienceRsvp?.status === 'interested'
+                            const cardRsvpLoading = rsvpLoading?.eventId === event.id ? rsvpLoading.intent : null
                             return (
                               <div className="flex items-center justify-between gap-2 pt-2 border-t">
                                 <div className="text-xs text-muted-foreground">
@@ -2516,6 +2599,8 @@ export default function Dashboard() {
                                     <span className="font-semibold text-sm text-foreground">
                                       🎟️ {myTicket.quantity} ticket{myTicket.quantity !== 1 ? 's' : ''}
                                     </span>
+                                  ) : freeRsvp || freeTicketed ? (
+                                    <span className="font-semibold text-sm text-foreground">Free</span>
                                   ) : ticket ? (
                                     <span className="font-semibold text-sm text-foreground">
                                       ${(ticket.price_cents / 100).toFixed(2)} CAD
@@ -2523,7 +2608,7 @@ export default function Dashboard() {
                                   ) : event.tickets_enabled ? (
                                     <span>Tickets available</span>
                                   ) : (
-                                    <span>Invite only</span>
+                                    <span>Free RSVP</span>
                                   )}
                                   {!myTicket && ticket && remaining != null && remaining > 0 && remaining <= 10 && (
                                     <span className="ml-1.5 text-orange-600">· {remaining} left</span>
@@ -2564,14 +2649,52 @@ export default function Dashboard() {
                                         Buy Tickets
                                       </Button>
                                     </a>
-                                  ) : soldOut ? (
+                                  ) : soldOut && !freeRsvp ? (
                                     <Badge variant="destructive">Sold Out</Badge>
+                                  ) : freeRsvp || freeTicketed ? (
+                                    <FreeRsvpButtons
+                                      going={going}
+                                      interested={interested}
+                                      waitlisted={waitlisted}
+                                      bookingId={audienceRsvp?.id}
+                                      loading={cardRsvpLoading}
+                                      onGoing={() => {
+                                        if (freeTicketed) {
+                                          void handleClaimFreeTicket(event)
+                                          return
+                                        }
+                                        void handleFreeRsvp(event, 'going')
+                                      }}
+                                      onInterested={() => void handleFreeRsvp(event, 'interested')}
+                                    />
                                   ) : event.tickets_enabled ? (
-                                    <Button size="sm" className="text-xs">
-                                      Get Tickets
-                                    </Button>
+                                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                      {!going && !waitlisted && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant={interested ? 'secondary' : 'outline'}
+                                          className="text-xs"
+                                          disabled={!!cardRsvpLoading}
+                                          onClick={() => void handleFreeRsvp(event, 'interested')}
+                                        >
+                                          {cardRsvpLoading === 'interested' ? 'Saving…' : 'Interested'}
+                                        </Button>
+                                      )}
+                                      <Button size="sm" className="text-xs">
+                                        Get Tickets
+                                      </Button>
+                                    </div>
                                   ) : (
-                                    isAudienceUser ? null : <Badge variant="outline">Invite only</Badge>
+                                    <FreeRsvpButtons
+                                      going={going}
+                                      interested={interested}
+                                      waitlisted={waitlisted}
+                                      bookingId={audienceRsvp?.id}
+                                      loading={cardRsvpLoading}
+                                      onGoing={() => void handleFreeRsvp(event, 'going')}
+                                      onInterested={() => void handleFreeRsvp(event, 'interested')}
+                                    />
                                   )}
                                 </div>
                               </div>

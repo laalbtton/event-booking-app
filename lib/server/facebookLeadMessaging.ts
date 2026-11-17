@@ -15,20 +15,33 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#039;')
 }
 
+function formatEmailParagraph(value: string): string {
+  return escapeHtml(value)
+    .replace(
+      /(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" style="color:#fbbf24;text-decoration:underline;word-break:break-all">$1</a>',
+    )
+    .replace(/\n/g, '<br>')
+}
+
+const WHATSAPP_GROUP_URL =
+  'https://chat.whatsapp.com/JGvL1FAqa8n9tl6tsuceTO?s=cl&p=a&iam=2'
+
 export async function buildFacebookLeadWelcomeEmail(name: string): Promise<{
   subject: string
   html: string
 }> {
   const firstName = escapeHtml(name.trim().split(/\s+/)[0] || 'there')
   const siteUrl = getSiteUrl()
+  const bramptonUrl = `${siteUrl}/brampton`
   const template = await getEmailTemplate(TEMPLATE_KEYS.FACEBOOK_LEAD_WELCOME)
   const subject = interpolate(template.subject, { user_name: firstName })
-  const intro = escapeHtml(
+  const intro = formatEmailParagraph(
     interpolate(template.intro, { user_name: firstName }),
-  ).replace(/\n/g, '<br>')
-  const footer = escapeHtml(
+  )
+  const footer = formatEmailParagraph(
     interpolate(template.footer, { user_name: firstName }),
-  ).replace(/\n/g, '<br>')
+  )
 
   const html = `<!doctype html>
 <html lang="en">
@@ -37,12 +50,17 @@ export async function buildFacebookLeadWelcomeEmail(name: string): Promise<{
     <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
         <tr><td>
-          <h1 style="font-size:28px;margin:0 0 20px;color:#fbbf24">Welcome to One Mic Stand 🎤</h1>
+          <h1 style="font-size:28px;margin:0 0 20px;color:#fbbf24">Welcome to Laal Button 🎤</h1>
           <p style="font-size:16px;line-height:1.7">Hi ${firstName},</p>
           <p style="font-size:16px;line-height:1.7;color:#d6d3d1">${intro}</p>
-          <p style="margin:28px 0">
-            <a href="${siteUrl}/brampton" style="display:inline-block;background:#fbbf24;color:#09090b;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700">
-              See upcoming shows
+          <p style="margin:28px 0 12px">
+            <a href="${bramptonUrl}" style="display:inline-block;background:#fbbf24;color:#09090b;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700">
+              Brampton show details
+            </a>
+          </p>
+          <p style="margin:0 0 28px">
+            <a href="${WHATSAPP_GROUP_URL}" style="display:inline-block;background:#25D366;color:#09090b;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700">
+              Join the WhatsApp group
             </a>
           </p>
           ${emailAppStoreBadgesHtml()}

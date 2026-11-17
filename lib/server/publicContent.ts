@@ -9,6 +9,7 @@ import {
   eventIsCountable,
   type AttendedCountEvent,
 } from '@/lib/attendedCount'
+import { sumAudienceSpots } from '@/lib/bookingPartySize'
 
 type EventRow = {
   id: string
@@ -51,6 +52,7 @@ type HostRow = {
 type BookingRow = {
   status: string
   booking_scope: string | null
+  party_size?: number | null
   event_art_type_id: string | null
   waitlist_position: number | null
   profiles: {
@@ -238,7 +240,6 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
     venueRes,
     hostRes,
     bookingsRes,
-    audienceCountRes,
     ticketRes,
     artTypesRes,
     primaryCommunityRes,
@@ -260,6 +261,7 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
         `
           status,
           booking_scope,
+          party_size,
           event_art_type_id,
           waitlist_position,
           profiles (id, full_name, avatar_url)
@@ -268,12 +270,6 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
       .eq('event_id', eventData.id)
       .in('status', ['confirmed', 'waitlist'])
       .order('booked_at', { ascending: true }),
-    supabase
-      .from('bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('event_id', eventData.id)
-      .eq('booking_scope', 'audience')
-      .in('status', ['confirmed', 'waitlist']),
     eventData.tickets_enabled
       ? supabase
           .from('event_tickets')
@@ -366,7 +362,7 @@ export async function getPublicEventByIdentifier(identifier: string): Promise<Pu
     organizerId: eventData.host_user_id || null,
     performerLineup,
     spotsConfirmed,
-    audienceExpectedCount: audienceCountRes.count || 0,
+    audienceExpectedCount: sumAudienceSpots(bookings),
     createdAt: eventData.created_at,
     updatedAt: eventData.updated_at,
     imageUrl: resolveEventImageUrl({
@@ -449,7 +445,7 @@ export async function listPublicEvents(
   const [bookingsRes, ticketsRes, artTypesRes, communityRes] = await Promise.all([
     supabase
       .from('bookings')
-      .select('event_id, status, booking_scope, event_art_type_id, waitlist_position, profiles(id, full_name, avatar_url)')
+      .select('event_id, status, booking_scope, party_size, event_art_type_id, waitlist_position, profiles(id, full_name, avatar_url)')
       .in('event_id', eventIds)
       .in('status', ['confirmed', 'waitlist'])
       .order('booked_at', { ascending: true }),
@@ -527,7 +523,7 @@ export async function listPublicEvents(
       }))
 
     const spotsConfirmed = performerLineup.filter((p) => p.status === 'confirmed').length
-    const audienceExpectedCount = bookings.filter((b) => b.booking_scope === 'audience').length
+    const audienceExpectedCount = sumAudienceSpots(bookings)
 
     const ticket = ticketByEvent.get(eventData.id) || null
     const isFree = computePublicIsFree(!!eventData.tickets_enabled, ticket)
@@ -600,7 +596,7 @@ export async function fetchEventsByIds(eventIds: string[]): Promise<PublicEventD
   const [bookingsRes, ticketsRes, artTypesRes, communityRes] = await Promise.all([
     supabase
       .from('bookings')
-      .select('event_id, status, booking_scope, event_art_type_id, waitlist_position, profiles(id, full_name, avatar_url)')
+      .select('event_id, status, booking_scope, party_size, event_art_type_id, waitlist_position, profiles(id, full_name, avatar_url)')
       .in('event_id', eventIds)
       .in('status', ['confirmed', 'waitlist'])
       .order('booked_at', { ascending: true }),
@@ -678,7 +674,7 @@ export async function fetchEventsByIds(eventIds: string[]): Promise<PublicEventD
       organizerName: hostRaw?.full_name || 'One Mic Stand',
       organizerId: (eventData.host_user_id as string | null) || null,
       performerLineup, spotsConfirmed,
-      audienceExpectedCount: bookings.filter((b) => b.booking_scope === 'audience').length,
+      audienceExpectedCount: sumAudienceSpots(bookings),
       createdAt: eventData.created_at as string, updatedAt: eventData.updated_at as string,
       imageUrl: resolveEventImageUrl({
         posterUrl: eventData.poster_url as string | null,

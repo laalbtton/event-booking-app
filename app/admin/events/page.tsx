@@ -342,9 +342,9 @@ export default function AdminEventsPage() {
       if (formData.tickets_enabled && !formData.external_event) {
         const priceValue = parseFloat(formData.ticket_price)
         const quantityValue = parseInt(formData.ticket_quantity)
-        const minAllowedPrice = formData.tickets_redeemable_credits_enabled ? 0 : 0.01
+        const minAllowedPrice = 0
         if (!Number.isFinite(priceValue) || priceValue < minAllowedPrice || !Number.isFinite(quantityValue) || quantityValue <= 0) {
-          toast.error('Please provide a valid ticket price and quantity')
+          toast.error('Please provide a valid ticket price and quantity. Use 0 for free tickets.')
           setSubmitting(false)
           return
         }
@@ -991,7 +991,7 @@ export default function AdminEventsPage() {
                 {event.theme && <p>Theme: {event.theme}</p>}
                 <p>Rating: {event.rating || '18+'}</p>
                 {event.event_type === 'booked_show' ? (
-                  <p>Invite only</p>
+                  <p>{event.tickets_enabled ? (event.external_event ? 'External tickets' : 'Tickets') : 'Free RSVP'}</p>
                 ) : (
                   <p>{event.credits_required} credits</p>
                 )}
@@ -1710,6 +1710,7 @@ export default function AdminEventsPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="create-ticket-price">Ticket price (CAD)</Label>
+                        <p className="text-xs text-muted-foreground mb-2">Enter 0 for free tickets.</p>
                         <Input
                           id="create-ticket-price"
                           type="number"
@@ -2202,6 +2203,7 @@ export default function AdminEventsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="create-ticket-price">Ticket price (CAD)</Label>
+                      <p className="text-xs text-muted-foreground mb-2">Enter 0 for free tickets.</p>
                       <Input
                         id="create-ticket-price"
                         type="number"

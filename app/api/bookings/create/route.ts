@@ -7,6 +7,8 @@ import { notifyFollowersOfGig } from '@/lib/server/follows'
 import { promptPerformerAboutOpenRoles } from '@/lib/server/performerRoleNotify'
 import { getAudienceBookingCreditsRequired } from '@/lib/audienceBookingCredits'
 import { isWithinSharePosterSignupWindow, notifyUserToSharePoster } from '@/lib/server/sharePosterNotify'
+import { isFreeBookedShowRsvp, type FreeRsvpIntent } from '@/lib/freeEventRsvp'
+import { sumConfirmedAudienceSpots } from '@/lib/bookingPartySize'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -46,6 +48,164 @@ function isSocapName(value: string | null | undefined) {
   return value.toLowerCase().includes('socap')
 }
 
+async function handleFreeBookedShowRsvp(params: {
+  supabase: ReturnType<NonNullable<typeof getAdminClient>>
+  userId: string
+  event: {
+    id: string
+    title: string
+    audience_capacity?: number | null
+  }
+  rsvpIntent: FreeRsvpIntent
+}) {
+  const { supabase, userId, event, rsvpIntent } = params
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from('bookings')
+    .select('id, status, booking_scope, audience_checkin_code')
+    .eq('event_id', event.id)
+    .eq('user_id', userId)
+    .in('status', ['confirmed', 'waitlist', 'interested'])
+
+  if (existingError) {
+    return NextResponse.json({ error: existingError.message }, { status: 500 })
+  }
+
+  const existing = (existingRows || [])[0] as
+    | { id: string; status: string; booking_scope?: string | null; audience_checkin_code?: string | null }
+    | undefined
+
+  if (existing && (existing.booking_scope || 'performer') !== 'audience') {
+    return NextResponse.json(
+      { error: 'You already have a performer spot for this event.' },
+      { status: 400 },
+    )
+  }
+
+  if (existing && (existing.status === 'confirmed' || existing.status === 'waitlist')) {
+    return NextResponse.json({
+      bookingId: existing.id,
+      bookingStatus: existing.status,
+      bookingScope: 'audience',
+      checkinCode: existing.audience_checkin_code,
+      creditsDebited: 0,
+    })
+  }
+
+  if (rsvpIntent === 'interested') {
+    if (existing?.status === 'interested') {
+      return NextResponse.json({
+        bookingId: existing.id,
+        bookingStatus: 'interested',
+        bookingScope: 'audience',
+        creditsDebited: 0,
+      })
+    }
+
+    const { data: booking, error: insertError } = await supabase
+      .from('bookings')
+      .insert({
+        user_id: userId,
+        event_id: event.id,
+        credits_used: 0,
+        status: 'interested',
+        attendance_status: null,
+        booking_scope: 'audience',
+      })
+      .select('id, status, booking_scope')
+      .single()
+
+    if (insertError || !booking) {
+      return NextResponse.json({ error: insertError?.message || 'Failed to save RSVP' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      bookingId: booking.id,
+      bookingStatus: booking.status,
+      bookingScope: booking.booking_scope,
+      creditsDebited: 0,
+    })
+  }
+
+  const audienceCapacityRaw = Number(event.audience_capacity || 0)
+  const audienceCapacity = audienceCapacityRaw > 0 ? audienceCapacityRaw : null
+
+  const { spots: goingCount, error: goingCountError } = await sumConfirmedAudienceSpots(supabase, event.id)
+
+  if (goingCountError) {
+    return NextResponse.json({ error: goingCountError.message }, { status: 500 })
+  }
+
+  const isFull = audienceCapacity != null && goingCount >= audienceCapacity
+  const bookingStatus: 'confirmed' | 'waitlist' = isFull ? 'waitlist' : 'confirmed'
+
+  let audienceCheckinCode: string | null = null
+  if (bookingStatus === 'confirmed') {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = buildAudienceCheckinCode()
+      const { data: existingCode } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('audience_checkin_code', candidate)
+        .maybeSingle()
+      if (!existingCode) {
+        audienceCheckinCode = candidate
+        break
+      }
+    }
+  }
+
+  if (existing?.status === 'interested') {
+    const { data: updated, error: updateError } = await supabase
+      .from('bookings')
+      .update({
+        status: bookingStatus,
+        audience_checkin_code: audienceCheckinCode,
+      })
+      .eq('id', existing.id)
+      .select('id, status, booking_scope, audience_checkin_code')
+      .single()
+
+    if (updateError || !updated) {
+      return NextResponse.json({ error: updateError?.message || 'Failed to update RSVP' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      bookingId: updated.id,
+      bookingStatus: updated.status,
+      bookingScope: updated.booking_scope,
+      checkinCode: updated.audience_checkin_code,
+      creditsDebited: 0,
+    })
+  }
+
+  const { data: booking, error: insertError } = await supabase
+    .from('bookings')
+    .insert({
+      user_id: userId,
+      event_id: event.id,
+      credits_used: 0,
+      status: bookingStatus,
+      attendance_status: null,
+      booking_scope: 'audience',
+      audience_checkin_code: audienceCheckinCode,
+    })
+    .select('id, status, booking_scope, audience_checkin_code')
+    .single()
+
+  if (insertError || !booking) {
+    return NextResponse.json({ error: insertError?.message || 'Failed to save RSVP' }, { status: 500 })
+  }
+
+  return NextResponse.json({
+    bookingId: booking.id,
+    bookingStatus: booking.status,
+    bookingScope: booking.booking_scope,
+    checkinCode: booking.audience_checkin_code,
+    creditsDebited: 0,
+  })
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = getAdminClient()
@@ -64,10 +224,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { eventId, eventArtTypeId } = await request.json()
+    const { eventId, eventArtTypeId, rsvpIntent } = await request.json()
     if (!eventId) {
       return NextResponse.json({ error: 'Missing eventId' }, { status: 400 })
     }
+    const freeRsvpIntent: FreeRsvpIntent = rsvpIntent === 'interested' ? 'interested' : 'going'
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -94,12 +255,6 @@ export async function POST(request: NextRequest) {
     if (event.status === 'cancelled') {
       return NextResponse.json({ error: 'Event has been cancelled' }, { status: 400 })
     }
-    if (event.event_type === 'booked_show') {
-      return NextResponse.json({ error: 'This show is invite-only' }, { status: 400 })
-    }
-    if (event.tickets_enabled && event.event_type !== 'open_mic') {
-      return NextResponse.json({ error: 'This event requires tickets, not booking credits' }, { status: 400 })
-    }
     if (event.registration_opens_at && new Date() < new Date(event.registration_opens_at)) {
       return NextResponse.json({ error: 'Registration is not open yet' }, { status: 400 })
     }
@@ -109,6 +264,30 @@ export async function POST(request: NextRequest) {
         { error: "You're hosting this event, so you don't need to book a performer slot." },
         { status: 400 }
       )
+    }
+
+    if (event.event_type === 'booked_show') {
+      const { data: ticketRow } = await supabase
+        .from('event_tickets')
+        .select('price_cents')
+        .eq('event_id', event.id)
+        .maybeSingle()
+      const allowFreeGoing = isFreeBookedShowRsvp(event, ticketRow)
+      if (allowFreeGoing || freeRsvpIntent === 'interested') {
+        return handleFreeBookedShowRsvp({
+          supabase,
+          userId: authData.user.id,
+          event,
+          rsvpIntent: freeRsvpIntent,
+        })
+      }
+      return NextResponse.json(
+        { error: 'This show uses tickets. Use Get Tickets, or tap Interested to get updates.' },
+        { status: 400 },
+      )
+    }
+    if (event.tickets_enabled && event.event_type !== 'open_mic') {
+      return NextResponse.json({ error: 'This event requires tickets, not booking credits' }, { status: 400 })
     }
 
     if (profile.role === 'audience' && !event.audience_enabled) {

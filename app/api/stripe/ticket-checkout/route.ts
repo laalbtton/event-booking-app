@@ -130,6 +130,54 @@ export async function POST(request: Request) {
     const creditsAppliedCents = creditsToApply * 100
     const remainingCents = totalCents - creditsAppliedCents
 
+    if (totalCents <= 0) {
+      if (!userId) {
+        return NextResponse.json(
+          { error: 'Sign in to claim a free ticket', requiresAuth: true },
+          { status: 401 },
+        )
+      }
+
+      const { data: purchase, error: purchaseError } = await serviceClient
+        .from('ticket_purchases')
+        .insert({
+          event_id: eventId,
+          stripe_session_id: null,
+          stripe_payment_intent: null,
+          user_id: userId,
+          buyer_name: buyerProfile?.full_name || null,
+          buyer_email: buyerProfile?.email || prefillEmail,
+          quantity: qty,
+          unit_price_cents: 0,
+          total_cents: 0,
+          credits_applied_cents: 0,
+          currency: 'cad',
+          status: 'completed',
+        })
+        .select('id')
+        .maybeSingle()
+
+      if (purchaseError) {
+        console.error('Failed to record free ticket:', purchaseError)
+        return NextResponse.json({ error: 'Failed to claim free ticket' }, { status: 500 })
+      }
+
+      await serviceClient
+        .from('event_tickets')
+        .update({ sold: (ticket.sold as number) + qty })
+        .eq('id', ticket.id as string)
+
+      await serviceClient
+        .from('bookings')
+        .update({ status: 'confirmed' })
+        .eq('event_id', eventId)
+        .eq('user_id', userId)
+        .eq('booking_scope', 'audience')
+        .eq('status', 'interested')
+
+      return NextResponse.json({ completedFree: true, purchaseId: purchase?.id || null })
+    }
+
     if (creditsToApply > 0 && remainingCents <= 0) {
       // Fully covered by credits — no Stripe checkout needed at all.
       const purchased = buyerProfile!.credits_purchased ?? 0

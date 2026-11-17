@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useAuthBootstrap } from '@/components/providers/auth-bootstrap-provider'
-import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { getGuestTicketPromoMessage } from '@/lib/promotions'
@@ -41,14 +40,16 @@ export function PublicEventCTA({
   const { authResolved, user } = useAuthBootstrap()
   const [mounted, setMounted] = useState(false)
 
-  // Attend form state (open mic magic link — free / non-ticketed attend path)
-  const [showAttendForm, setShowAttendForm] = useState(false)
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [spotCount, setSpotCount] = useState(1)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [waitlisted, setWaitlisted] = useState(false)
+  const [bookedSpots, setBookedSpots] = useState(1)
+  const [spotsCapped, setSpotsCapped] = useState(false)
   const [attendError, setAttendError] = useState('')
 
-  // Guest ticket checkout
   const [ticketQty, setTicketQty] = useState(1)
   const [ticketLoading, setTicketLoading] = useState(false)
   const [ticketError, setTicketError] = useState('')
@@ -83,28 +84,38 @@ export function PublicEventCTA({
     )
   }
 
-  async function handleSendMagicLink(e: React.FormEvent) {
+  async function handleGuestAttend(e: React.FormEvent) {
     e.preventDefault()
-    if (!email.trim()) return
+    if (!name.trim() || !email.trim()) return
     setSending(true)
     setAttendError('')
 
-    const callbackUrl =
-      `${window.location.origin}/auth/callback?intent=attend&eventId=${encodeURIComponent(eventId)}&eventSlug=${encodeURIComponent(eventSlug)}`
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: callbackUrl,
-      },
-    })
-
-    if (error) {
-      setAttendError(error.message)
-    } else {
+    try {
+      const response = await fetch('/api/public/event-attend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId,
+          eventSlug,
+          name: name.trim(),
+          email: email.trim(),
+          quantity: spotCount,
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(typeof result.error === 'string' ? result.error : 'Could not save your spot')
+      }
+      const savedSpots = Number(result.partySize || spotCount)
+      setBookedSpots(Number.isFinite(savedSpots) && savedSpots > 0 ? savedSpots : spotCount)
+      setSpotsCapped(result.capped === true)
+      setWaitlisted(result.bookingStatus === 'waitlist')
       setSent(true)
+    } catch (err: unknown) {
+      setAttendError(err instanceof Error ? err.message : 'Could not save your spot')
+    } finally {
+      setSending(false)
     }
-    setSending(false)
   }
 
   async function handleBuyTickets() {
@@ -135,9 +146,10 @@ export function PublicEventCTA({
   const soldOut = remaining === 0
   const hasPricedTickets =
     !!ticketsEnabled && !isFree && ticketPriceCents != null && ticketPriceCents > 0
-  // Same guest Stripe checkout for booked shows and ticketed open mics
   const canCheckoutTickets = !!ticketsEnabled && !ticketUrl && hasPricedTickets
   const hasExternalTickets = !!ticketsEnabled && !!ticketUrl
+  const ticketsNotOnSale = isBookedShow && !!ticketsEnabled && !isFree && !canCheckoutTickets && !hasExternalTickets
+  const canGuestAttend = !canCheckoutTickets && !hasExternalTickets && !ticketsNotOnSale
   const promo = getGuestTicketPromoMessage(ticketPriceCents)
 
   const signupNudge = GUEST_TICKET_CREDIT_PROMO_ENABLED ? (
@@ -223,92 +235,102 @@ export function PublicEventCTA({
       </div>
       <span className="text-2xl shrink-0">🎟️</span>
     </a>
-  ) : isBookedShow ? (
+  ) : ticketsNotOnSale ? (
     <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-4 text-center space-y-1">
       <p className="text-sm font-medium text-stone-200">Tickets aren&apos;t on sale yet</p>
       <p className="text-xs text-stone-400">Check back soon, or create a free account to get notified.</p>
     </div>
   ) : null
 
+  const attendForm = canGuestAttend ? (
+    <div className="rounded-lg border-2 border-yellow-400/50 bg-yellow-400/10 p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="text-2xl shrink-0">🎟️</span>
+        <div>
+          <p className="font-semibold text-sm text-stone-100">Attend this event</p>
+          <p className="text-xs text-stone-400">Name and email only — book up to 4 spots if you&apos;re bringing guests.</p>
+        </div>
+      </div>
+
+      {sent ? (
+        <div className="rounded-lg bg-green-900/30 border border-green-700 p-3 text-center space-y-1">
+          <p className="text-sm font-medium text-green-300">
+            {waitlisted
+              ? `You're on the waitlist for ${bookedSpots} ${bookedSpots === 1 ? 'spot' : 'spots'}`
+              : `You're booked for ${bookedSpots} ${bookedSpots === 1 ? 'spot' : 'spots'}`}
+          </p>
+          <p className="text-xs text-green-400">
+            {spotsCapped ? 'Only that many seats were left. ' : ''}
+            We sent confirmation to <span className="font-medium">{email}</span>
+            {waitlisted ? ". We'll email you if a spot opens." : '.'} The email also has an optional link if you want an account.
+          </p>
+        </div>
+      ) : (
+        <form onSubmit={handleGuestAttend} className="space-y-2">
+          <Input
+            type="text"
+            name="name"
+            autoComplete="name"
+            placeholder="Your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            minLength={2}
+            className="text-sm bg-zinc-800 border-zinc-600 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
+          />
+          <Input
+            type="email"
+            name="email"
+            autoComplete="email"
+            placeholder="your@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="text-sm bg-zinc-800 border-zinc-600 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
+          />
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-stone-400 shrink-0" htmlFor="guest-spot-count">
+              Spots
+            </label>
+            <select
+              id="guest-spot-count"
+              className="h-10 flex-1 rounded-md border border-zinc-600 bg-zinc-800 px-2 text-sm text-stone-100"
+              value={spotCount}
+              onChange={(e) => setSpotCount(Number(e.target.value))}
+              disabled={sending}
+            >
+              <option value={1}>1 — Just me</option>
+              <option value={2}>2 — Me + 1 guest</option>
+              <option value={3}>3 — Me + 2 guests</option>
+              <option value={4}>4 — Me + 3 guests</option>
+            </select>
+          </div>
+          {attendError && <p className="text-xs text-destructive">{attendError}</p>}
+          <Button type="submit" size="sm" className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-300 font-semibold" disabled={sending}>
+            {sending ? 'Saving…' : spotCount === 1 ? 'Save my spot' : `Save ${spotCount} spots`}
+          </Button>
+        </form>
+      )}
+    </div>
+  ) : null
+
   return (
     <div className="rounded-xl border border-zinc-700 bg-zinc-900 shadow-sm p-5 space-y-4">
-      {/* Guest ticket checkout — booked shows and ticketed open mics */}
       {guestTicketBlock}
 
-      {/* Open mic: perform signup + free attend (when not buying tickets) */}
+      {attendForm}
+
       {!isBookedShow && (
-        <>
-          <Link
-            href={performUrl}
-            className="flex items-center gap-3 rounded-lg border-2 border-yellow-400/60 bg-yellow-400/10 p-4 hover:bg-yellow-400/15 hover:border-yellow-400 transition-colors"
-          >
-            <span className="text-2xl shrink-0">🎤</span>
-            <div>
-              <p className="font-semibold text-sm text-stone-100">I want to perform</p>
-              <p className="text-xs text-stone-400">Sign up and book a spot on stage</p>
-            </div>
-          </Link>
-
-          {/* Magic-link attend only when tickets aren't the audience path */}
-          {!canCheckoutTickets && !hasExternalTickets && (
-            <div className="rounded-lg border-2 border-zinc-700 p-4 space-y-3">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl shrink-0">🎟️</span>
-                <div>
-                  <p className="font-semibold text-sm text-stone-100">I want to attend</p>
-                  <p className="text-xs text-stone-400">Register instantly — no password needed</p>
-                </div>
-              </div>
-
-              {sent ? (
-                <div className="rounded-lg bg-green-900/30 border border-green-700 p-3 text-center space-y-1">
-                  <p className="text-sm font-medium text-green-300">📬 Check your email</p>
-                  <p className="text-xs text-green-400">
-                    We sent a link to <span className="font-medium">{email}</span>. Click it to register — no password required.
-                  </p>
-                </div>
-              ) : showAttendForm ? (
-                <form onSubmit={handleSendMagicLink} className="space-y-2">
-                  <Input
-                    type="email"
-                    placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoFocus
-                    className="text-sm bg-zinc-800 border-zinc-600 text-stone-100 placeholder:text-stone-500 focus:border-yellow-400"
-                  />
-                  {attendError && (
-                    <p className="text-xs text-destructive">{attendError}</p>
-                  )}
-                  <div className="flex gap-2">
-                    <Button type="submit" size="sm" className="flex-1 bg-yellow-400 text-zinc-950 hover:bg-yellow-300" disabled={sending}>
-                      {sending ? 'Sending…' : 'Send magic link'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-stone-400 hover:text-stone-200 hover:bg-zinc-800"
-                      onClick={() => { setShowAttendForm(false); setAttendError('') }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full bg-zinc-800 border-zinc-600 text-stone-100 hover:bg-zinc-700 hover:border-zinc-500 hover:text-white"
-                  onClick={() => setShowAttendForm(true)}
-                >
-                  Register to attend
-                </Button>
-              )}
-            </div>
-          )}
-        </>
+        <Link
+          href={performUrl}
+          className="flex items-center gap-3 rounded-lg border-2 border-yellow-400/60 bg-yellow-400/10 p-4 hover:bg-yellow-400/15 hover:border-yellow-400 transition-colors"
+        >
+          <span className="text-2xl shrink-0">🎤</span>
+          <div>
+            <p className="font-semibold text-sm text-stone-100">I want to perform</p>
+            <p className="text-xs text-stone-400">Sign up and book a spot on stage</p>
+          </div>
+        </Link>
       )}
 
       {signupNudge}

@@ -23,6 +23,7 @@ type BookingWithEvent = {
   credits_used: number
   booking_scope: string
   audience_checkin_code?: string | null
+  party_size?: number | null
   booked_at: string
   events: {
     id: string
@@ -84,6 +85,7 @@ export default function BookingDetailsPage() {
   const [booking, setBooking] = useState<BookingWithEvent | null>(null)
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
+  const [confirmingGoing, setConfirmingGoing] = useState(false)
   const [confirmedCount, setConfirmedCount] = useState<number | null>(null)
 
   useEffect(() => {
@@ -108,6 +110,7 @@ export default function BookingDetailsPage() {
           credits_used,
           booking_scope,
           audience_checkin_code,
+          party_size,
           booked_at,
           events (*)
         `)
@@ -160,7 +163,9 @@ export default function BookingDetailsPage() {
           ? `Remove yourself from the waitlist for "${event.title}"?\n\nYour free audience pass will be restored.`
           : `Remove yourself from the waitlist for "${event.title}"?\n\nYou will receive a full refund of ${booking.credits_used} credit${booking.credits_used > 1 ? 's' : ''}.`
     } else {
-      confirmMessage = isBookedShow
+      confirmMessage = booking.status === 'interested'
+        ? `Remove your Interested RSVP for "${event.title}"?`
+        : isBookedShow
         ? `Cancel participation for "${event.title}"?`
         : willGetRefund
           ? isAudienceBooking && booking.credits_used === 0
@@ -172,7 +177,7 @@ export default function BookingDetailsPage() {
     const shouldProceed = await confirm({
       title: 'Confirm cancellation',
       message: confirmMessage,
-      confirmText: booking.status === 'waitlist' ? 'Leave Waitlist' : 'Cancel Booking',
+      confirmText: booking.status === 'waitlist' ? 'Leave Waitlist' : booking.status === 'interested' ? 'Remove RSVP' : 'Cancel Booking',
       cancelText: 'Keep Booking',
       variant: 'destructive',
     })
@@ -214,6 +219,34 @@ export default function BookingDetailsPage() {
     }
   }
 
+  async function handleConfirmGoing() {
+    if (!booking) return
+    setConfirmingGoing(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/bookings/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ eventId: booking.events.id, rsvpIntent: 'going' }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Failed to update RSVP')
+
+      toast.success(result.bookingStatus === 'waitlist' ? "You're on the waitlist." : "You're going!")
+      await loadBooking()
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Could not update RSVP')
+    } finally {
+      setConfirmingGoing(false)
+    }
+  }
+
   if (!authResolved || loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -242,6 +275,7 @@ export default function BookingDetailsPage() {
   const event = booking.events
   const isEventCancelled = event.status === 'cancelled'
   const isWaitlist = booking.status === 'waitlist'
+  const isInterested = booking.status === 'interested'
   const isAudienceBooking = booking.booking_scope === 'audience'
   const isBookedShow = event.event_type === 'booked_show'
   const eventDate = new Date(event.date)
@@ -300,7 +334,7 @@ export default function BookingDetailsPage() {
         <Card
           className={cn(
             'border-l-0 sm:border-l-4',
-            isEventCancelled ? 'sm:border-l-red-500' : isWaitlist ? 'sm:border-l-yellow-500' : 'sm:border-l-green-500'
+            isEventCancelled ? 'sm:border-l-red-500' : isWaitlist || isInterested ? 'sm:border-l-yellow-500' : 'sm:border-l-green-500'
           )}
         >
           <CardHeader className="pb-3">
@@ -313,6 +347,8 @@ export default function BookingDetailsPage() {
                   <Badge variant="outline" className="text-yellow-600 border-yellow-600">
                     ⏳ #{booking.waitlist_position}
                   </Badge>
+                ) : isInterested ? (
+                  <Badge variant="outline" className="text-yellow-700 border-yellow-500">Interested</Badge>
                 ) : (
                   <Badge variant="outline" className="text-green-600 border-green-600">✓ Confirmed</Badge>
                 ))}
@@ -344,6 +380,14 @@ export default function BookingDetailsPage() {
                 <span>🔞</span>
                 <span>{getRatingDisplay(event.rating)}</span>
               </div>
+              {isAudienceBooking && Number(booking.party_size || 1) > 0 && (
+                <div className="flex items-center gap-2">
+                  <span>🎟️</span>
+                  <span>
+                    {Number(booking.party_size || 1)} {Number(booking.party_size || 1) === 1 ? 'spot' : 'spots'} reserved
+                  </span>
+                </div>
+              )}
               {event.max_attendees != null && spotsLeft != null && (
                 <div className="flex items-center gap-2">
                   <span>👥</span>
@@ -356,7 +400,7 @@ export default function BookingDetailsPage() {
               <div className="flex items-center gap-1 text-muted-foreground">
                 <span>💳</span>
                 {isBookedShow ? (
-                  <span>Invite only</span>
+                  <span>{isInterested ? 'Free RSVP · Interested' : 'Free RSVP'}</span>
                 ) : isAudienceBooking ? (
                   booking.credits_used > 0 ? (
                     <span>Deposit held: {booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>
@@ -387,6 +431,22 @@ export default function BookingDetailsPage() {
               </div>
             )}
 
+            {isInterested && !isPast && !isEventCancelled && (
+              <div className="space-y-2 pt-4 border-t">
+                <Button
+                  onClick={handleConfirmGoing}
+                  disabled={confirmingGoing}
+                  size="sm"
+                  className="w-full"
+                >
+                  {confirmingGoing ? 'Saving…' : "I'm going"}
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Interested is not a ticket. Tap I&apos;m going when you plan to attend.
+                </p>
+              </div>
+            )}
+
             {canCancel && (
               <div className="space-y-2 pt-4 border-t">
                 <Button
@@ -396,7 +456,7 @@ export default function BookingDetailsPage() {
                   size="sm"
                   className="w-full"
                 >
-                  {cancelling ? 'Cancelling...' : isWaitlist ? 'Leave Waitlist' : 'Cancel Booking'}
+                  {cancelling ? 'Cancelling...' : isWaitlist ? 'Leave Waitlist' : isInterested ? 'Remove RSVP' : 'Cancel Booking'}
                 </Button>
                 {!isBookedShow && (
                   <p className="text-xs text-muted-foreground text-center">

@@ -594,9 +594,9 @@ export default function EventManagementPage() {
 
       if (formData.tickets_enabled && !formData.external_event) {
         const priceValue = parseFloat(formData.ticket_price)
-        const minAllowedPrice = formData.tickets_redeemable_credits_enabled ? 0 : 0.01
+        const minAllowedPrice = 0
         if (!Number.isFinite(priceValue) || priceValue < minAllowedPrice) {
-          toast.error('Please provide a valid ticket price')
+          toast.error('Please provide a valid ticket price. Use 0 for free tickets.')
           setSubmitting(false)
           return
         }
@@ -1005,9 +1005,9 @@ export default function EventManagementPage() {
 
       if (formData.tickets_enabled && !formData.external_event) {
         const priceValue = parseFloat(formData.ticket_price)
-        const minAllowedPrice = formData.tickets_redeemable_credits_enabled ? 0 : 0.01
+        const minAllowedPrice = 0
         if (!Number.isFinite(priceValue) || priceValue < minAllowedPrice) {
-          toast.error('Please provide a valid ticket price')
+          toast.error('Please provide a valid ticket price. Use 0 for free tickets.')
           setSubmitting(false)
           return
         }
@@ -2364,7 +2364,7 @@ export default function EventManagementPage() {
                               external_event: nextValue ? formData.external_event : false,
                               external_ticket_url: nextValue ? formData.external_ticket_url : '',
                               ticket_price: nextValue && !formData.ticket_price
-                                ? (formData.event_type === 'open_mic' ? '5' : '')
+                                ? (formData.event_type === 'open_mic' ? '5' : '0')
                                 : formData.ticket_price,
                               ticket_quantity: nextValue && !formData.ticket_quantity
                                 ? (formData.audience_capacity || '50')
@@ -2415,6 +2415,7 @@ export default function EventManagementPage() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Ticket price (CAD)
                         </label>
+                        <p className="text-xs text-muted-foreground mb-2">Enter 0 for free tickets.</p>
                         <input
                           type="number"
                           min="0"
@@ -3102,7 +3103,7 @@ export default function EventManagementPage() {
                               external_event: nextValue ? formData.external_event : false,
                               external_ticket_url: nextValue ? formData.external_ticket_url : '',
                               ticket_price: nextValue && !formData.ticket_price
-                                ? (formData.event_type === 'open_mic' ? '5' : '')
+                                ? (formData.event_type === 'open_mic' ? '5' : '0')
                                 : formData.ticket_price,
                               ticket_quantity: nextValue && !formData.ticket_quantity
                                 ? (formData.audience_capacity || '50')
@@ -3162,6 +3163,7 @@ export default function EventManagementPage() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Ticket price (CAD)
                             </label>
+                            <p className="text-xs text-muted-foreground mb-2">Enter 0 for free tickets.</p>
                             <input
                               type="number"
                               min="0"

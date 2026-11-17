@@ -36,7 +36,7 @@ const TEMPLATE_META: Record<string, { label: string; description: string; icon: 
   },
   facebook_lead_welcome: {
     label: 'Facebook Lead Welcome',
-    description: 'Sent to new Facebook lead-ad contacts after they opt in. Edit and preview here before new leads are processed — changes apply to the next send.',
+    description: 'Sent to new Facebook lead-ad contacts after they opt in (Laal Button / Sunny). Edit and preview here before new leads are processed — changes apply to the next send.',
     icon: <Mail className="h-5 w-5 text-amber-600" />,
     variables: ['{{user_name}}'],
   },
@@ -54,11 +54,11 @@ const DEFAULTS: Record<string, { subject: string; intro: string; footer: string 
     footer: 'Break a leg! 🎭',
   },
   facebook_lead_welcome: {
-    subject: 'Welcome to One Mic Stand 🎤',
+    subject: 'Welcome to Laal Button from Sunny',
     intro:
-      "Thanks for your interest in live comedy. We'll keep you posted about upcoming shows, open mics, and special events.",
+      "Thanks for your interest in live comedy in Brampton. Our free event is happening this Wednesday in Downtown Brampton at 8:00 PM. There is lots of free parking in the area such as the Nelson Parking lot. Our paid shows happen on weekends — keep an eye out for those. Hope to see you there. Use this link for more details: https://app.laalbutton.com/brampton\n\nWe also have a WhatsApp group for ticket updates — join here: https://chat.whatsapp.com/JGvL1FAqa8n9tl6tsuceTO?s=cl&p=a&iam=2",
     footer:
-      'You\'re receiving this because you asked to hear from One Mic Stand through our Facebook form. Reply with "unsubscribe" if you no longer want these emails.',
+      "Sunny\n647-490-7858\n\nYou're receiving this because you asked to hear from Laal Button through our Facebook form. Reply with \"unsubscribe\" if you no longer want these emails.",
   },
 }
 

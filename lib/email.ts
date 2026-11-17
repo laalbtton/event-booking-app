@@ -142,6 +142,78 @@ export function getBookingConfirmationEmail(data: {
 }
 
 /**
+ * Guest public-event RSVP: spot is already booked; magic link is optional signup.
+ */
+export function getGuestAttendConfirmationEmail(data: {
+  userName: string
+  eventTitle: string
+  eventDate: string
+  eventLocation: string
+  eventUrl: string
+  magicLinkUrl: string
+  waitlisted?: boolean
+  partySize?: number
+}): string {
+  const spots = Math.max(1, Math.min(4, Math.floor(Number(data.partySize || 1))))
+  const spotsLabel = spots === 1 ? '1 spot' : `${spots} spots`
+  const guestsLabel = spots === 1 ? '' : spots === 2 ? ' (you + 1 guest)' : ` (you + ${spots - 1} guests)`
+  const statusLine = data.waitlisted
+    ? `You're on the waitlist for <strong>${spotsLabel}</strong> at <strong>${data.eventTitle}</strong>${guestsLabel}. We'll email you if a spot opens.`
+    : `You're booked for <strong>${spotsLabel}</strong> at <strong>${data.eventTitle}</strong>${guestsLabel}. This email is your confirmation — no account needed to hold the spot.`
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #111827 0%, #1f2937 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: #facc15; margin: 0;">${data.waitlisted ? "You're on the waitlist" : "You're in"}</h1>
+        </div>
+
+        <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">
+          <p style="font-size: 16px; margin-bottom: 20px;">Hi ${data.userName},</p>
+          <p style="font-size: 16px; margin-bottom: 20px;">${statusLine}</p>
+
+          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #facc15;">
+            <h2 style="margin-top: 0; color: #111827;">Event details</h2>
+            <p style="margin: 10px 0;"><strong>📅 Date &amp; time:</strong> ${data.eventDate}</p>
+            <p style="margin: 10px 0;"><strong>📍 Location:</strong> ${data.eventLocation}</p>
+            <p style="margin: 10px 0;"><strong>🎟️ Spots:</strong> ${spotsLabel}${guestsLabel}</p>
+          </div>
+
+          <div style="text-align: center; margin: 28px 0 8px;">
+            <a href="${data.eventUrl}" style="background: #111827; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+              View event
+            </a>
+          </div>
+
+          <div style="background: #fffbeb; padding: 20px; border-radius: 8px; margin: 28px 0 0; border: 1px solid #fde68a;">
+            <p style="margin: 0 0 12px; font-size: 15px; color: #111827;">
+              Want to manage ${spots === 1 ? 'this spot' : 'these spots'} in the app? Optional — your booking is already saved.
+            </p>
+            <div style="text-align: center;">
+              <a href="${data.magicLinkUrl}" style="background: #facc15; color: #111827; padding: 12px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+                Create my free account
+              </a>
+            </div>
+            <p style="margin: 14px 0 0; font-size: 12px; color: #6b7280; text-align: center;">
+              This link signs you in — no password. It expires in 24 hours.
+            </p>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
+          ${emailAppStoreBadgesHtml()}
+        </div>
+      </body>
+    </html>
+  `
+}
+
+/**
  * Email template for waitlist promotion
  */
 export function getWaitlistPromotionEmail(data: {

@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     if (booking.user_id !== authData.user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-    if (booking.status !== 'confirmed' && booking.status !== 'waitlist') {
+    if (booking.status !== 'confirmed' && booking.status !== 'waitlist' && booking.status !== 'interested') {
       return NextResponse.json({ error: 'Booking cannot be cancelled' }, { status: 400 })
     }
 

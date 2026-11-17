@@ -287,7 +287,7 @@ export default function ProfilePage() {
           .from('bookings')
           .select('*, events (*)')
           .eq('user_id', userId)
-          .in('status', ['confirmed', 'waitlist', 'cancelled']),
+          .in('status', ['confirmed', 'waitlist', 'cancelled', 'interested']),
         supabase
           .from('ticket_purchases')
           .select('id, event_id, quantity, total_cents, unit_price_cents, status, created_at, events (*)')
@@ -1712,6 +1712,7 @@ export default function ProfilePage() {
                             refundTimeDisplay = parts.join(' ') || '0m'
                           }
                           const isWaitlist = booking.status === 'waitlist'
+                          const isInterested = booking.status === 'interested'
                           const isEventCancelled = booking.events.status === 'cancelled'
                           const isAudienceBooking = booking.booking_scope === 'audience'
                           const confirmedCount = eventConfirmedCounts[booking.event_id] || 0
@@ -1723,7 +1724,7 @@ export default function ProfilePage() {
                               <Card
                                 className={cn(
                                   'hover:border-primary/60 hover:shadow-sm transition-all active:bg-muted/40 rounded-none sm:rounded-lg border-x-0 sm:border-x border-l-0 sm:border-l-4',
-                                  isEventCancelled ? 'sm:border-l-red-500' : isWaitlist ? 'sm:border-l-yellow-500' : 'sm:border-l-green-500'
+                                  isEventCancelled ? 'sm:border-l-red-500' : isWaitlist || isInterested ? 'sm:border-l-yellow-500' : 'sm:border-l-green-500'
                                 )}
                               >
                                 <CardHeader className="pb-3">
@@ -1736,6 +1737,8 @@ export default function ProfilePage() {
                                         <Badge variant="outline" className="text-yellow-600 border-yellow-600 ml-2">
                                           ⏳ #{booking.waitlist_position}
                                         </Badge>
+                                      ) : isInterested ? (
+                                        <Badge variant="outline" className="text-yellow-700 border-yellow-500 ml-2">Interested</Badge>
                                       ) : (
                                         <Badge variant="outline" className="text-green-600 border-green-600 ml-2">✓</Badge>
                                       ))}
@@ -1779,7 +1782,7 @@ export default function ProfilePage() {
                                     <div className="flex items-center gap-1 text-muted-foreground">
                                       <span>💳</span>
                                       {isBookedShow ? (
-                                        <span>Invite only</span>
+                                        <span>{isInterested ? 'Free RSVP · Interested' : 'Free RSVP'}</span>
                                       ) : isAudienceBooking ? (
                                         booking.credits_used > 0 ? (
                                           <span>Deposit held: {booking.credits_used} credit{booking.credits_used > 1 ? 's' : ''}</span>

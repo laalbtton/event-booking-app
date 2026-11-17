@@ -91,7 +91,7 @@ export default function AuthCallbackPage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ eventId }),
+          body: JSON.stringify({ eventId, rsvpIntent: 'going' }),
         })
       } catch {
         // Non-blocking — redirect to event even if booking fails
@@ -241,6 +241,12 @@ export default function AuthCallbackPage() {
           return
         }
         // ────────────────────────────────────────────────────────────────
+
+        const guestReturnTo = url.searchParams.get('returnTo')
+        if (guestReturnTo && guestReturnTo.startsWith('/events/')) {
+          router.replace(guestReturnTo)
+          return
+        }
 
         const shouldShowRoleOnboarding = await ensureRoleOnboardingFlag(user)
         window.localStorage.removeItem('pending_role_onboarding')
