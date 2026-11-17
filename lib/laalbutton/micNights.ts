@@ -33,14 +33,14 @@ export const MIC_NIGHTS: Record<MicNightSlug, MicNightData> = {
   'toronto-open-mic': {
     slug: 'toronto-open-mic',
     title: 'Toronto Open Mic',
-    shortTitle: 'Thursday Mic in Toronto',
-    day: 'Every Thursday',
+    shortTitle: 'Tuesday Mic in Toronto',
+    day: 'Every Tuesday',
     city: 'Toronto',
     time: '7:30 PM',
-    venue: 'SoCap',
+    venue: 'Toronto',
     address: 'Toronto, ON',
     description:
-      "Toronto's weekly multilingual comedy open mic at SoCap — where South Asian performers and comedy-curious newcomers mix it up every Thursday. Bring a tight five, or just bring yourself.",
+      "Toronto's weekly multilingual comedy open mic — where South Asian performers and comedy-curious newcomers mix it up every Tuesday. Bring a tight five, or just bring yourself.",
     languages: ['Punjabi', 'Hindi', 'English', 'More'],
     accentColor: '#f5a623',
   },

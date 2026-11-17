@@ -14,7 +14,7 @@ export const revalidate = 600
 export const metadata: Metadata = {
   title: 'Toronto Open Mic',
   description:
-    'Weekly multilingual comedy open mic in Toronto every Thursday at SoCap. South Asian performers and comedy-curious newcomers welcome.',
+    'Weekly multilingual comedy open mic in Toronto every Tuesday. South Asian performers and comedy-curious newcomers welcome.',
   openGraph: {
     title: 'Toronto Open Mic | Laal Button Comedy',
     url: 'https://laalbutton.com/laalbutton/multilingual-comedy/toronto-open-mic',

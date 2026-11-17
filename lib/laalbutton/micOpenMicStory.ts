@@ -87,13 +87,22 @@ const RYANS_CHAI_HISTORICAL: MicStoryChapter = {
   imageAlt: LB_MEDIA.ryansChaiVibe.alt,
 }
 
-const SOCAP_TODAY: MicStoryChapter = {
+const SOCAP_CHAPTER: MicStoryChapter = {
   id: 'socap',
-  title: 'SoCap — today',
+  title: 'SoCap',
   body:
-    'Today our weekly Toronto open mic runs at SoCap — the current home for Thursday multilingual comedy. We hope to see you in the room.',
+    'For a stretch the weekly Toronto show lived at SoCap on Thursdays — a multilingual room that carried the mic after earlier Toronto homes.',
   imageSrc: LB_MEDIA.torontoOpenMicSunny.src,
   imageAlt: LB_MEDIA.torontoOpenMicSunny.alt,
+}
+
+const TUESDAY_TODAY: MicStoryChapter = {
+  id: 'tuesday-toronto',
+  title: 'Tuesdays in Toronto — today',
+  body:
+    'Today the weekly Toronto open mic runs on Tuesdays. Same community, new night and a new venue — we hope to see you in the room.',
+  imageSrc: LB_MEDIA.torontoOpenMicDefault.src,
+  imageAlt: LB_MEDIA.torontoOpenMicDefault.alt,
 }
 
 const SHARED_MIDDLE: MicStoryChapter[] = [
@@ -110,7 +119,8 @@ export const BRAMPTON_OPEN_MIC_STORY: MicStoryChapter[] = [...SHARED_MIDDLE, RYA
 export const TORONTO_OPEN_MIC_STORY: MicStoryChapter[] = [
   ...SHARED_MIDDLE,
   RYANS_CHAI_HISTORICAL,
-  SOCAP_TODAY,
+  SOCAP_CHAPTER,
+  TUESDAY_TODAY,
 ]
 
 export const BRAMPTON_STORY_INTRO: MicStoryIntro = {
@@ -122,5 +132,5 @@ export const BRAMPTON_STORY_INTRO: MicStoryIntro = {
 export const TORONTO_STORY_INTRO: MicStoryIntro = {
   heading: 'Eight years of stages across the GTA',
   subheading:
-    'From Station on Bloor in 2019 to weekly open mics at SoCap today — Toronto has been part of the story all along.',
+    'From Station on Bloor in 2019 to weekly Tuesday open mics in Toronto today — the city has been part of the story all along.',
 }

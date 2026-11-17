@@ -1,14 +1,17 @@
 const TORONTO_TZ = 'America/Toronto'
 
-export const BRAMPTON_OPEN_MIC_DEFAULT_POSTER = '/images/Brampton_Open_mic_generic.png'
-export const TORONTO_OPEN_MIC_DEFAULT_POSTER = '/images/OpenMicToronto.png'
+export const BRAMPTON_OPEN_MIC_DEFAULT_POSTER = '/images/WedBramptonOpenMic.png'
+export const TORONTO_OPEN_MIC_DEFAULT_POSTER = '/images/Tuesdays.png'
 
 type VenueLike = {
   name: string
   city?: string
 } | null
 
-export function isWeekdayInToronto(isoDate: string, weekday: 'Wednesday' | 'Thursday'): boolean {
+export function isWeekdayInToronto(
+  isoDate: string,
+  weekday: 'Tuesday' | 'Wednesday' | 'Thursday',
+): boolean {
   return (
     new Intl.DateTimeFormat('en-US', { timeZone: TORONTO_TZ, weekday: 'long' }).format(
       new Date(isoDate),
@@ -25,21 +28,60 @@ export function isRyansChaiVenue(venueName: string, locationText: string): boole
   )
 }
 
+function mentionsBrampton(args: {
+  locationText: string
+  venue: VenueLike
+  title?: string | null
+}): boolean {
+  const city = (args.venue?.city ?? '').toLowerCase()
+  const venueName = (args.venue?.name ?? '').toLowerCase()
+  const location = args.locationText.toLowerCase()
+  const title = (args.title ?? '').toLowerCase()
+  return (
+    city.includes('brampton') ||
+    location.includes('brampton') ||
+    venueName.includes('brampton') ||
+    title.includes('brampton')
+  )
+}
+
+/** Wednesday events in Brampton (any venue). Ryan's Chai still counts even if city is missing. */
+export function isBramptonWednesdayEvent(args: {
+  startDate: string
+  locationText: string
+  venue: VenueLike
+  title?: string | null
+}): boolean {
+  if (!isWeekdayInToronto(args.startDate, 'Wednesday')) return false
+  if (mentionsBrampton(args)) return true
+  return isRyansChaiVenue(args.venue?.name ?? '', args.locationText)
+}
+
+/** @deprecated Use isBramptonWednesdayEvent — kept so older imports keep working. */
 export function isBramptonRyansChaiWednesdayEvent(args: {
   startDate: string
   locationText: string
   venue: VenueLike
+  title?: string | null
 }): boolean {
-  if (!isWeekdayInToronto(args.startDate, 'Wednesday')) return false
-  const venueName = args.venue?.name ?? ''
-  if (!isRyansChaiVenue(venueName, args.locationText)) return false
+  return isBramptonWednesdayEvent(args)
+}
 
+function mentionsToronto(args: {
+  locationText: string
+  venue: VenueLike
+  title?: string | null
+}): boolean {
   const city = (args.venue?.city ?? '').toLowerCase()
+  const venueName = (args.venue?.name ?? '').toLowerCase()
   const location = args.locationText.toLowerCase()
-  if (city.includes('brampton') || location.includes('brampton')) return true
-
-  // Ryan's Chai is Brampton-only in this app — treat Wednesday Ryan's Chai as Brampton open mic.
-  return true
+  const title = (args.title ?? '').toLowerCase()
+  return (
+    city.includes('toronto') ||
+    location.includes('toronto') ||
+    venueName.includes('toronto') ||
+    title.includes('toronto')
+  )
 }
 
 function isComedyOpenMicEvent(args: {
@@ -57,21 +99,45 @@ function isComedyOpenMicEvent(args: {
   return false
 }
 
-export function isThursdayComedyOpenMicEvent(args: {
+/** Tuesday Toronto open mic — venue-agnostic so a venue change still gets the poster. */
+export function isTuesdayTorontoOpenMicEvent(args: {
   startDate: string
+  locationText: string
+  venue: VenueLike
   eventType?: string | null
   openMicType?: string | null
   title?: string | null
 }): boolean {
-  if (!isWeekdayInToronto(args.startDate, 'Thursday')) return false
+  if (!isWeekdayInToronto(args.startDate, 'Tuesday')) return false
+  if (mentionsBrampton(args)) return false
+  if (mentionsToronto(args)) return true
   return isComedyOpenMicEvent(args)
+}
+
+/** @deprecated Toronto mic moved to Tuesday. */
+export function isThursdayComedyOpenMicEvent(args: {
+  startDate: string
+  locationText?: string
+  venue?: VenueLike
+  eventType?: string | null
+  openMicType?: string | null
+  title?: string | null
+}): boolean {
+  return isTuesdayTorontoOpenMicEvent({
+    startDate: args.startDate,
+    locationText: args.locationText ?? '',
+    venue: args.venue ?? null,
+    eventType: args.eventType,
+    openMicType: args.openMicType,
+    title: args.title,
+  })
 }
 
 /**
  * Default poster for event listings (public site + app) when no custom poster
  * is uploaded. Same rules as the Brampton / Toronto marketing pages:
- *   - Wednesday Ryan's Chai open mic → Brampton generic poster
- *   - Thursday comedy open mic → Toronto open mic poster
+ *   - Wednesday Brampton event → WedBramptonOpenMic.png
+ *   - Tuesday Toronto open mic → Tuesdays.png
  */
 export function resolvePublicEventPosterUrl(args: {
   posterUrl: string | null | undefined
@@ -85,11 +151,11 @@ export function resolvePublicEventPosterUrl(args: {
   const custom = args.posterUrl?.trim()
   if (custom) return custom
 
-  if (isBramptonRyansChaiWednesdayEvent(args)) {
+  if (isBramptonWednesdayEvent(args)) {
     return BRAMPTON_OPEN_MIC_DEFAULT_POSTER
   }
 
-  if (isThursdayComedyOpenMicEvent(args)) {
+  if (isTuesdayTorontoOpenMicEvent(args)) {
     return TORONTO_OPEN_MIC_DEFAULT_POSTER
   }
 

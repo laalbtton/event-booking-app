@@ -9,8 +9,8 @@ export const LB_MEDIA = {
     alt: "Packed audience at a Laal Button comedy show at Ryan's Chai in Brampton",
   },
   torontoOpenMicDefault: {
-    src: '/images/OpenMicToronto.png',
-    alt: 'Toronto Open Mic — weekly multilingual comedy night by Laal Button',
+    src: '/images/Tuesdays.png',
+    alt: 'Toronto Open Mic — weekly Tuesday multilingual comedy night by Laal Button',
   },
   homeVibes: {
     src: '/images/vibes/creative_collage.jpg',

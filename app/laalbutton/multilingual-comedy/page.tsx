@@ -9,7 +9,7 @@ export const revalidate = 3600
 export const metadata: Metadata = {
   title: 'Multilingual Comedy Open Mics',
   description:
-    'Weekly multilingual comedy open mics in Brampton (Wednesday) and Toronto (Thursday). Perform in Punjabi, Hindi, Urdu, or English — all stages welcome all languages.',
+    'Weekly multilingual comedy open mics in Brampton (Wednesday) and Toronto (Tuesday). Perform in Punjabi, Hindi, Urdu, or English — all stages welcome all languages.',
   openGraph: {
     title: 'Multilingual Comedy Open Mics | Laal Button Comedy',
     description: 'Weekly open mics in Brampton and Toronto. All languages welcome on stage.',
@@ -49,7 +49,7 @@ export default function MultilingualComedyPage() {
               Open Mics
             </h1>
             <p className="text-[#8a6a4a] text-lg leading-relaxed mb-8">
-              Two weekly open mics where you can perform in any language. Wednesday in Brampton. Thursday in Toronto. All levels welcome — first-timer to seasoned performer.
+              Two weekly open mics where you can perform in any language. Wednesday in Brampton. Tuesday in Toronto. All levels welcome — first-timer to seasoned performer.
             </p>
             <div className="flex flex-wrap gap-3">
               <a
@@ -82,7 +82,7 @@ export default function MultilingualComedyPage() {
       <section className="mx-auto max-w-6xl px-5 py-10">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { icon: 'calendar' as const, label: 'Wednesday & Thursday', sub: 'Two weekly mics' },
+            { icon: 'calendar' as const, label: 'Wednesday & Tuesday', sub: 'Two weekly mics' },
             { icon: 'location' as const, label: 'Brampton & Toronto', sub: 'Your city, your stage' },
             { icon: 'languages' as const, label: 'All Languages Welcome', sub: 'Punjabi, Hindi, Urdu, English & more' },
           ].map((fact) => (
@@ -113,11 +113,11 @@ export default function MultilingualComedyPage() {
             href="/laalbutton/multilingual-comedy/toronto-open-mic"
             className="group rounded-2xl border border-[#2a1a0e] bg-[#120c06] p-6 hover:border-[#f5a623]/40 transition-all"
           >
-            <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest mb-2">Every Thursday</p>
+            <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest mb-2">Every Tuesday</p>
             <h3 className="text-xl font-black text-[#e8d9c4] group-hover:text-[#f5a623] transition-colors" style={serif}>
               Toronto Open Mic
             </h3>
-            <p className="text-[#6b5030] text-sm mt-2">SoCap · Toronto</p>
+            <p className="text-[#6b5030] text-sm mt-2">Toronto</p>
             <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest mt-4">View details →</p>
           </Link>
         </div>
