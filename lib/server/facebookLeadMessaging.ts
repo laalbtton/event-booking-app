@@ -1,4 +1,9 @@
 import { emailAppStoreBadgesHtml } from '@/lib/appStores'
+import {
+  getEmailTemplate,
+  interpolate,
+  TEMPLATE_KEYS,
+} from '@/lib/server/emailTemplates'
 import { getSiteUrl } from '@/lib/server/emailUrl'
 
 function escapeHtml(value: string): string {
@@ -10,11 +15,22 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#039;')
 }
 
-export function buildFacebookLeadWelcomeEmail(name: string): string {
+export async function buildFacebookLeadWelcomeEmail(name: string): Promise<{
+  subject: string
+  html: string
+}> {
   const firstName = escapeHtml(name.trim().split(/\s+/)[0] || 'there')
   const siteUrl = getSiteUrl()
+  const template = await getEmailTemplate(TEMPLATE_KEYS.FACEBOOK_LEAD_WELCOME)
+  const subject = interpolate(template.subject, { user_name: firstName })
+  const intro = escapeHtml(
+    interpolate(template.intro, { user_name: firstName }),
+  ).replace(/\n/g, '<br>')
+  const footer = escapeHtml(
+    interpolate(template.footer, { user_name: firstName }),
+  ).replace(/\n/g, '<br>')
 
-  return `<!doctype html>
+  const html = `<!doctype html>
 <html lang="en">
   <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
   <body style="margin:0;background:#09090b;font-family:Arial,sans-serif;color:#f5f5f4">
@@ -23,25 +39,21 @@ export function buildFacebookLeadWelcomeEmail(name: string): string {
         <tr><td>
           <h1 style="font-size:28px;margin:0 0 20px;color:#fbbf24">Welcome to One Mic Stand 🎤</h1>
           <p style="font-size:16px;line-height:1.7">Hi ${firstName},</p>
-          <p style="font-size:16px;line-height:1.7;color:#d6d3d1">
-            Thanks for your interest in live comedy. We’ll keep you posted about upcoming shows,
-            open mics, and special events.
-          </p>
+          <p style="font-size:16px;line-height:1.7;color:#d6d3d1">${intro}</p>
           <p style="margin:28px 0">
             <a href="${siteUrl}/brampton" style="display:inline-block;background:#fbbf24;color:#09090b;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700">
               See upcoming shows
             </a>
           </p>
           ${emailAppStoreBadgesHtml()}
-          <p style="font-size:12px;color:#78716c;line-height:1.6">
-            You’re receiving this because you asked to hear from One Mic Stand through our Facebook form.
-            Reply with “unsubscribe” if you no longer want these emails.
-          </p>
+          <p style="font-size:12px;color:#78716c;line-height:1.6">${footer}</p>
         </td></tr>
       </table>
     </td></tr></table>
   </body>
 </html>`
+
+  return { subject, html }
 }
 
 export async function sendLeadWelcomeEmail(input: {
@@ -53,6 +65,7 @@ export async function sendLeadWelcomeEmail(input: {
   if (!apiKey) return { ok: false, error: 'RESEND_API_KEY is not configured' }
 
   try {
+    const { subject, html } = await buildFacebookLeadWelcomeEmail(input.name)
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -63,8 +76,8 @@ export async function sendLeadWelcomeEmail(input: {
       body: JSON.stringify({
         from: process.env.RESEND_FROM_EMAIL || 'noreply@laalbutton.com',
         to: [input.email],
-        subject: 'Welcome to One Mic Stand 🎤',
-        html: buildFacebookLeadWelcomeEmail(input.name),
+        subject,
+        html,
       }),
     })
     if (response.ok) return { ok: true }

@@ -34,6 +34,12 @@ const TEMPLATE_META: Record<string, { label: string; description: string; icon: 
     icon: <Clock className="h-5 w-5 text-emerald-600" />,
     variables: ['{{user_name}}', '{{event_title}}', '{{event_date}}', '{{venue_name}}'],
   },
+  facebook_lead_welcome: {
+    label: 'Facebook Lead Welcome',
+    description: 'Sent to new Facebook lead-ad contacts after they opt in. Edit and preview here before new leads are processed — changes apply to the next send.',
+    icon: <Mail className="h-5 w-5 text-amber-600" />,
+    variables: ['{{user_name}}'],
+  },
 }
 
 const DEFAULTS: Record<string, { subject: string; intro: string; footer: string }> = {
@@ -46,6 +52,13 @@ const DEFAULTS: Record<string, { subject: string; intro: string; footer: string 
     subject: 'Your event is in 48 hours 🎤',
     intro: "Just a friendly reminder that you're registered for an upcoming event. We're looking forward to seeing you there!",
     footer: 'Break a leg! 🎭',
+  },
+  facebook_lead_welcome: {
+    subject: 'Welcome to One Mic Stand 🎤',
+    intro:
+      "Thanks for your interest in live comedy. We'll keep you posted about upcoming shows, open mics, and special events.",
+    footer:
+      'You\'re receiving this because you asked to hear from One Mic Stand through our Facebook form. Reply with "unsubscribe" if you no longer want these emails.',
   },
 }
 
@@ -207,7 +220,12 @@ function TemplateEditor({ template, onSaved }: { template: Template; onSaved: ()
                 <hr />
                 <p className="font-medium text-muted-foreground uppercase tracking-wide text-xs mt-3">Opening paragraph</p>
                 <p className="text-gray-700 leading-relaxed">{intro || defaults.intro}</p>
-                <p className="text-gray-400 italic text-xs">… event listings appear here …</p>
+                {template.key !== 'facebook_lead_welcome' && (
+                  <p className="text-gray-400 italic text-xs">… event listings appear here …</p>
+                )}
+                {template.key === 'facebook_lead_welcome' && (
+                  <p className="text-gray-400 italic text-xs">… “See upcoming shows” button + app store badges …</p>
+                )}
                 <hr />
                 <p className="font-medium text-muted-foreground uppercase tracking-wide text-xs mt-3">Sign-off</p>
                 <p className="text-gray-600">{footer || defaults.footer}</p>
@@ -321,9 +339,10 @@ export default function EmailTemplatesPage() {
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 space-y-1">
         <p className="font-semibold">How scheduling works</p>
         <ul className="list-disc list-inside space-y-1 text-amber-700">
-          <li><strong>Weekly digest</strong> — fires every Sunday at 9:00 AM UTC. Skipped if no events are upcoming in any community.</li>
+          <li><strong>Weekly digest</strong> — Sunday Inngest job. Skipped when paused under Admin → Resend Tools, or when no upcoming events.</li>
           <li><strong>48-hour reminder</strong> — scheduled automatically when an event is created or updated. Cancelled if the event is cancelled.</li>
-          <li>Both are powered by Inngest — you can view runs in the <a href="https://app.inngest.com" target="_blank" rel="noopener noreferrer" className="underline">Inngest dashboard</a>.</li>
+          <li><strong>Facebook lead welcome</strong> — sent when a new opted-in Facebook lead is imported. Edit here first; the next lead uses your saved copy.</li>
+          <li>Digest and reminders are powered by Inngest — you can view runs in the <a href="https://app.inngest.com" target="_blank" rel="noopener noreferrer" className="underline">Inngest dashboard</a>.</li>
         </ul>
       </div>
     </div>

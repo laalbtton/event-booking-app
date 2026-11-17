@@ -25,9 +25,24 @@ export const facebookLeadSchema = z.object({
   city: z.string().trim().max(80).optional().nullable(),
   campaignName: z.string().trim().max(300).optional().nullable(),
   adName: z.string().trim().max(300).optional().nullable(),
+  notes: z.string().trim().max(2000).optional().nullable(),
   consent: consentValue.default(false),
   /** Restricted to callers holding the Sheet webhook secret; used for one-time historical backfills. */
   sendSmsViaApp: consentValue.default(false),
+  /** Import/match CRM contacts without sending welcome email or SMS. */
+  crmOnly: consentValue.default(false),
+  tags: z
+    .union([z.array(z.string()), z.string()])
+    .optional()
+    .transform((value) => {
+      const list = Array.isArray(value)
+        ? value
+        : String(value || '')
+            .split(',')
+            .map((part) => part.trim())
+            .filter(Boolean)
+      return list.length ? list : ['Facebook Lead']
+    }),
 })
 
 export type FacebookLeadInput = z.input<typeof facebookLeadSchema>
@@ -106,17 +121,23 @@ export async function processFacebookLead(rawLead: unknown) {
         city: lead.city,
         how_met: lead.campaignName || lead.adName || 'Facebook lead ad',
         notes:
-          [lead.campaignName && `Campaign: ${lead.campaignName}`, lead.adName && `Ad: ${lead.adName}`]
+          [
+            lead.notes,
+            lead.campaignName && `Campaign: ${lead.campaignName}`,
+            lead.adName && `Ad: ${lead.adName}`,
+          ]
             .filter(Boolean)
             .join('\n') || null,
         ok_to_contact: lead.consent,
-        tags: ['Facebook Lead'],
+        tags: lead.tags,
       })
       const duplicate = await findDuplicate(db, ownerId, input)
       const contact = duplicate
         ? await updateContact(db, ownerId, duplicate.id, {
             ok_to_contact: duplicate.ok_to_contact || lead.consent,
-            tags: Array.from(new Set([...duplicate.tags.map((tag) => tag.name), 'Facebook Lead'])),
+            tags: Array.from(
+              new Set([...duplicate.tags.map((tag) => tag.name), ...lead.tags]),
+            ),
           })
         : await createContact(db, ownerId, input)
       crmContactId = contact.id
@@ -135,7 +156,9 @@ export async function processFacebookLead(rawLead: unknown) {
   let emailSentAt: string | null = delivery.email_sent_at
   let emailError: string | null = null
   if (emailStatus !== 'sent') {
-    if (!lead.consent) {
+    if (lead.crmOnly) {
+      emailStatus = 'skipped_external'
+    } else if (!lead.consent) {
       emailStatus = 'skipped_no_consent'
     } else if (!lead.email) {
       emailStatus = 'skipped_missing'
@@ -170,7 +193,9 @@ export async function processFacebookLead(rawLead: unknown) {
     const smsSender = lead.sendSmsViaApp
       ? 'app'
       : process.env.FACEBOOK_LEADS_SMS_SENDER || 'pabbly'
-    if (smsSender === 'pabbly') {
+    if (lead.crmOnly) {
+      smsStatus = 'skipped_external'
+    } else if (smsSender === 'pabbly') {
       smsStatus = 'skipped_external'
     } else if (!lead.consent) {
       smsStatus = 'skipped_no_consent'

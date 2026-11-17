@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js'
 export const TEMPLATE_KEYS = {
   WEEKLY_DIGEST: 'weekly_digest',
   PRE_EVENT_REMINDER: 'pre_event_reminder',
+  FACEBOOK_LEAD_WELCOME: 'facebook_lead_welcome',
 } as const
 
 export type TemplateKey = (typeof TEMPLATE_KEYS)[keyof typeof TEMPLATE_KEYS]
@@ -39,6 +40,13 @@ const DEFAULTS: Record<string, { subject: string; intro: string; footer: string 
     intro:
       "Just a friendly reminder that you're registered for an upcoming event. We're looking forward to seeing you there!",
     footer: 'Break a leg! 🎭',
+  },
+  facebook_lead_welcome: {
+    subject: 'Welcome to One Mic Stand 🎤',
+    intro:
+      "Thanks for your interest in live comedy. We'll keep you posted about upcoming shows, open mics, and special events.",
+    footer:
+      "You're receiving this because you asked to hear from One Mic Stand through our Facebook form. Reply with \"unsubscribe\" if you no longer want these emails.",
   },
 }
 
